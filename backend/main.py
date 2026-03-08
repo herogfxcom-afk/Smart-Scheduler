@@ -136,7 +136,7 @@ async def sync_group(data: dict, current_user: User = Depends(get_current_user),
             from aiogram.utils.keyboard import InlineKeyboardBuilder
             from aiogram import types
             builder = InlineKeyboardBuilder()
-            APP_URL = os.getenv("APP_URL", "https://web-rho-five-92.vercel.app")
+            APP_URL = os.getenv("APP_URL", "https://smart-scheduler-production-2006.up.railway.app")
             builder.button(text="📊 Magic Sync", web_app=types.WebAppInfo(url=f"{APP_URL}/#/?startapp=group_{chat_id}"))
             
             resp = requests.post(f"https://api.telegram.org/bot{bot_token}/editMessageText", json={

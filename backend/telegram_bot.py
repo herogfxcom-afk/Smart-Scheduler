@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-APP_URL = os.getenv("APP_URL", "https://frontend-2bzsgebt0-herogfxcom-5981s-projects.vercel.app")
+APP_URL = os.getenv("APP_URL", "https://smart-scheduler-production-2006.up.railway.app")
 
 from .database import SessionLocal
 from . import models
