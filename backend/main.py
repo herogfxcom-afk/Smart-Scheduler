@@ -23,6 +23,20 @@ from .database import engine
 from . import models
 models.Base.metadata.create_all(bind=engine)
 
+# Production Migration: Ensure 'email' column exists in Postgres
+@app.on_event("startup")
+def migrate_db():
+    from sqlalchemy import text
+    with engine.connect() as conn:
+        try:
+            # Check if email column exists
+            conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS email VARCHAR(255)"))
+            conn.commit()
+            print("Migration: Added email column to users table if it didn't exist.")
+        except Exception as e:
+            # For SQLite or if column already exists in some DB variants
+            print(f"Migration Notice: {e}")
+
 # CORS - raw middleware that always injects correct headers regardless of origin
 class CORSEverywhere(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
