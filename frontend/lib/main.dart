@@ -60,7 +60,20 @@ class _SmartSchedulerAppState extends State<SmartSchedulerApp> with WidgetsBindi
     // Parse deep link group context
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final telegram = context.read<TelegramService>();
-      final startParam = telegram.getStartParam();
+      String? startParam = telegram.getStartParam();
+      
+      // Fallback to Uri.base if Telegram start_param is null (common on Desktop/Web)
+      if (startParam == null) {
+        final uri = Uri.base;
+        startParam = uri.queryParameters['startapp'];
+        
+        // Sometimes it's in the fragment if using HashStrategy (GoRouter default)
+        if (startParam == null && uri.fragment.contains('startapp=')) {
+          final fragmentParts = Uri.splitQueryString(uri.fragment.split('?').last);
+          startParam = fragmentParts['startapp'];
+        }
+      }
+
       if (startParam != null && startParam.startsWith("group_")) {
         final chatId = startParam.replaceFirst("group_", "");
         context.read<GroupProvider>().setChatId(chatId);
