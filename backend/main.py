@@ -29,12 +29,18 @@ class CORSEverywhere(BaseHTTPMiddleware):
         if request.method == "OPTIONS":
             response = Response(status_code=200)
         else:
-            response = await call_next(request)
+            try:
+                response = await call_next(request)
+            except Exception as e:
+                # Ensure even error responses have CORS headers
+                print(f"Middleware Error: {str(e)}")
+                response = Response(content=json.dumps({"detail": str(e)}), status_code=500)
+        
         origin = request.headers.get("origin", "*")
         response.headers["Access-Control-Allow-Origin"] = origin
         response.headers["Access-Control-Allow-Credentials"] = "true"
         response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, PATCH"
-        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With, init-data, accept, origin"
         response.headers["Access-Control-Max-Age"] = "600"
         return response
 
