@@ -85,7 +85,7 @@ class GroupProvider with ChangeNotifier {
     
     try {
       final response = await _apiService.get('/groups/${int.tryParse(_chatId!) ?? _chatId.hashCode}/participants');
-      _participants = (response as List).map((p) => GroupParticipant.fromJson(p)).toList();
+      _participants = (response.data as List).map((p) => GroupParticipant.fromJson(p)).toList();
       notifyListeners();
     } catch (e) {
       _error = e.toString();

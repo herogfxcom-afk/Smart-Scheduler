@@ -206,6 +206,37 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
           ),
         ],
       ),
+      bottomNavigationBar: scheduler.suggestedSlots.isNotEmpty && !_isHeatmapView
+          ? SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: ElevatedButton(
+                  onPressed: () {
+                    if (scheduler.suggestedSlots.isNotEmpty) {
+                      _showConfirmation(context, scheduler, scheduler.suggestedSlots.first);
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue,
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size(double.infinity, 56),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  ),
+                  child: const Text("Arrange Meeting (Best Slot)", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                ),
+              ),
+            )
+          : null,
+      floatingActionButton: scheduler.suggestedSlots.isNotEmpty && _isHeatmapView
+          ? FloatingActionButton.extended(
+              onPressed: () {
+                _showConfirmation(context, scheduler, scheduler.suggestedSlots.first);
+              },
+              backgroundColor: Colors.blue,
+              icon: const Icon(Icons.calendar_today, color: Colors.white),
+              label: const Text("Book Best Time", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            )
+          : null,
     );
   }
 
