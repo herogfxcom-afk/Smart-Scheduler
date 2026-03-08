@@ -13,4 +13,8 @@ echo "Fetching dependencies..."
 flutter pub get
 
 echo "Building for Web..."
-flutter build web --release --no-tree-shake-icons --no-wasm-dry-run
+if [ -n "$API_URL" ]; then
+  flutter build web --release --no-tree-shake-icons --no-wasm-dry-run --dart-define=API_URL=$API_URL
+else
+  flutter build web --release --no-tree-shake-icons --no-wasm-dry-run
+fi
