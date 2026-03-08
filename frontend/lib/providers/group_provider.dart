@@ -60,14 +60,14 @@ class GroupProvider with ChangeNotifier {
   Future<void> syncWithGroup() async {
     if (_chatId == null) return;
     
-    _isLoading = true;
-    _error = null;
-    notifyListeners();
-
     try {
+      _isLoading = true;
+      notifyListeners();
+
       // 1. Tell backend we are in this group
       await _apiService.post('/groups/sync', {
         'chat_id': int.tryParse(_chatId!) ?? _chatId.hashCode,
+        'title': 'Telegram Group', // Title extraction could be improved later
       });
       
       // 2. Fetch all participants
