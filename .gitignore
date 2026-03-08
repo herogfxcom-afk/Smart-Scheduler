@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+env/
+.env
+
+# Railway/System
+.railway/
+ntuser.dat*
+
+# IDEs
+.vscode/
+.idea/
+
+# Flutter/Dart (if applicable)
+/build/
+.dart_tool/
+.packages
+.pub-cache/
+.pub/

@@ -1,0 +1,453 @@
+from fastapi import FastAPI, Depends, HTTPException, Header
+from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+from starlette.responses import Response
+from sqlalchemy.orm import Session
+from datetime import datetime, timedelta
+from .auth import get_current_user
+from .google_oauth import router as google_auth_router
+from .models import User, BusySlot, Meeting
+from .database import get_db
+from .encryption import decrypt_token, encrypt_token
+from .calendar_service import GoogleCalendarService
+from .caldav_service import AppleCalendarService
+import json
+import os
+import requests
+
+app = FastAPI(title="Smart Scheduler API")
+
+# Create database tables
+from .database import engine
+from . import models
+models.Base.metadata.create_all(bind=engine)
+
+# CORS - raw middleware that always injects correct headers regardless of origin
+class CORSEverywhere(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        if request.method == "OPTIONS":
+            response = Response(status_code=200)
+        else:
+            response = await call_next(request)
+        origin = request.headers.get("origin", "*")
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, PATCH"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
+        response.headers["Access-Control-Max-Age"] = "600"
+        return response
+
+app.add_middleware(CORSEverywhere)
+
+# Connect Routers
+app.include_router(google_auth_router)
+
+@app.get("/")
+async def root():
+    return {"status": "ok", "message": "Smart Scheduler API", "version": "2.0-cors-fix"}
+
+@app.get("/cors-debug")
+async def cors_debug():
+    return {"cors": "enabled", "middleware": "CORSEverywhere"}
+
+@app.get("/auth/me")
+async def get_me(current_user: User = Depends(get_current_user)):
+    """Returns the current user profile."""
+    return {
+        "id": current_user.id,
+        "telegram_id": current_user.telegram_id,
+        "username": current_user.username,
+        "first_name": current_user.first_name,
+        "email": current_user.email,
+        "is_connected": bool(current_user.google_refresh_token),
+        "is_apple_connected": bool(current_user.apple_auth_data)
+    }
+
+@app.post("/groups/sync")
+async def sync_group(data: dict, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Links user to a group via telegram_chat_id."""
+    chat_id = data.get("chat_id")
+    if not chat_id:
+        raise HTTPException(status_code=400, detail="chat_id is required")
+    
+    # Check if group exists
+    group = db.query(models.Group).filter(models.Group.telegram_chat_id == chat_id).first()
+    if not group:
+        group = models.Group(telegram_chat_id=chat_id, title=data.get("title"))
+        db.add(group)
+        db.commit()
+        db.refresh(group)
+    
+    # 2. Link user to group if not already linked
+    participant = db.query(models.GroupParticipant).filter(
+        models.GroupParticipant.group_id == group.id,
+        models.GroupParticipant.user_id == current_user.id
+    ).first()
+    
+    if not participant:
+        participant = models.GroupParticipant(
+            group_id=group.id, 
+            user_id=current_user.id,
+            is_synced=1 if (current_user.google_refresh_token or current_user.apple_auth_data) else 0
+        )
+        db.add(participant)
+    else:
+        # Update sync status
+        participant.is_synced = 1 if (current_user.google_refresh_token or current_user.apple_auth_data) else 0
+        
+    db.commit()
+    
+    # 3. Update Telegram Message (Dynamic Update)
+    if group.last_invite_message_id:
+        try:
+            print(f"DEBUG: Attempting to update TG message for chat {chat_id}, msg {group.last_invite_message_id}")
+            participants_count = db.query(models.GroupParticipant).filter(
+                models.GroupParticipant.group_id == group.id,
+                models.GroupParticipant.is_synced == 1
+            ).count()
+            bot_token = os.getenv("BOT_TOKEN")
+            new_text = (
+                f"📊 **Ищу общее время для встречи.**\n\n"
+                f"✅ Присоединилось: {participants_count} чел.\n\n"
+                f"Нажмите кнопку ниже, чтобы синхронизировать календари."
+            )
+            # We need the markup too to stay persistent
+            from aiogram.utils.keyboard import InlineKeyboardBuilder
+            from aiogram import types
+            builder = InlineKeyboardBuilder()
+            APP_URL = os.getenv("APP_URL", "https://web-rho-five-92.vercel.app")
+            builder.button(text="📊 Magic Sync", web_app=types.WebAppInfo(url=f"{APP_URL}/#/?startapp=group_{chat_id}"))
+            
+            resp = requests.post(f"https://api.telegram.org/bot{bot_token}/editMessageText", json={
+                "chat_id": int(chat_id),
+                "message_id": int(group.last_invite_message_id),
+                "text": new_text,
+                "parse_mode": "Markdown",
+                "reply_markup": builder.as_markup().model_dump()
+            }, timeout=3).json()
+            print(f"DEBUG: Message update result: {resp}")
+        except Exception as e:
+            print(f"TRACE: Failed to update TG message for chat {chat_id}: {e}")
+
+    return {"status": "success", "group_id": group.id}
+
+@app.get("/groups/{chat_id}/participants")
+async def get_group_participants(chat_id: int, db: Session = Depends(get_db)):
+    """Returns all participants in a group."""
+    print(f"DEBUG: Fetching participants for chat_id: {chat_id}")
+    group = db.query(models.Group).filter(models.Group.telegram_chat_id == chat_id).first()
+    if not group:
+        print(f"DEBUG: Group not found in DB for chat_id: {chat_id}")
+        return []
+    
+    participants = db.query(models.GroupParticipant).filter(models.GroupParticipant.group_id == group.id).all()
+    print(f"DEBUG: Found {len(participants)} potential participants in DB")
+    
+    bot_token = os.getenv("BOT_TOKEN")
+    active_participants = []
+    
+    for p in participants:
+        u = p.user
+        print(f"DEBUG: Checking membership for user {u.telegram_id} ({u.username}) in chat {chat_id}")
+        try:
+            resp = requests.get(f"https://api.telegram.org/bot{bot_token}/getChatMember", params={
+                "chat_id": int(chat_id),
+                "user_id": int(u.telegram_id)
+            }, timeout=3).json()
+            
+            if not resp.get("ok"):
+                print(f"DEBUG: TG API Error for user {u.telegram_id}: {resp.get('description')}")
+                # Fallback: if chat not found or other API error, we keep THEM as they were synced
+                active_participants.append({
+                    "id": u.id,
+                    "telegram_id": u.telegram_id,
+                    "username": u.username,
+                    "first_name": u.first_name,
+                    "photo_url": u.photo_url,
+                    "email": u.email,
+                    "is_synced": bool(p.is_synced)
+                })
+                continue
+
+            status = resp.get("result", {}).get("status")
+            print(f"DEBUG: User {u.telegram_id} status in chat: {status}")
+            
+            if status in ["member", "administrator", "creator", "restricted"]:
+                active_participants.append({
+                    "id": u.id,
+                    "telegram_id": u.telegram_id,
+                    "username": u.username,
+                    "first_name": u.first_name,
+                    "photo_url": u.photo_url,
+                    "email": u.email,
+                    "is_synced": bool(p.is_synced)
+                })
+            elif status in ["left", "kicked"]:
+                print(f"DEBUG: HARD DELETE ghost participant {u.telegram_id} (status: {status})")
+                db.delete(p)
+                db.commit()
+            else:
+                print(f"DEBUG: Status {status} for {u.telegram_id}, excluding but NOT deleting yet.")
+        except Exception as e:
+            print(f"TRACE: Error checking member {u.telegram_id}: {e}")
+            active_participants.append({
+                "id": u.id,
+                "telegram_id": u.telegram_id,
+                "username": u.username,
+                "first_name": u.first_name,
+                "photo_url": u.photo_url,
+                "email": u.email,
+                "is_synced": bool(p.is_synced)
+            })
+            
+    # Final Deduplication check (server-side) based on telegram_id
+    seen_ids = set()
+    final_output = []
+    for ap in active_participants:
+        if ap["telegram_id"] not in seen_ids:
+            final_output.append(ap)
+            seen_ids.add(ap["telegram_id"])
+        else:
+            print(f"DEBUG: Filtering duplicate local participant {ap['telegram_id']}")
+
+    print(f"DEBUG: Returning {len(final_output)} active participants")
+    return final_output
+
+@app.post("/auth/apple/connect")
+async def connect_apple(data: dict, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Saves encrypted iCloud credentials (email + app-specific password)."""
+    apple_email = data.get("email")
+    app_password = data.get("password")
+    
+    if not apple_email or not app_password:
+        raise HTTPException(status_code=400, detail="Email and App-Specific Password required")
+        
+    auth_payload = json.dumps({"email": apple_email, "password": app_password})
+    current_user.apple_auth_data = encrypt_token(auth_payload)
+    db.commit()
+    
+    return {"status": "success"}
+
+@app.post("/calendar/sync")
+async def sync_calendar(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Syncs busy slots from Google Calendar to the database."""
+    try:
+        all_busy_slots = []
+        
+        # 1. Sync Google if connected
+        if current_user.google_refresh_token:
+            refresh_token = decrypt_token(current_user.google_refresh_token)
+            g_service = GoogleCalendarService(refresh_token)
+            start = datetime.utcnow()
+            end = start + timedelta(days=14)
+            google_busy = await g_service.get_busy_slots(start, end)
+            all_busy_slots.extend(google_busy)
+            
+        # 2. Sync Apple if connected
+        if current_user.apple_auth_data:
+            print(f"DEBUG: Syncing Apple for user {current_user.id}")
+            apple_data = json.loads(decrypt_token(current_user.apple_auth_data))
+            a_service = AppleCalendarService(apple_data['email'], apple_data['password'])
+            start = datetime.utcnow()
+            end = start + timedelta(days=14)
+            apple_busy = a_service.get_busy_slots(start, end)
+            print(f"DEBUG: Found {len(apple_busy)} slots from Apple")
+            all_busy_slots.extend(apple_busy)
+            
+        if not all_busy_slots and not current_user.google_refresh_token and not current_user.apple_auth_data:
+             print(f"DEBUG: No calendars connected for user {current_user.id}")
+             raise HTTPException(status_code=400, detail="No calendars connected")
+
+        # 3. Update DB (Clear old and insert new)
+        db.query(BusySlot).filter(BusySlot.user_id == current_user.id).delete()
+        
+        for slot in all_busy_slots:
+            try:
+                # Better ISO parsing that handles 'Z' and offsets
+                s_out = slot['start'].replace('Z', '+00:00')
+                e_out = slot['end'].replace('Z', '+00:00')
+                new_slot = BusySlot(
+                    user_id=current_user.id,
+                    start_time=datetime.fromisoformat(s_out),
+                    end_time=datetime.fromisoformat(e_out)
+                )
+                db.add(new_slot)
+            except Exception as parse_e:
+                print(f"DEBUG: Error parsing slot {slot}: {parse_e}")
+        
+        db.commit()
+        print(f"DEBUG: Successfully synced {len(all_busy_slots)} slots for user {current_user.id}")
+        return {"status": "success", "synced_count": len(all_busy_slots)}
+        
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Sync failed: {str(e)}")
+
+@app.post("/meeting/finalize")
+async def finalize_meeting(data: dict, db: Session = Depends(get_db)):
+    """Updates the Telegram message to announce the chosen time."""
+    chat_id = data.get("chat_id")
+    time_str = data.get("time_str")
+    
+    group = db.query(models.Group).filter(models.Group.telegram_chat_id == chat_id).first()
+    if not group or not group.last_invite_message_id:
+        return {"status": "error", "message": "Group or message ID not found"}
+
+    bot_token = os.getenv("BOT_TOKEN")
+    new_text = f"✅ **Время найдено!**\n\n📌 **{time_str}**\n\nПожалуйста, подтвердите своё участие нажатием кнопки!"
+    
+    from aiogram.utils.keyboard import InlineKeyboardBuilder
+    builder = InlineKeyboardBuilder()
+    builder.button(text="👍 Подтверждаю", callback_data=f"confirm_meet_{chat_id}")
+    
+    resp = requests.post(f"https://api.telegram.org/bot{bot_token}/editMessageText", json={
+        "chat_id": int(chat_id),
+        "message_id": int(group.last_invite_message_id),
+        "text": new_text,
+        "parse_mode": "Markdown",
+        "reply_markup": builder.as_markup().model_dump()
+    }, timeout=3).json()
+    
+    return {"status": "success", "tg_response": resp}
+
+@app.get("/calendar/busy-slots")
+async def get_busy_slots(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Returns cached busy slots for the user."""
+    slots = db.query(BusySlot).filter(BusySlot.user_id == current_user.id).all()
+    return [
+        {"start": s.start_time.isoformat(), "end": s.end_time.isoformat()} 
+        for s in slots
+    ]
+
+@app.post("/calendar/free-slots")
+async def get_free_slots(data: dict, db: Session = Depends(get_db)):
+    """
+    Finds common free slots for a list of telegram user IDs.
+    """
+    try:
+        # 1. Parse IDs
+        tg_ids = data.get("telegram_ids", [])
+        if not tg_ids:
+            return {"free_slots": [], "debug": "no_tg_ids_provided"}
+            
+        # 2. Find internal user IDs
+        users = db.query(User).filter(User.telegram_id.in_(tg_ids)).all()
+        internal_ids = [u.id for u in users]
+        
+        if not internal_ids:
+            print(f"DEBUG: No internal users found for TG IDs: {tg_ids}")
+            return {"free_slots": [], "debug": f"no_users_found_for_ids_{tg_ids}"}
+
+        # 3. Fetch all cached busy slots for these users for next 14 days
+        start = datetime.utcnow()
+        end = start + timedelta(days=30)
+        
+        busy_slots_per_user = []
+        for uid in internal_ids:
+            user_busy = db.query(BusySlot).filter(
+                BusySlot.user_id == uid,
+                BusySlot.end_time >= start,
+                BusySlot.start_time <= end
+            ).all()
+            busy_slots_per_user.append([(s.start_time, s.end_time) for s in user_busy])
+            
+        # 4. Find intersections
+        from .calendar_service import find_common_free_slots
+        print(f"DEBUG: Finding slots for TG IDs: {tg_ids} (Internal IDs: {internal_ids})")
+        print(f"DEBUG: Search range: {start} to {end}")
+        
+        for i, slots in enumerate(busy_slots_per_user):
+            print(f"DEBUG: User {internal_ids[i]} has {len(slots)} busy slots in range.")
+            if len(slots) > 0:
+                print(f"DEBUG: First busy slot for user {internal_ids[i]}: {slots[0]}")
+        
+        free_windows = find_common_free_slots(
+            busy_slots_per_user,
+            start_date=start,
+            end_date=end,
+            work_start_hour=7,
+            work_end_hour=23 
+        )
+        
+        print(f"DEBUG: Found {len(free_windows)} free windows")
+        return {"free_slots": free_windows}
+        
+    except Exception as e:
+        import traceback
+        print(f"ERROR in get_free_slots: {str(e)}")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/users")
+async def get_all_users(db: Session = Depends(get_db)):
+    """Returns a list of all registered users (for group selection)."""
+    users = db.query(User).all()
+    return [{
+        "id": u.id,
+        "telegram_id": u.telegram_id,
+        "username": u.username,
+        "first_name": u.first_name,
+        "photo_url": u.photo_url
+    } for u in users]
+
+@app.post("/meeting/create")
+async def create_meeting(data: dict, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Creates a meeting in both Google and Apple calendars if connected."""
+    summary = data.get("title", "Smart Scheduler Meeting")
+    start_str = data.get("start")
+    end_str = data.get("end")
+    location = data.get("location", "")
+    idempotency_key = data.get("idempotency_key")
+    attendee_emails = data.get("attendee_emails", [])
+    
+    if not start_str or not end_str:
+        raise HTTPException(status_code=400, detail="Start and End times are required")
+        
+    try:
+        start_time = datetime.fromisoformat(str(start_str).replace('Z', '').split('+')[0])
+        end_time = datetime.fromisoformat(str(end_str).replace('Z', '').split('+')[0])
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid date format")
+    
+    # Check Idempotency
+    if idempotency_key:
+        existing = db.query(models.GroupMeeting).filter(models.GroupMeeting.idempotency_key == idempotency_key).first()
+        if existing:
+            return {"status": "success", "message": "already_exists", "id": existing.id}
+
+    results = {"google": "not_connected", "apple": "not_connected"}
+    
+    # 1. Google
+    if current_user.google_refresh_token:
+        try:
+            refresh_token = decrypt_token(current_user.google_refresh_token)
+            g_service = GoogleCalendarService(refresh_token)
+            await g_service.create_event(summary, start_time, end_time, attendees=attendee_emails, location=location)
+            results["google"] = "success"
+        except Exception as e:
+            results["google"] = f"error: {str(e)}"
+            
+    # 2. Apple
+    if current_user.apple_auth_data:
+        try:
+            apple_data = json.loads(decrypt_token(current_user.apple_auth_data))
+            a_service = AppleCalendarService(apple_data['email'], apple_data['password'])
+            # Apple doesn't easily support attendees via simple CalDAV as Google does, skipping for now
+            a_service.create_event(summary, start_time, end_time, location)
+            results["apple"] = "success"
+        except Exception as e:
+            results["apple"] = f"error: {str(e)}"
+            
+    # Save to our DB history
+    new_meeting = models.GroupMeeting(
+        title=summary,
+        start_time=start_time,
+        end_time=end_time,
+        location=location,
+        idempotency_key=idempotency_key
+    )
+    db.add(new_meeting)
+    db.commit()
+    
+    return {"status": "success", "results": results}
