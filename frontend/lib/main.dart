@@ -62,21 +62,51 @@ class _SmartSchedulerAppState extends State<SmartSchedulerApp> with WidgetsBindi
       final telegram = context.read<TelegramService>();
       String? startParam = telegram.getStartParam();
       
+      print("DEBUG: Telegram startParam: $startParam");
+      
       // Fallback to Uri.base if Telegram start_param is null (common on Desktop/Web)
       if (startParam == null) {
         final uri = Uri.base;
+        print("DEBUG: URI.base: $uri");
+        print("DEBUG: URI.queryParameters: ${uri.queryParameters}");
+        print("DEBUG: URI.fragment: ${uri.fragment}");
+        
         startParam = uri.queryParameters['startapp'];
         
-        // Sometimes it's in the fragment if using HashStrategy (GoRouter default)
-        if (startParam == null && uri.fragment.contains('startapp=')) {
-          final fragmentParts = Uri.splitQueryString(uri.fragment.split('?').last);
-          startParam = fragmentParts['startapp'];
+        // Robust fragment parsing (HashStrategy support)
+        if (startParam == null && uri.fragment.isNotEmpty) {
+          // Case 1: #/?startapp=...
+          // Case 2: #/scheduler?startapp=...
+          final fragmentQueryIndex = uri.fragment.indexOf('?');
+          if (fragmentQueryIndex != -1) {
+            final fragmentQuery = uri.fragment.substring(fragmentQueryIndex + 1);
+            final fragmentParts = Uri.splitQueryString(fragmentQuery);
+            startParam = fragmentParts['startapp'];
+          } else if (uri.fragment.contains('startapp=')) {
+            // Case 3: #startapp=... (no question mark)
+            final parts = Uri.splitQueryString(uri.fragment.startsWith('/') 
+                ? uri.fragment.substring(1) 
+                : uri.fragment);
+            startParam = parts['startapp'];
+          }
         }
       }
 
+      print("DEBUG: Final extracted startParam: $startParam");
+
       if (startParam != null && startParam.startsWith("group_")) {
         final chatId = startParam.replaceFirst("group_", "");
+        print("DEBUG: Setting chatId: $chatId");
         context.read<GroupProvider>().setChatId(chatId);
+        
+        // Also show a small snackbar for 1s to confirm to the user
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Syncing with group: $chatId"),
+            duration: const Duration(seconds: 1),
+            behavior: SnackBarBehavior.floating,
+          )
+        );
       }
     });
   }
