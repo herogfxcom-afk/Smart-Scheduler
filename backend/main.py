@@ -92,12 +92,16 @@ async def sync_group(data: dict, current_user: User = Depends(get_current_user),
         raise HTTPException(status_code=400, detail="chat_id is required")
     
     # Check if group exists
+    print(f"DEBUG: sync_group called for chat_id={chat_id} by user={current_user.id}")
     group = db.query(models.Group).filter(models.Group.telegram_chat_id == chat_id).first()
     if not group:
+        print(f"DEBUG: Creating new group for chat_id={chat_id}")
         group = models.Group(telegram_chat_id=chat_id, title=data.get("title"))
         db.add(group)
         db.commit()
         db.refresh(group)
+    else:
+        print(f"DEBUG: Found existing group_id={group.id} for chat_id={chat_id}")
     
     # 2. Link user to group if not already linked
     participant = db.query(models.GroupParticipant).filter(
