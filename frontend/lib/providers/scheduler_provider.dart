@@ -76,21 +76,36 @@ class SchedulerProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // Idempotency key to avoid duplicates (chatId + start time)
-      final idempotencyKey = chatId != null
-          ? "group_${chatId}_${slot.start.millisecondsSinceEpoch}"
-          : "user_${slot.start.millisecondsSinceEpoch}";
+      // 1. Logging for debug
+      print("DEBUG: Booking slot (Local): ${slot.start} - ${slot.end}");
+      print("DEBUG: Booking slot (UTC): ${slot.start.toUtc()} - ${slot.end.toUtc()}");
 
-      await _apiService.post('/meeting/create', {
+      // 2. Optimistic Update: Remove from suggested list immediately
+      final originalSlots = List<TimeSlot>.from(_suggestedSlots);
+      _suggestedSlots.removeWhere((s) => s.start == slot.start && s.end == slot.end);
+      notifyListeners();
+
+      // 3. Enhanced Idempotency key (includes end time and current timestamp for uniqueness)
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final idempotencyKey = chatId != null
+          ? "group_${chatId}_${slot.start.millisecondsSinceEpoch}_${slot.end.millisecondsSinceEpoch}"
+          : "user_${slot.start.millisecondsSinceEpoch}_${timestamp}";
+
+      final response = await _apiService.post('/meeting/create', {
         'title': title,
         'start': slot.start.toUtc().toIso8601String(),
         'end': slot.end.toUtc().toIso8601String(),
         'attendee_emails': attendeeEmails ?? [],
         'idempotency_key': idempotencyKey,
       });
+
+      print("DEBUG: Server response: ${response.data}");
       return true;
     } catch (e) {
+      print("DEBUG: createMeeting Error: $e");
       _error = e.toString();
+      // Rollback optimistic update if failed
+      await fetchCommonSlots(_selectedParticipants); 
       return false;
     } finally {
       _isLoading = false;
