@@ -1,4 +1,6 @@
 from fastapi import FastAPI, Depends, HTTPException, Header
+from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -68,8 +70,9 @@ app.add_middleware(CORSEverywhere)
 # Connect Routers
 app.include_router(google_auth_router)
 
-@app.get("/")
-async def root():
+# API status debug
+@app.get("/api/status")
+async def api_status():
     return {"status": "ok", "message": "Smart Scheduler API", "version": "2.0-cors-fix"}
 
 @app.get("/cors-debug")
@@ -483,3 +486,12 @@ async def create_meeting(data: dict, current_user: User = Depends(get_current_us
     db.commit()
     
     return {"status": "success", "results": results}
+
+# Serve the Flutter frontend
+# We mount this at the very end so it doesn't override API paths
+@app.get("/")
+async def root():
+    return FileResponse("frontend/build/web/index.html")
+
+# Static files and SPA fallback
+app.mount("/", StaticFiles(directory="frontend/build/web", html=True), name="frontend")
