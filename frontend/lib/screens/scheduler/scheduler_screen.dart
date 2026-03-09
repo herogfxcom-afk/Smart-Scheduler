@@ -304,7 +304,7 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
                       slots: scheduler.suggestedSlots,
                       selectedDay: _selectedDay,
                       ignoredParticipantIds: _ignoredParticipantIds,
-                      onSlotSelected: (slot) => _showConfirmation(context, scheduler, slot),
+                      onSlotSelected: (slot) => _showBookingOptions(context, scheduler, slot),
                     )
                   : _buildListSlots(slotsForDay, scheduler),
             ),
@@ -317,7 +317,7 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
           child: ElevatedButton.icon(
             onPressed: () {
               if (scheduler.suggestedSlots.isNotEmpty) {
-                _showConfirmation(context, scheduler, scheduler.suggestedSlots.first);
+                _showBookingOptions(context, scheduler, scheduler.suggestedSlots.first);
               } else {
                 _showManualBooking(context, scheduler);
               }
@@ -378,7 +378,7 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
       type: 'match',
       availability: 1.0,
     );
-    _showConfirmation(context, scheduler, manualSlot);
+    _showBookingOptions(context, scheduler, manualSlot);
   }
 
   Widget _buildListSlots(List<TimeSlot> slotsForDay, SchedulerProvider scheduler) {
@@ -420,7 +420,7 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(20),
-        onTap: () => _showConfirmation(context, scheduler, slot),
+        onTap: () => _showBookingOptions(context, scheduler, slot),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
           child: Row(
@@ -475,105 +475,127 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
     );
   }
 
-  void _showConfirmation(BuildContext context, SchedulerProvider scheduler, TimeSlot slot) {
-    showModalBottomSheet(
+  /// Shows a detailed booking dialog with time fine-tuning.
+  void _showBookingOptions(BuildContext context, SchedulerProvider scheduler, TimeSlot slot) async {
+    DateTime startTime = slot.start.toLocal();
+    DateTime endTime = slot.end.toLocal();
+    final TextEditingController titleController = TextEditingController(text: "Group Sync Meeting");
+
+    showDialog(
       context: context,
-      builder: (context) {
-        return Container(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                "Забронировать время?",
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
-            const SizedBox(height: 16),
-            Text(
-              "Дата: ${DateFormat('d MMMM').format(slot.start.toLocal())}\nВремя: ${slot.start.toLocal().hour}:${slot.start.toLocal().minute.toString().padLeft(2, '0')} - ${slot.end.toLocal().hour}:${slot.end.toLocal().minute.toString().padLeft(2, '0')}",
-              textAlign: TextAlign.center,
-            ),
-              const SizedBox(height: 32),
-              ElevatedButton(
-                onPressed: scheduler.isLoading 
-                  ? null 
-                  : () async {
-                      final groupProvider = context.read<GroupProvider>();
-                      final List<String> emails = groupProvider.participants
-                          .where((p) => p.isSynced && p.email != null)
-                          .map((p) => p.email!)
-                          .toList();
-
-                      final success = await scheduler.createMeeting(
-                        title: "Group Sync Meeting", 
-                        slot: slot,
-                        attendeeEmails: emails,
-                        chatId: groupProvider.chatId,
-                      );
-
-                      if (success) {
-                        if (groupProvider.chatId != null) {
-                          final timeStr = DateFormat('EEEE, d MMMM, HH:mm').format(slot.start);
-                          await scheduler.finalizeMeeting(
-                            chatId: groupProvider.chatId!,
-                            timeStr: timeStr,
-                          );
-                        }
-                        
-                        if (mounted) {
-                          await showDialog(
-                            context: context,
-                            builder: (ctx) => AlertDialog(
-                              title: const Text("Успешно забронировано!"),
-                              content: const Text("Общее время выбрано. Мы отправили уведомление в группу."),
-                              actions: [
-                                TextButton(
-                                  onPressed: () => Navigator.of(ctx).pop(),
-                                  child: const Text("ОК"),
-                                ),
-                              ],
-                            ),
-                          );
-                          
-                          // Trigger Background Sync to repaint grid
-                          if (mounted) {
-                            Future.delayed(const Duration(seconds: 2), () {
-                              if (mounted) {
-                                context.read<SyncProvider>().sync().then((_) {
-                                  if (mounted) {
-                                    final groupProvider = context.read<GroupProvider>();
-                                    final scheduler = context.read<SchedulerProvider>();
-                                    groupProvider.syncWithGroup();
-                                    final ids = groupProvider.participants.map((p) => p.telegramId).toList();
-                                    scheduler.fetchCommonSlots(ids);
-                                  }
-                                });
-                              }
-                            });
-                            Navigator.of(context).pop(); // Close sheet
-                          }
-                        }
-                      } else {
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text("Ошибка при бронировании встречи.")),
-                          );
-                        }
-                      }
-                    },
-                style: ElevatedButton.styleFrom(
-                  minimumSize: const Size(double.infinity, 50),
-                  backgroundColor: Colors.blue,
-                  foregroundColor: Colors.white,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: const Color(0xFF1E1E1E),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text("Параметры встречи", style: TextStyle(color: Colors.white)),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: titleController,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: const InputDecoration(
+                    labelText: "Тема",
+                    labelStyle: TextStyle(color: Colors.blue),
+                    enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
+                  ),
                 ),
-                child: scheduler.isLoading
-                  ? const CircularProgressIndicator(color: Colors.white)
-                  : const Text("Подтвердить"),
-              ),
-            ],
+                const SizedBox(height: 20),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text("Начало", style: TextStyle(color: Colors.white70, fontSize: 14)),
+                  subtitle: Text(
+                    DateFormat('HH:mm (d MMMM)').format(startTime),
+                    style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  trailing: const Icon(Icons.access_time, color: Colors.blue),
+                  onTap: () async {
+                    final time = await showTimePicker(
+                      context: context,
+                      initialTime: TimeOfDay.fromDateTime(startTime),
+                    );
+                    if (time != null) {
+                      setDialogState(() {
+                        startTime = DateTime(startTime.year, startTime.month, startTime.day, time.hour, time.minute);
+                        // Adjust end time to maintain duration
+                        endTime = startTime.add(const Duration(minutes: 30));
+                      });
+                    }
+                  },
+                ),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text("Конец", style: TextStyle(color: Colors.white70, fontSize: 14)),
+                  subtitle: Text(
+                    DateFormat('HH:mm').format(endTime),
+                    style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  trailing: const Icon(Icons.access_time, color: Colors.blue),
+                  onTap: () async {
+                    final time = await showTimePicker(
+                      context: context,
+                      initialTime: TimeOfDay.fromDateTime(endTime),
+                    );
+                    if (time != null) {
+                      setDialogState(() {
+                        endTime = DateTime(endTime.year, endTime.month, endTime.day, time.hour, time.minute);
+                      });
+                    }
+                  },
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  "Ваше местное время (UTC${DateTime.now().timeZoneOffset.inHours >= 0 ? '+' : ''}${DateTime.now().timeZoneOffset.inHours})",
+                  style: const TextStyle(color: Colors.grey, fontSize: 12),
+                ),
+              ],
+            ),
           ),
-        );
-      },
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Отмена", style: TextStyle(color: Colors.grey)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
+              onPressed: scheduler.isLoading ? null : () async {
+                final finalSlot = TimeSlot(
+                  start: startTime,
+                  end: endTime,
+                  type: slot.type,
+                  availability: slot.availability,
+                );
+                
+                final success = await scheduler.createMeeting(
+                  title: titleController.text,
+                  slot: finalSlot,
+                  chatId: context.read<GroupProvider>().chatId,
+                );
+
+                if (success && mounted) {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text("Встреча успешно забронирована!")),
+                  );
+                  // Trigger finalization to update Telegram
+                  await scheduler.finalizeMeeting(
+                    chatId: context.read<GroupProvider>().chatId!,
+                    timeStr: "${DateFormat('HH:mm').format(startTime)} - ${DateFormat('HH:mm').format(endTime)} (${DateFormat('d MMMM').format(startTime)})",
+                  );
+                } else if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text("Ошибка: ${scheduler.error ?? 'Не удалось забронировать'}")),
+                  );
+                }
+              },
+              child: scheduler.isLoading 
+                ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                : const Text("Забронировать", style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
