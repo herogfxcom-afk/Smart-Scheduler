@@ -5,8 +5,8 @@ import os
 from urllib.parse import parse_qs
 from fastapi import Header, HTTPException, Depends
 from sqlalchemy.orm import Session
-from .database import get_db
-from .models import User
+from database import get_db
+from models import User
 from dotenv import load_dotenv
 
 load_dotenv()

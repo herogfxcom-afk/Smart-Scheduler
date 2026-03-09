@@ -10,8 +10,8 @@ load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 APP_URL = os.getenv("APP_URL", "https://smart-scheduler-production-2006.up.railway.app")
 
-from .database import SessionLocal
-from . import models
+from database import SessionLocal
+import models
 from sqlalchemy.orm import Session
 
 bot = Bot(token=BOT_TOKEN)

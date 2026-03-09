@@ -5,13 +5,13 @@ from starlette.requests import Request
 from starlette.responses import Response
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
-from .auth import get_current_user
-from .google_oauth import router as google_auth_router
-from .models import User, BusySlot, Meeting
-from .database import get_db
-from .encryption import decrypt_token, encrypt_token
-from .calendar_service import GoogleCalendarService
-from .caldav_service import AppleCalendarService
+from auth import get_current_user
+from google_oauth import router as google_auth_router
+from models import User, BusySlot, Meeting
+from database import get_db
+from encryption import decrypt_token, encrypt_token
+from calendar_service import GoogleCalendarService
+from caldav_service import AppleCalendarService
 import json
 import os
 import requests
@@ -19,8 +19,8 @@ import requests
 app = FastAPI(title="Smart Scheduler API")
 
 # Create database tables
-from .database import engine
-from . import models
+from database import engine
+import models
 models.Base.metadata.create_all(bind=engine)
 
 # Production Migration: Ensure 'email' column exists in Postgres
@@ -380,7 +380,7 @@ async def get_free_slots(data: dict, db: Session = Depends(get_db)):
             busy_slots_per_user.append([(s.start_time, s.end_time) for s in user_busy])
             
         # 4. Find intersections
-        from .calendar_service import find_common_free_slots
+        from calendar_service import find_common_free_slots
         print(f"DEBUG: Finding slots for TG IDs: {tg_ids} (Internal IDs: {internal_ids})")
         print(f"DEBUG: Search range: {start} to {end}")
         

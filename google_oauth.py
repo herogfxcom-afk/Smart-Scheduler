@@ -4,10 +4,10 @@ from urllib.parse import urlencode
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse, HTMLResponse
 from sqlalchemy.orm import Session
-from .database import get_db
-from .auth import get_current_user
-from .models import User
-from .encryption import encrypt_token
+from database import get_db
+from auth import get_current_user
+from models import User
+from encryption import encrypt_token
 from dotenv import load_dotenv
 
 load_dotenv()
