@@ -148,8 +148,8 @@ def find_common_free_slots(
                     free_slots[-1]["end"] = segment_end.isoformat()
                 else:
                     free_slots.append({
-                        "start": segment_start.isoformat(),
-                        "end": segment_end.isoformat(),
+                        "start": segment_start.isoformat() + "Z",
+                        "end": segment_end.isoformat() + "Z",
                         "type": type_label,
                         "free_count": free_count,
                         "total_count": num_users,

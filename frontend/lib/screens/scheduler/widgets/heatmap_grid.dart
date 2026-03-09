@@ -111,6 +111,7 @@ class HeatmapGrid extends StatelessWidget {
                     // Days Grid
                     ...List.generate(7, (dayIndex) {
                       final slot = gridData[hour]?[dayIndex];
+                      final isSelectedColumn = dayIndex == selectedDay.weekday - 1;
                       
                       return Expanded(
                         child: GestureDetector(
@@ -118,12 +119,12 @@ class HeatmapGrid extends StatelessWidget {
                           child: Container(
                             margin: const EdgeInsets.all(1.5),
                             decoration: BoxDecoration(
-                              color: _getSlotColor(slot),
+                              color: slot != null ? _getSlotColor(slot) : (isSelectedColumn ? Colors.white.withOpacity(0.04) : Colors.transparent),
                               borderRadius: BorderRadius.circular(4),
                               border: Border.all(
-                                color: slot != null && slot.availability == 1.0 
-                                  ? Colors.white.withOpacity(0.2) 
-                                  : Colors.transparent,
+                                color: isSelectedColumn 
+                                  ? Colors.blue.withOpacity(0.3) 
+                                  : (slot != null && slot.availability == 1.0 ? Colors.white.withOpacity(0.2) : Colors.transparent),
                                 width: 0.5,
                               ),
                             ),

@@ -236,9 +236,9 @@ async def _send_sync_invite(bot_token: str, chat_id: int, chat_title: str, db: S
 async def api_status():
     return {
         "status": "online",
-        "version": "4.0-stable",
+        "version": "4.1-stabilized",
         "database": "connected",
-        "message": "Magic Sync is stabilized and ready (baseline stable).",
+        "message": "Magic Sync & Calendar grid stabilized.",
         "bot_webhook": bool(os.getenv("BOT_TOKEN") and os.getenv("API_URL"))
     }
 
