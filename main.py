@@ -491,8 +491,22 @@ async def create_meeting(data: dict, current_user: User = Depends(get_current_us
 # We mount this at the very end so it doesn't override API paths
 STATIC_DIR = "frontend/build/web"
 
+@app.on_event("startup")
+def debug_paths():
+    import os
+    print(f"DEBUG WORKDIR: {os.getcwd()}")
+    try:
+        print(f"DEBUG ROOT FILES: {os.listdir('.')}")
+        if os.path.exists('frontend'):
+            print(f"DEBUG FRONTEND DIR: {os.listdir('frontend')}")
+            if os.path.exists('frontend/build'):
+                print(f"DEBUG FRONTEND/BUILD DIR: {os.listdir('frontend/build')}")
+    except Exception as e:
+        print(f"DEBUG ERR: {e}")
+
 @app.get("/")
 async def root():
+
     if os.path.exists(os.path.join(STATIC_DIR, "index.html")):
         return FileResponse(os.path.join(STATIC_DIR, "index.html"))
     return {"status": "ok", "message": "API is running, but frontend build is missing. Please check deployment logs."}

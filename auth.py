@@ -11,11 +11,11 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-
 def validate_init_data(init_data: str) -> dict:
     """Verifies Telegram Web App initData using HMAC-SHA256."""
-    if not BOT_TOKEN:
+    current_bot_token = os.getenv("BOT_TOKEN")
+    if not current_bot_token:
+        print("AUTH ERROR: BOT_TOKEN is missing from environment variables!")
         raise HTTPException(status_code=500, detail="BOT_TOKEN not configured")
     
     try:
@@ -28,11 +28,12 @@ def validate_init_data(init_data: str) -> dict:
         data_check_string = "\n".join([f"{k}={v}" for k, v in sorted(vals.items())])
         
         # secret_key = HMAC_SHA256("WebAppData", bot_token)
-        secret_key = hmac.new("WebAppData".encode(), BOT_TOKEN.encode(), hashlib.sha256).digest()
+        secret_key = hmac.new("WebAppData".encode(), current_bot_token.encode(), hashlib.sha256).digest()
         # hash = HMAC_SHA256(secret_key, data_check_string)
         h = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
         
         if h != auth_hash:
+            print(f"AUTH ERROR: Hash mismatch. Expected {auth_hash}, got {h}")
             raise HTTPException(status_code=401, detail="Invalid hash")
             
         # Prevent replay attacks: check auth_date (timestamp)
