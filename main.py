@@ -44,17 +44,20 @@ def migrate_db():
                 print(f"Migration Error (email): {e}")
 
     # Check groups table for telegram_chat_id type change
-    # Note: SQLite doesn't support easy column type changes, but MySQL/Postgres do.
-    # If using SQLite, we skip or handle carefully.
     try:
         with engine.connect() as conn:
-            # We use a broad try-catch because this SQL is DB-specific.
-            # On PostgreSQL/MySQL:
-            conn.execute(text("ALTER TABLE groups ALTER COLUMN telegram_chat_id TYPE VARCHAR(255)"))
+            # We use USING clause for PostgreSQL to handle BigInteger to VARCHAR conversion
+            if engine.url.drivername == 'postgresql':
+                conn.execute(text("ALTER TABLE groups ALTER COLUMN telegram_chat_id TYPE VARCHAR(255) USING telegram_chat_id::text"))
+            else:
+                # SQLite or others - note SQLite can't actually do this via ALTER, 
+                # but we'll try standard SQL for MySQL/etc.
+                conn.execute(text("ALTER TABLE groups ALTER COLUMN telegram_chat_id VARCHAR(255)"))
+                
             conn.commit()
             print("Migration: Updated telegram_chat_id to VARCHAR for invite tokens.")
     except Exception as e:
-        print(f"Migration Note (telegram_chat_id): {e}. This might be expected on SQLite.")
+        print(f"Migration Note (telegram_chat_id): {e}. This might be expected on SQLite or if already migrated.")
 
 # CORS - raw middleware that always injects correct headers regardless of origin
 class CORSEverywhere(BaseHTTPMiddleware):
@@ -217,9 +220,9 @@ async def _send_sync_invite(bot_token: str, chat_id: int, chat_title: str, db: S
     
     # Save group to DB
     import models as _models
-    group = db.query(_models.Group).filter(_models.Group.telegram_chat_id == chat_id).first()
+    group = db.query(_models.Group).filter(_models.Group.telegram_chat_id == str(chat_id)).first()
     if not group:
-        group = _models.Group(telegram_chat_id=chat_id, title=chat_title)
+        group = _models.Group(telegram_chat_id=str(chat_id), title=chat_title)
         db.add(group)
     if result.get("ok"):
         group.last_invite_message_id = result["result"]["message_id"]
@@ -347,10 +350,10 @@ async def sync_group(data: dict, current_user: User = Depends(get_current_user),
     return {"status": "success", "group_id": group.id}
 
 @app.get("/groups/{chat_id}/participants")
-async def get_group_participants(chat_id: int, db: Session = Depends(get_db)):
+async def get_group_participants(chat_id: str, db: Session = Depends(get_db)):
     """Returns all participants in a group."""
     print(f"DEBUG: Fetching participants for chat_id: {chat_id}")
-    group = db.query(models.Group).filter(models.Group.telegram_chat_id == chat_id).first()
+    group = db.query(models.Group).filter(models.Group.telegram_chat_id == str(chat_id)).first()
     if not group:
         print(f"DEBUG: Group not found in DB for chat_id: {chat_id}")
         return []
@@ -670,7 +673,7 @@ async def finalize_meeting(data: dict, db: Session = Depends(get_db)):
     if not chat_id or not time_str:
         raise HTTPException(status_code=400, detail="chat_id and time_str are required")
         
-    group = db.query(models.Group).filter(models.Group.telegram_chat_id == chat_id).first()
+    group = db.query(models.Group).filter(models.Group.telegram_chat_id == str(chat_id)).first()
     if not group or not group.last_invite_message_id:
         return {"status": "error", "message": "group_not_found_or_no_message"}
         

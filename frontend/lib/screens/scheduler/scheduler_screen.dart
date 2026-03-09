@@ -508,16 +508,15 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
                         chatId: groupProvider.chatId,
                       );
 
-                      if (success && groupProvider.chatId != null) {
-                        // Call finalize to update Telegram message
-                        final timeStr = "${DateFormat('EEEE, d MMMM, HH:mm').format(slot.start)}";
-                        await scheduler.finalizeMeeting(
-                          chatId: groupProvider.chatId!,
-                          timeStr: timeStr,
-                        );
-                      }
-
-                        // Show success before closing
+                      if (success) {
+                        if (groupProvider.chatId != null) {
+                          final timeStr = DateFormat('EEEE, d MMMM, HH:mm').format(slot.start);
+                          await scheduler.finalizeMeeting(
+                            chatId: groupProvider.chatId!,
+                            timeStr: timeStr,
+                          );
+                        }
+                        
                         if (mounted) {
                           await showDialog(
                             context: context,
@@ -532,13 +531,17 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
                               ],
                             ),
                           );
-                        }
-                        
-                        if (mounted) {
-                          Navigator.of(context).pop(); // Close bottom sheet
+                          Navigator.of(context).pop(); // Close sheet
                           context.read<TelegramService>().close();
                         }
-                      },
+                      } else {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text("Ошибка при бронировании встречи.")),
+                          );
+                        }
+                      }
+                    },
                 style: ElevatedButton.styleFrom(
                   minimumSize: const Size(double.infinity, 50),
                   backgroundColor: Colors.blue,

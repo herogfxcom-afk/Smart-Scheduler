@@ -101,11 +101,17 @@ class GroupProvider with ChangeNotifier {
     if (_chatId == null) return;
     
     try {
-      final response = await _apiService.get('/groups/${int.tryParse(_chatId!) ?? _chatId.hashCode}/participants');
-      _participants = (response.data as List).map((p) => GroupParticipant.fromJson(p)).toList();
+      print("DEBUG: Fetching participants for chat_id: $_chatId");
+      final response = await _apiService.get('/groups/$_chatId/participants'); // Use string chat_id directly
+      _participants = (response.data as List)
+          .map((p) => GroupParticipant.fromJson(p))
+          .toList();
+      _error = null;
+      print("DEBUG: Synced with group. Participants: ${_participants.length}");
       notifyListeners();
     } catch (e) {
       _error = e.toString();
+      print("ERROR: Failed to fetch participants for chat_id $_chatId: $e");
       notifyListeners();
     }
   }
