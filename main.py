@@ -74,23 +74,34 @@ app.include_router(google_auth_router)
 # ─────────────────── TELEGRAM BOT WEBHOOK ───────────────────
 # Bot runs as a webhook inside FastAPI - no separate process needed!
 
-async def _setup_webhook():
-    """Registers the webhook URL with Telegram on startup."""
+async def _setup_bot_ui():
+    """Registers the webhook and sets up the bot menu button."""
     bot_token = os.getenv("BOT_TOKEN")
     api_url = os.getenv("API_URL", "")
     if not bot_token or not api_url:
-        print("BOT WEBHOOK: Skipping - BOT_TOKEN or API_URL not set")
+        print("BOT UI SETUP: Skipping - BOT_TOKEN or API_URL not set")
         return
+        
+    # 1. Webhook
     webhook_url = f"{api_url.rstrip('/')}/webhook/bot"
-    resp = requests.post(
-        f"https://api.telegram.org/bot{bot_token}/setWebhook",
-        json={"url": webhook_url, "drop_pending_updates": True}
-    )
-    print(f"BOT WEBHOOK: setWebhook → {resp.json()}")
+    resp = requests.post(f"https://api.telegram.org/bot{bot_token}/setWebhook", json={"url": webhook_url, "drop_pending_updates": True}).json()
+    print(f"BOT WEBHOOK: setWebhook → {resp}")
+    
+    # 2. Menu Button (Global)
+    # This button appears next to the bot's input field in all chats.
+    # Note: In groups, it might just open the command list, but in private it opens the app.
+    menu_resp = requests.post(f"https://api.telegram.org/bot{bot_token}/setChatMenuButton", json={
+        "menu_button": {
+            "type": "web_app",
+            "text": "📊 Magic Sync",
+            "web_app": {"url": api_url}
+        }
+    }).json()
+    print(f"BOT MENU: setChatMenuButton → {menu_resp}")
 
 @app.on_event("startup")
 async def on_startup_webhook():
-    asyncio.create_task(_setup_webhook())
+    asyncio.create_task(_setup_bot_ui())
 
 @app.post("/webhook/bot")
 async def telegram_webhook(req: FastAPIRequest, db: Session = Depends(get_db)):
@@ -236,9 +247,15 @@ async def get_me(current_user: User = Depends(get_current_user)):
 @app.post("/groups/sync")
 async def sync_group(data: dict, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Links user to a group via telegram_chat_id."""
-    chat_id = data.get("chat_id")
-    if not chat_id:
+    raw_chat_id = data.get("chat_id")
+    if not raw_chat_id:
         raise HTTPException(status_code=400, detail="chat_id is required")
+    
+    # Robust integer parsing for large TG IDs
+    try:
+        chat_id = int(raw_chat_id)
+    except (ValueError, TypeError):
+        chat_id = raw_chat_id # Fallback to hash if it's truly not an int string
     
     # Check if group exists
     print(f"DEBUG: sync_group called for chat_id={chat_id} by user={current_user.id}")
