@@ -32,12 +32,20 @@ class HeatmapGrid extends StatelessWidget {
     }
 
     for (final slot in slots) {
-      final hour = slot.start.hour;
-      // Get exact day difference (0 = Monday, 1 = Tuesday etc.)
       final int diff = slot.start.difference(weekStart).inDays;
-      
-      if (hour >= 7 && hour < 23 && diff >= 0 && diff < 7) {
-        gridData[hour]![diff] = slot;
+      if (diff >= 0 && diff < 7) {
+        // Fill all hours this slot covers
+        int startHour = slot.start.hour;
+        int endHour = slot.end.hour;
+        
+        // If it ends at 00:00 next day, cap at 23
+        if (slot.end.day != slot.start.day) endHour = 23;
+
+        for (int h = startHour; h < endHour; h++) {
+          if (h >= 7 && h < 23) {
+            gridData[h]![diff] = slot;
+          }
+        }
       }
     }
 

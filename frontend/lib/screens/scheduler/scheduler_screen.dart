@@ -531,8 +531,7 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
                               ],
                             ),
                           );
-                          Navigator.of(context).pop(); // Close sheet
-                          context.read<TelegramService>().close();
+                          if (mounted) Navigator.of(context).pop(); // Close sheet
                         }
                       } else {
                         if (mounted) {
