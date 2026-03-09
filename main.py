@@ -236,9 +236,9 @@ async def _send_sync_invite(bot_token: str, chat_id: int, chat_title: str, db: S
 async def api_status():
     return {
         "status": "online",
-        "version": "4.2-stabilized",
+        "version": "4.3-final-polish",
         "database": "connected",
-        "message": "Magic Sync & Calendar grid stabilized (v4.2).",
+        "message": "Magic Sync, robust notifications, and grid-scaling ready.",
         "bot_webhook": bool(os.getenv("BOT_TOKEN") and os.getenv("API_URL"))
     }
 
@@ -666,7 +666,7 @@ async def create_meeting(data: dict, current_user: User = Depends(get_current_us
 
 @app.post("/meeting/finalize")
 async def finalize_meeting(data: dict, db: Session = Depends(get_db)):
-    """Finalizes meeting by updating Telegram message with the final date/time."""
+    """Finalizes meeting by updating/sending Telegram message with the final date/time."""
     chat_id = data.get("chat_id")
     time_str = data.get("time_str")
     
@@ -674,47 +674,61 @@ async def finalize_meeting(data: dict, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="chat_id and time_str are required")
         
     group = db.query(models.Group).filter(models.Group.telegram_chat_id == str(chat_id)).first()
-    if not group or not group.last_invite_message_id:
-        return {"status": "error", "message": "group_not_found_or_no_message"}
-        
+    
     bot_token = os.getenv("BOT_TOKEN")
     if not bot_token:
         return {"status": "error", "message": "bot_token_missing"}
         
+    # Deep link optimization (handle 'n' prefix for negative IDs)
+    clean_param = str(chat_id).replace("-", "n")
+    reply_markup = {
+        "inline_keyboard": [[{
+            "text": "📅 Посмотреть детали",
+            "url": f"https://t.me/smartschedulertime_bot/app?startapp=group_{clean_param}"
+        }]]
+    }
+
+    new_text = (
+        f"📅 **Встреча назначена!**\n\n"
+        f"📍 Тема: {group.title if group else 'Встреча'}\n"
+        f"⏰ Время: **{time_str}**\n\n"
+        "Добавлено в календари участников!"
+    )
+
     try:
-        new_text = (
-            f"📅 **Встреча назначена!**\n\n"
-            f"📍 Тема: {group.title or 'Встреча'}\n"
-            f"⏰ Время: **{time_str}**\n\n"
-            "Добавляйте в календарь!"
-        )
-        
-        # Build a different keyboard or remove it
-        reply_markup = {
-            "inline_keyboard": [[{
-                "text": "📅 Посмотреть детали",
-                "url": f"https://t.me/smartschedulertime_bot/app?startapp=group_{chat_id}"
-            }]]
-        }
-        
         # Safe int conversion for numeric chat_ids
         try:
             target_chat = int(chat_id)
         except:
             target_chat = str(chat_id)
 
-        resp = requests.post(
-            f"https://api.telegram.org/bot{bot_token}/editMessageText",
-            json={
+        # 1. Try to EDIT existing message if possible
+        if group and group.last_invite_message_id:
+            print(f"DEBUG: Attempting to EDIT message {group.last_invite_message_id} in {target_chat}")
+            edit_resp = requests.post(f"https://api.telegram.org/bot{bot_token}/editMessageText", json={
                 "chat_id": target_chat,
                 "message_id": int(group.last_invite_message_id),
                 "text": new_text,
                 "parse_mode": "Markdown",
                 "reply_markup": json.dumps(reply_markup)
-            }
-        ).json()
+            }, timeout=3).json()
+            
+            if edit_resp.get("ok"):
+                print("DEBUG: Successfully edited existing invitation message.")
+                return {"status": "success", "action": "edited", "tg_response": edit_resp}
+            else:
+                print(f"DEBUG: Edit failed ({edit_resp.get('description')}), falling back to SENDING NEW message.")
+
+        # 2. Fallback: Send a NEW message to the group
+        send_resp = requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={
+            "chat_id": target_chat,
+            "text": new_text,
+            "parse_mode": "Markdown",
+            "reply_markup": json.dumps(reply_markup)
+        }, timeout=3).json()
         
-        return {"status": "success", "tg_response": resp}
+        return {"status": "success", "action": "sent_new", "tg_response": send_resp}
+
     except Exception as e:
         print(f"ERROR in finalize_meeting: {e}")
         return {"status": "error", "message": str(e)}

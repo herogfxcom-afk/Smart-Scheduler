@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:go_router/go_router.dart';
 import '../../providers/scheduler_provider.dart';
 import '../../providers/group_provider.dart';
+import '../../providers/sync_provider.dart';
 import '../../core/telegram/telegram_service.dart';
 import '../../models/time_slot.dart';
 import 'widgets/heatmap_grid.dart';
@@ -531,7 +532,20 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
                               ],
                             ),
                           );
-                          if (mounted) Navigator.of(context).pop(); // Close sheet
+                          
+                          // Trigger Background Sync to repaint grid
+                          if (mounted) {
+                            context.read<SyncProvider>().sync().then((_) {
+                              if (mounted) {
+                                final groupProvider = context.read<GroupProvider>();
+                                final scheduler = context.read<SchedulerProvider>();
+                                groupProvider.syncWithGroup();
+                                final ids = groupProvider.participants.map((p) => p.telegramId).toList();
+                                scheduler.fetchCommonSlots(ids);
+                              }
+                            });
+                            Navigator.of(context).pop(); // Close sheet
+                          }
                         }
                       } else {
                         if (mounted) {
