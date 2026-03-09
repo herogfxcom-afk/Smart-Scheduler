@@ -25,7 +25,7 @@ class User(Base):
 class Group(Base):
     __tablename__ = "groups"
     id = Column(Integer, primary_key=True)
-    telegram_chat_id = Column(BigInteger, unique=True, index=True, nullable=False)
+    telegram_chat_id = Column(String(255), unique=True, index=True, nullable=False)
     title = Column(String(255), nullable=True)
     last_invite_message_id = Column(BigInteger, nullable=True) # For updating the "Magic Sync" card
     created_at = Column(DateTime, default=datetime.datetime.utcnow)

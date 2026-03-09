@@ -513,12 +513,28 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
                         );
                       }
 
-                      if (mounted) {
-                        Navigator.of(context).pop(); // Close bottom sheet
-                        // Close the Mini App
-                        context.read<TelegramService>().close();
-                      }
-                    },
+                        // Show success before closing
+                        if (mounted) {
+                          await showDialog(
+                            context: context,
+                            builder: (ctx) => AlertDialog(
+                              title: const Text("Успешно забронировано!"),
+                              content: const Text("Общее время выбрано. Мы отправили уведомление в группу."),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.of(ctx).pop(),
+                                  child: const Text("ОК"),
+                                ),
+                              ],
+                            ),
+                          );
+                        }
+                        
+                        if (mounted) {
+                          Navigator.of(context).pop(); // Close bottom sheet
+                          context.read<TelegramService>().close();
+                        }
+                      },
                 style: ElevatedButton.styleFrom(
                   minimumSize: const Size(double.infinity, 50),
                   backgroundColor: Colors.blue,

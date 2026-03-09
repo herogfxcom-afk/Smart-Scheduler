@@ -81,17 +81,9 @@ class GroupProvider with ChangeNotifier {
       _isLoading = true;
       notifyListeners();
 
-      // 1. Tell backend we are in this group
-      final parsedId = int.tryParse(_chatId!);
-      if (parsedId == null) {
-        _error = "Numeric Group ID is required. Please use a valid Telegram link or ID.";
-        _isLoading = false;
-        notifyListeners();
-        return;
-      }
-
+      // 1. Tell backend we are in this group (allowing both numeric and alphanumeric tokens)
       await _apiService.post('/groups/sync', {
-        'chat_id': parsedId,
+        'chat_id': _chatId!,
         'title': 'Telegram Group',
       });
       

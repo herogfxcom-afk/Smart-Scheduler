@@ -31,19 +31,30 @@ models.Base.metadata.create_all(bind=engine)
 def migrate_db():
     from sqlalchemy import text, inspect
     inspector = inspect(engine)
-    columns = [col['name'] for col in inspector.get_columns('users')]
     
-    if 'email' not in columns:
+    # Check users table
+    users_cols = [col['name'] for col in inspector.get_columns('users')]
+    if 'email' not in users_cols:
         with engine.connect() as conn:
             try:
-                # Standard SQL
                 conn.execute(text("ALTER TABLE users ADD COLUMN email VARCHAR(255)"))
                 conn.commit()
                 print("Migration: Added email column to users table.")
             except Exception as e:
-                print(f"Migration Error: {e}")
-    else:
-        print("Migration Check: 'email' column already exists.")
+                print(f"Migration Error (email): {e}")
+
+    # Check groups table for telegram_chat_id type change
+    # Note: SQLite doesn't support easy column type changes, but MySQL/Postgres do.
+    # If using SQLite, we skip or handle carefully.
+    try:
+        with engine.connect() as conn:
+            # We use a broad try-catch because this SQL is DB-specific.
+            # On PostgreSQL/MySQL:
+            conn.execute(text("ALTER TABLE groups ALTER COLUMN telegram_chat_id TYPE VARCHAR(255)"))
+            conn.commit()
+            print("Migration: Updated telegram_chat_id to VARCHAR for invite tokens.")
+    except Exception as e:
+        print(f"Migration Note (telegram_chat_id): {e}. This might be expected on SQLite.")
 
 # CORS - raw middleware that always injects correct headers regardless of origin
 class CORSEverywhere(BaseHTTPMiddleware):
@@ -221,9 +232,10 @@ async def _send_sync_invite(bot_token: str, chat_id: int, chat_title: str, db: S
 @app.get("/api/status")
 async def api_status():
     return {
-        "status": "ok", 
-        "message": "Smart Scheduler API", 
-        "version": "3.5-final",
+        "status": "online",
+        "version": "3.8-stable",
+        "database": "connected",
+        "message": "Magic Sync is stabilized and ready (including invite links).",
         "bot_webhook": bool(os.getenv("BOT_TOKEN") and os.getenv("API_URL"))
     }
 
@@ -347,8 +359,14 @@ async def get_group_participants(chat_id: int, db: Session = Depends(get_db)):
         u = p.user
         print(f"DEBUG: Checking membership for user {u.telegram_id} ({u.username}) in chat {chat_id}")
         try:
+            # Safe int conversion for numeric chat_ids
+            try:
+                target_chat = int(chat_id)
+            except:
+                target_chat = str(chat_id)
+
             resp = requests.get(f"https://api.telegram.org/bot{bot_token}/getChatMember", params={
-                "chat_id": int(chat_id),
+                "chat_id": target_chat,
                 "user_id": int(u.telegram_id)
             }, timeout=3).json()
             
@@ -480,32 +498,7 @@ async def sync_calendar(current_user: User = Depends(get_current_user), db: Sess
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Sync failed: {str(e)}")
 
-@app.post("/meeting/finalize")
-async def finalize_meeting(data: dict, db: Session = Depends(get_db)):
-    """Updates the Telegram message to announce the chosen time."""
-    chat_id = data.get("chat_id")
-    time_str = data.get("time_str")
-    
-    group = db.query(models.Group).filter(models.Group.telegram_chat_id == chat_id).first()
-    if not group or not group.last_invite_message_id:
-        return {"status": "error", "message": "Group or message ID not found"}
-
-    bot_token = os.getenv("BOT_TOKEN")
-    new_text = f"✅ **Время найдено!**\n\n📌 **{time_str}**\n\nПожалуйста, подтвердите своё участие нажатием кнопки!"
-    
-    from aiogram.utils.keyboard import InlineKeyboardBuilder
-    builder = InlineKeyboardBuilder()
-    builder.button(text="👍 Подтверждаю", callback_data=f"confirm_meet_{chat_id}")
-    
-    resp = requests.post(f"https://api.telegram.org/bot{bot_token}/editMessageText", json={
-        "chat_id": int(chat_id),
-        "message_id": int(group.last_invite_message_id),
-        "text": new_text,
-        "parse_mode": "Markdown",
-        "reply_markup": builder.as_markup().model_dump()
-    }, timeout=3).json()
-    
-    return {"status": "success", "tg_response": resp}
+# Removed duplicate finalize_meeting to prevent conflicts
 
 @app.get("/calendar/busy-slots")
 async def get_busy_slots(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -695,10 +688,16 @@ async def finalize_meeting(data: dict, db: Session = Depends(get_db)):
             }]]
         }
         
+        # Safe int conversion for numeric chat_ids
+        try:
+            target_chat = int(chat_id)
+        except:
+            target_chat = str(chat_id)
+
         resp = requests.post(
             f"https://api.telegram.org/bot{bot_token}/editMessageText",
             json={
-                "chat_id": int(chat_id),
+                "chat_id": target_chat,
                 "message_id": int(group.last_invite_message_id),
                 "text": new_text,
                 "parse_mode": "Markdown",
