@@ -131,17 +131,20 @@ async def sync_group(data: dict, current_user: User = Depends(get_current_user),
                 models.GroupParticipant.is_synced == 1
             ).count()
             bot_token = os.getenv("BOT_TOKEN")
+            # Fetch bot username for deep linking
+            bot_resp = requests.get(f"https://api.telegram.org/bot{bot_token}/getMe").json()
+            bot_username = bot_resp.get("result", {}).get("username", "smartschedulertime_bot")
+
             new_text = (
-                f"📊 **Ищу общее время для встречи.**\n\n"
+                f"📊 **Ищу общее время для встречи: {group.title or 'Group'}**\n\n"
                 f"✅ Присоединилось: {participants_count} чел.\n\n"
                 f"Нажмите кнопку ниже, чтобы синхронизировать календари."
             )
-            # We need the markup too to stay persistent
+            
+            # Use direct deep link for reliability
             from aiogram.utils.keyboard import InlineKeyboardBuilder
-            from aiogram import types
             builder = InlineKeyboardBuilder()
-            APP_URL = os.getenv("APP_URL", "https://smart-scheduler-production-2006.up.railway.app")
-            builder.button(text="📊 Magic Sync", web_app=types.WebAppInfo(url=f"{APP_URL}/#/?startapp=group_{chat_id}"))
+            builder.button(text="📊 Magic Sync", url=f"https://t.me/{bot_username}/app?startapp=group_{chat_id}")
             
             resp = requests.post(f"https://api.telegram.org/bot{bot_token}/editMessageText", json={
                 "chat_id": int(chat_id),

@@ -21,6 +21,7 @@ dp = Dispatcher()
 async def cmd_start(message: types.Message):
     """Handles /start and deep linking."""
     args = message.text.split()
+    bot_info = await bot.get_me()
     if len(args) > 1 and args[1].startswith("group_"):
         chat_id = args[1].replace("group_", "")
         await message.answer(
@@ -28,7 +29,7 @@ async def cmd_start(message: types.Message):
             f"Click the button below to join the sync!",
             reply_markup=InlineKeyboardBuilder().button(
                 text="🚀 Open Mini App",
-                web_app=types.WebAppInfo(url=f"{APP_URL}/#/?startapp=group_{chat_id}")
+                url=f"https://t.me/{bot_info.username}/app?startapp=group_{chat_id}"
             ).as_markup()
         )
     else:
@@ -42,14 +43,16 @@ async def cmd_sync(message: types.Message):
         return
 
     chat_id = message.chat.id
+    bot_info = await bot.get_me()
     builder = InlineKeyboardBuilder()
+    # Use direct deep link instead of web_app for better group persistence
     builder.button(
         text="📊 Magic Sync",
-        web_app=types.WebAppInfo(url=f"{APP_URL}/#/?startapp=group_{chat_id}")
+        url=f"https://t.me/{bot_info.username}/app?startapp=group_{chat_id}"
     )
     
     msg = await message.answer(
-        "📊 **Ищу общее время для встречи.**\n\n"
+        f"📊 **Ищу общее время для встречи: {message.chat.title}**\n\n"
         "Нажмите кнопку ниже, чтобы присоединиться к поиску и синхронизировать свой календарь.",
         parse_mode="Markdown",
         reply_markup=builder.as_markup()
@@ -67,22 +70,26 @@ async def cmd_sync(message: types.Message):
 @dp.inline_query()
 async def inline_handler(inline_query: types.InlineQuery):
     """Handles inline queries to search for free time."""
-    # Use a direct link to the bot with start_param for better compatibility in inline results
+    query = inline_query.query.strip() or "Новая встреча"
     bot_user = await bot.get_me()
-    sync_url = f"https://t.me/{bot_user.username}/app?startapp=inline"
+    
+    # Format: startapp=inline_[encoded_title]
+    # For now keep it simple: group_ID or just open app
+    sync_url = f"https://t.me/{bot_user.username}/app?startapp=new_meeting"
     
     builder = InlineKeyboardBuilder()
     builder.button(
-        text="📊 Magic Sync",
+        text="🗓 Open Scheduler",
         url=sync_url
     )
     
     result = types.InlineQueryResultArticle(
-        id="find_time_meeting",
-        title="Найти время для встречи",
+        id=f"sync_{inline_query.id}",
+        title=f"📅 Встреча: {query}",
         description="Создать карточку синхронизации для выбора времени",
         input_message_content=types.InputTextMessageContent(
-            message_text="📊 **Нажмите кнопку ниже, чтобы синхронизировать календари и найти время для встречи!**",
+            message_text=f"📊 **Найти лучшее время для встречи: {query}**\n\n"
+                         "Нажмите кнопку ниже, чтобы синхронизировать календари!",
             parse_mode="Markdown"
         ),
         reply_markup=builder.as_markup()
