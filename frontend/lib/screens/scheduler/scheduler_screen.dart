@@ -142,7 +142,7 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
-        title: const Text("Доступность команды v5.6.7"),
+        title: const Text("Доступность команды v5.7.1-stable"),
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: BackButton(onPressed: () => Navigator.of(context).pop()),

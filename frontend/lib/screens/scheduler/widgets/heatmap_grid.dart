@@ -27,7 +27,7 @@ class HeatmapGrid extends StatelessWidget {
 
     // 2. Group slots by hour and offset date
     final Map<int, Map<int, TimeSlot?>> gridData = {};
-    for (int hour = 7; hour < 23; hour++) {
+    for (int hour = 7; hour < 24; hour++) {
       gridData[hour] = {};
     }
 
@@ -41,11 +41,11 @@ class HeatmapGrid extends StatelessWidget {
         int startHour = localStart.hour;
         int endHour = localEnd.hour;
         
-        // If it spans midnight, cap at 23 for today
-        if (localEnd.day != localStart.day) endHour = 23;
+        // If it spans midnight, cap at 24 for today
+        if (localEnd.day != localStart.day) endHour = 24;
 
         for (int h = startHour; h < endHour; h++) {
-          if (h >= 7 && h < 23) {
+          if (h >= 7 && h < 24) {
             gridData[h]![diff] = slot;
           }
         }
@@ -100,7 +100,8 @@ class HeatmapGrid extends StatelessWidget {
         const SizedBox(height: 12),
         Expanded(
           child: ListView.builder(
-            itemCount: 16, // 7:00 to 23:00
+            padding: const EdgeInsets.only(bottom: 80), // Added padding for better scrolling
+            itemCount: 17, // 7:00 to 23:00 (up to 24:00)
             itemBuilder: (context, index) {
               final hour = index + 7;
               return SizedBox(
