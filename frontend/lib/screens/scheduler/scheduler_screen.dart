@@ -111,6 +111,12 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
         elevation: 0,
         leading: BackButton(onPressed: () => Navigator.of(context).pop()),
         actions: [
+          // Permanent "Book Meeting" button
+          IconButton(
+            icon: const Icon(Icons.event_available, color: Colors.blue),
+            tooltip: "Book a Meeting",
+            onPressed: () => _showManualBooking(context, scheduler),
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             tooltip: "Refresh sync",
@@ -265,38 +271,74 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
           ),
         ],
       ),
-      bottomNavigationBar: scheduler.suggestedSlots.isNotEmpty && !_isHeatmapView
-          ? SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: ElevatedButton(
-                  onPressed: () {
-                    if (scheduler.suggestedSlots.isNotEmpty) {
-                      _showConfirmation(context, scheduler, scheduler.suggestedSlots.first);
-                    }
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue,
-                    foregroundColor: Colors.white,
-                    minimumSize: const Size(double.infinity, 56),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  ),
-                  child: const Text("Arrange Meeting (Best Slot)", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                ),
-              ),
-            )
-          : null,
-      floatingActionButton: scheduler.suggestedSlots.isNotEmpty && _isHeatmapView
-          ? FloatingActionButton.extended(
-              onPressed: () {
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          child: ElevatedButton.icon(
+            onPressed: () {
+              if (scheduler.suggestedSlots.isNotEmpty) {
                 _showConfirmation(context, scheduler, scheduler.suggestedSlots.first);
-              },
+              } else {
+                _showManualBooking(context, scheduler);
+              }
+            },
+            icon: const Icon(Icons.calendar_today, color: Colors.white),
+            label: Text(
+              scheduler.suggestedSlots.isNotEmpty ? "Book Best Time" : "Book a Meeting",
+              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+            ),
+            style: ElevatedButton.styleFrom(
               backgroundColor: Colors.blue,
-              icon: const Icon(Icons.calendar_today, color: Colors.white),
-              label: const Text("Book Best Time", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-            )
-          : null,
+              minimumSize: const Size(double.infinity, 56),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            ),
+          ),
+        ),
+      ),
+      floatingActionButton: null,
     );
+  }
+
+  /// Opens a manual date/time picker so users can book even without Google Calendar data.
+  void _showManualBooking(BuildContext context, SchedulerProvider scheduler) async {
+    // Step 1: Date picker
+    final date = await showDatePicker(
+      context: context,
+      initialDate: _selectedDay,
+      firstDate: DateTime.now(),
+      lastDate: DateTime.now().add(const Duration(days: 90)),
+      builder: (ctx, child) => Theme(
+        data: ThemeData.dark().copyWith(
+          colorScheme: const ColorScheme.dark(primary: Colors.blue),
+        ),
+        child: child!,
+      ),
+    );
+    if (date == null || !mounted) return;
+
+    // Step 2: Time picker
+    final time = await showTimePicker(
+      context: context,
+      initialTime: const TimeOfDay(hour: 10, minute: 0),
+      builder: (ctx, child) => Theme(
+        data: ThemeData.dark().copyWith(
+          colorScheme: const ColorScheme.dark(primary: Colors.blue),
+        ),
+        child: child!,
+      ),
+    );
+    if (time == null || !mounted) return;
+
+    final start = DateTime(date.year, date.month, date.day, time.hour, time.minute);
+    final end = start.add(const Duration(hours: 1));
+
+    final manualSlot = TimeSlot(
+      start: start,
+      end: end,
+      type: 'match',
+      availability: 1.0,
+    );
+    _showConfirmation(context, scheduler, manualSlot);
   }
 
   Widget _buildListSlots(List<TimeSlot> slotsForDay, SchedulerProvider scheduler) {
