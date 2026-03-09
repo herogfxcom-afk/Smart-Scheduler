@@ -550,6 +550,8 @@ class _BookingFormSheetState extends State<BookingFormSheet>
   final _titleFocus = FocusNode();
   late DateTime _startTime;
   late DateTime _endTime;
+  bool _hasInteractedWithTime = false;
+  bool _hasInteractedWithDate = false;
   bool _isLoading = false;
 
   late final AnimationController _animCtrl;
@@ -557,7 +559,10 @@ class _BookingFormSheetState extends State<BookingFormSheet>
   late final Animation<double> _fadeAnim;
 
   bool get _canSubmit =>
-      _titleController.text.trim().isNotEmpty && !_isLoading;
+      _titleController.text.trim().isNotEmpty && 
+      _hasInteractedWithTime && 
+      _hasInteractedWithDate && 
+      !_isLoading;
 
   @override
   void initState() {
@@ -605,6 +610,7 @@ class _BookingFormSheetState extends State<BookingFormSheet>
     if (picked == null) return;
 
     setState(() {
+      _hasInteractedWithTime = true;
       if (isStart) {
         _startTime = DateTime(
           _startTime.year, _startTime.month, _startTime.day,
@@ -651,6 +657,7 @@ class _BookingFormSheetState extends State<BookingFormSheet>
     if (picked == null) return;
 
     setState(() {
+      _hasInteractedWithDate = true;
       final diff = _endTime.difference(_startTime);
       _startTime = DateTime(
         picked.year, picked.month, picked.day,
@@ -746,7 +753,7 @@ class _BookingFormSheetState extends State<BookingFormSheet>
         const Icon(Icons.event_rounded, color: Color(0xFF4A90E2), size: 22),
         const SizedBox(width: 10),
         const Text(
-          'Новая встреча',
+          'Новая встреча v5.6.1',
           style: TextStyle(
             color: Colors.white,
             fontSize: 18,
