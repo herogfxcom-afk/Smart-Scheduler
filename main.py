@@ -1,12 +1,12 @@
-from fastapi import FastAPI, Depends, HTTPException, Header, Request as FastAPIRequest
+from fastapi import FastAPI, Depends, HTTPException, Header, Request as FastAPIRequest, Request, Query
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.requests import Request
 from starlette.responses import Response
 from sqlalchemy.orm import Session
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+import pytz
 from auth import get_current_user
 from google_oauth import router as google_auth_router
 from models import User, BusySlot, Meeting
@@ -530,7 +530,7 @@ async def sync_calendar(current_user: User = Depends(get_current_user), db: Sess
 
 @app.get("/calendar/busy-slots")
 async def get_busy_slots(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Returns cached busy slots for the user with Z suffix."""
+    """Returns cached busy slots for the user with explicit Z suffix."""
     slots = db.query(BusySlot).filter(BusySlot.user_id == current_user.id).all()
     return [
         {"start": s.start_time.isoformat() + "Z", "end": s.end_time.isoformat() + "Z"} 
@@ -626,8 +626,12 @@ async def update_meeting(meeting_id: int, data: dict, current_user: User = Depen
         
     if "title" in data: meeting.title = data["title"]
     if "location" in data: meeting.location = data["location"]
-    if "start" in data: meeting.start_time = datetime.fromisoformat(data["start"].replace('Z', ''))
-    if "end" in data: meeting.end_time = datetime.fromisoformat(data["end"].replace('Z', ''))
+    if "start" in data: 
+        s_raw = data["start"].replace('Z', '+00:00')
+        meeting.start_time = datetime.fromisoformat(s_raw).astimezone(pytz.utc).replace(tzinfo=None)
+    if "end" in data: 
+        e_raw = data["end"].replace('Z', '+00:00')
+        meeting.end_time = datetime.fromisoformat(e_raw).astimezone(pytz.utc).replace(tzinfo=None)
     
     db.commit()
     return {"status": "success"}
@@ -731,10 +735,14 @@ async def create_meeting(data: dict, current_user: User = Depends(get_current_us
         raise HTTPException(status_code=400, detail="Start and End times are required")
         
     try:
-        start_time = datetime.fromisoformat(str(start_str).replace('Z', '').split('+')[0])
-        end_time = datetime.fromisoformat(str(end_str).replace('Z', '').split('+')[0])
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid date format")
+        # Robust UTC parsing: handle Z and offsets, convert to UTC, then store as naive
+        s_raw = str(start_str).replace('Z', '+00:00')
+        e_raw = str(end_str).replace('Z', '+00:00')
+        start_time = datetime.fromisoformat(s_raw).astimezone(pytz.utc).replace(tzinfo=None)
+        end_time = datetime.fromisoformat(e_raw).astimezone(pytz.utc).replace(tzinfo=None)
+    except Exception as e:
+        print(f"DEBUG: Error parsing dates {start_str}/{end_str}: {e}")
+        raise HTTPException(status_code=400, detail=f"Invalid date format: {e}")
     
     # Check Idempotency
     if idempotency_key:
