@@ -104,7 +104,52 @@ async def telegram_webhook(req: FastAPIRequest, db: Session = Depends(get_db)):
     except Exception:
         return {"ok": False}
     
+    # 1. Handle regular messages (/sync, /start etc)
     message = update.get("message") or update.get("edited_message")
+    
+    # 2. Handle bot added to group (my_chat_member)
+    my_chat_member = update.get("my_chat_member")
+    if my_chat_member and my_chat_member.get("new_chat_member", {}).get("status") == "member":
+        # Bot just added to group! Send invitation automatically.
+        chat = my_chat_member.get("chat", {})
+        chat_id = chat.get("id")
+        chat_title = chat.get("title", "Группа")
+        await _send_sync_invite(bot_token, chat_id, chat_title, db)
+        return {"ok": True}
+
+    # 3. Handle Inline Query (@botname)
+    inline_query = update.get("inline_query")
+    if inline_query:
+        query_id = inline_query.get("id")
+        # Get bot's username  
+        bot_info_resp = requests.get(f"https://api.telegram.org/bot{bot_token}/getMe").json()
+        bot_username = bot_info_resp.get("result", {}).get("username", "smartschedulertime_bot")
+        
+        # We offer a button to launch the app (generic since we don't know the chat_id here)
+        # But we can say "Share Magic Sync in this chat"
+        results = [{
+            "type": "article",
+            "id": "magic_sync",
+            "title": "📊 Поделиться Magic Sync",
+            "description": "Позволяет всем участникам синхронизировать календари.",
+            "input_message_content": {
+                "message_text": "📊 *Magic Sync: Синхронизация календарей*\n\nНажмите кнопку ниже, чтобы начать!",
+                "parse_mode": "Markdown"
+            },
+            "reply_markup": {
+                "inline_keyboard": [[{
+                    "text": "📊 Magic Sync",
+                    "url": f"https://t.me/{bot_username}/app" # Generic launch
+                }]]
+            }
+        }]
+        requests.post(f"https://api.telegram.org/bot{bot_token}/answerInlineQuery", json={
+            "inline_query_id": query_id,
+            "results": results,
+            "cache_time": 300
+        })
+        return {"ok": True}
+
     if not message:
         return {"ok": True}
     
@@ -112,45 +157,52 @@ async def telegram_webhook(req: FastAPIRequest, db: Session = Depends(get_db)):
     chat = message.get("chat", {})
     chat_id = chat.get("id")
     chat_type = chat.get("type", "")
-    chat_title = chat.get("title", "Group")
+    chat_title = chat.get("title", "Группа")
     
-    # Only respond to /sync in groups
-    if text.startswith("/sync") and chat_type in ["group", "supergroup"]:
-        # Get bot's username  
-        bot_info_resp = requests.get(f"https://api.telegram.org/bot{bot_token}/getMe")
-        bot_username = bot_info_resp.json().get("result", {}).get("username", "smartschedulertime_bot")
-        
-        deep_link = f"https://t.me/{bot_username}/app?startapp=group_{chat_id}"
-        
-        payload = {
-            "chat_id": chat_id,
-            "text": f"📊 *Синхронизация калendarей для: {chat_title}*\n\n"
-                    "Нажмите кнопку ниже, чтобы синхронизировать свой календарь и найти общее время!",
-            "parse_mode": "Markdown",
-            "reply_markup": json.dumps({
-                "inline_keyboard": [[{
-                    "text": "📊 Magic Sync",
-                    "url": deep_link
-                }]]
-            })
-        }
-        
-        result = requests.post(
-            f"https://api.telegram.org/bot{bot_token}/sendMessage",
-            json=payload
-        ).json()
-        
-        # Save group to DB
-        import models as _models
-        group = db.query(_models.Group).filter(_models.Group.telegram_chat_id == chat_id).first()
-        if not group:
-            group = _models.Group(telegram_chat_id=chat_id, title=chat_title)
-            db.add(group)
-        if result.get("ok"):
-            group.last_invite_message_id = result["result"]["message_id"]
-        db.commit()
-        
-        print(f"BOT: Sent Magic Sync to {chat_title} (chat_id={chat_id}), link={deep_link}")
+    # Only respond to /sync or /start in groups
+    if (text.startswith("/sync") or text.startswith("/start")) and chat_type in ["group", "supergroup"]:
+        await _send_sync_invite(bot_token, chat_id, chat_title, db)
+    
+    return {"ok": True}
+
+async def _send_sync_invite(bot_token: str, chat_id: int, chat_title: str, db: Session):
+    """Internal helper to send the Magic Sync button to a chat."""
+    bot_info_resp = requests.get(f"https://api.telegram.org/bot{bot_token}/getMe").json()
+    bot_username = bot_info_resp.get("result", {}).get("username", "smartschedulertime_bot")
+    
+    # IMPORTANT: StartApp parameter CANNOT contain the minus (-) sign.
+    # Replace negative ID prefix with 'n'
+    clean_chat_id = str(chat_id).replace("-", "n")
+    deep_link = f"https://t.me/{bot_username}/app?startapp=group_{clean_chat_id}"
+    
+    payload = {
+        "chat_id": chat_id,
+        "text": f"📊 *Синхронизация календарей для: {chat_title}*\n\n"
+                "Нажмите кнопку ниже, чтобы синхронизировать свой календарь и найти общее время!",
+        "parse_mode": "Markdown",
+        "reply_markup": json.dumps({
+            "inline_keyboard": [[{
+                "text": "📊 Magic Sync",
+                "url": deep_link
+            }]]
+        })
+    }
+    
+    result = requests.post(
+        f"https://api.telegram.org/bot{bot_token}/sendMessage",
+        json=payload
+    ).json()
+    
+    # Save group to DB
+    import models as _models
+    group = db.query(_models.Group).filter(_models.Group.telegram_chat_id == chat_id).first()
+    if not group:
+        group = _models.Group(telegram_chat_id=chat_id, title=chat_title)
+        db.add(group)
+    if result.get("ok"):
+        group.last_invite_message_id = result["result"]["message_id"]
+    db.commit()
+    print(f"BOT: Sent Magic Sync to {chat_title} (chat_id={chat_id}), link={deep_link}")
     
     return {"ok": True}
 # ─────────────────────────────────────────────────────────────

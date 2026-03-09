@@ -77,8 +77,14 @@ class _SmartSchedulerAppState extends State<SmartSchedulerApp> with WidgetsBindi
         print("DEBUG: Final extracted startParam: $startParam");
 
         if (startParam != null && startParam.startsWith("group_")) {
-          final chatId = startParam.replaceFirst("group_", "");
-          print("DEBUG: Setting chatId: $chatId");
+          // Deep link startapp values cannot have '-' sign. 
+          // We use 'n' as a prefix for negative IDs in main.py
+          final chatIdStr = startParam.replaceFirst("group_", "");
+          final chatId = chatIdStr.startsWith("n") 
+              ? chatIdStr.replaceFirst("n", "-")
+              : chatIdStr;
+              
+          print("DEBUG: Setting final decoded chatId: $chatId");
           context.read<GroupProvider>().setChatId(chatId);
           
           // Debug snackbar
