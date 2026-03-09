@@ -906,7 +906,7 @@ async def root():
             os.path.join(STATIC_DIR, "index.html"),
             headers={"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0"}
         )
-    return {"status": "ok", "message": "API is running. Backend v3.0"}
+    return {"status": "ok", "message": "API is running. Backend v5.6.5"}
 
 # Mount static assets (JS, CSS, fonts etc) at /static-assets to avoid overriding API
 # The key fix: we use a separate StaticFiles mount for assets onl
