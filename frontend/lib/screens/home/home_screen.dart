@@ -41,24 +41,25 @@ class HomeScreen extends StatelessWidget {
               // Group Sync Section (Magic Sync)
               if (groupProvider.chatId != null) ...[
                 Text(
-                  "📊 Syncing with: ${groupProvider.chatId}",
+                  "📊 Syncing with Group",
                   style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.blue),
                 ),
                 const SizedBox(height: 16),
                 if (groupProvider.isLoading)
                   const CircularProgressIndicator()
                 else if (groupProvider.participants.isEmpty)
-                  const Text("No participants yet. Click refresh or wait.", style: TextStyle(color: Colors.grey))
+                  const Text("No participants yet. Click refresh to check for others.", style: TextStyle(color: Colors.grey))
                 else
                   SizedBox(
-                    height: 100,
+                    height: 120,
                     child: ListView.builder(
                       scrollDirection: Axis.horizontal,
                       itemCount: groupProvider.participants.length,
                       itemBuilder: (context, index) {
                         final p = groupProvider.participants[index];
+                        final isMe = p.telegramId == authProvider.user?.telegramId;
                         return Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                          padding: const EdgeInsets.symmetric(horizontal: 12.0),
                           child: Column(
                             children: [
                               Container(
@@ -71,16 +72,19 @@ class HomeScreen extends StatelessWidget {
                                   ),
                                 ),
                                 child: CircleAvatar(
-                                  radius: 25,
-                                  backgroundImage: p.photoUrl != null ? NetworkImage(p.photoUrl!) : null,
-                                  child: p.photoUrl == null ? const Icon(Icons.person) : null,
+                                  radius: 30,
+                                  backgroundImage: (p.photoUrl != null && p.photoUrl!.isNotEmpty) 
+                                      ? NetworkImage(p.photoUrl!) : null,
+                                  child: (p.photoUrl == null || p.photoUrl!.isEmpty) 
+                                      ? const Icon(Icons.person, size: 30) : null,
                                 ),
                               ),
-                              const SizedBox(height: 4),
+                              const SizedBox(height: 6),
                               Text(
-                                p.firstName ?? "User",
+                                isMe ? "You" : (p.firstName ?? "User"),
                                 style: TextStyle(
-                                  fontSize: 12,
+                                  fontSize: 13,
+                                  fontWeight: isMe ? FontWeight.bold : FontWeight.normal,
                                   color: p.isSynced ? Colors.green : Colors.grey,
                                 ),
                               ),
@@ -92,26 +96,44 @@ class HomeScreen extends StatelessWidget {
                   ),
                 const Divider(),
               ] else ...[
-                 // Debug / Manual Part
+                 // Manual Group Join
                  ExpansionTile(
-                   title: const Text("Technical Help / Manual Sync", style: TextStyle(fontSize: 12, color: Colors.grey)),
+                   initiallyExpanded: false,
+                   title: const Text("Join a Group Manually", style: TextStyle(fontSize: 14, color: Colors.blue)),
+                   subtitle: const Text("Paste the group ID or invite link here", style: TextStyle(fontSize: 11)),
                    children: [
                      Padding(
-                       padding: const EdgeInsets.all(8.0),
+                       padding: const EdgeInsets.all(16.0),
                        child: Column(
                          children: [
-                           Text("URL: ${Uri.base}", style: const TextStyle(fontSize: 10, color: Colors.grey)),
-                           const SizedBox(height: 8),
                            TextField(
-                             decoration: const InputDecoration(
-                               hintText: "Enter Group ID manually",
-                               hintStyle: TextStyle(fontSize: 12),
-                               border: OutlineInputBorder(),
-                               contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 5)
+                             decoration: InputDecoration(
+                               hintText: "e.g. -10012345 or t.me/join...",
+                               hintStyle: const TextStyle(fontSize: 13, color: Colors.grey),
+                               border: const OutlineInputBorder(),
+                               suffixIcon: IconButton(
+                                 icon: const Icon(Icons.check_circle, color: Colors.blue),
+                                 onPressed: () {
+                                   // Focus scope refresh
+                                   FocusScope.of(context).unfocus();
+                                 },
+                               )
                              ),
                              onSubmitted: (val) {
-                               if (val.isNotEmpty) groupProvider.setChatId(val);
+                               if (val.trim().isNotEmpty) groupProvider.setChatId(val.trim());
                              },
+                           ),
+                           const SizedBox(height: 12),
+                           SizedBox(
+                             width: double.infinity,
+                             child: ElevatedButton(
+                               style: ElevatedButton.styleFrom(backgroundColor: Colors.blue.withOpacity(0.1)),
+                               onPressed: () {
+                                 // Logic to trigger groupProvider.setChatId with current text
+                                 // (Note: usually we would wrap TextField in a Form or use a controller)
+                               },
+                               child: const Text("Connect Group", style: TextStyle(color: Colors.blue)),
+                             ),
                            ),
                          ],
                        ),

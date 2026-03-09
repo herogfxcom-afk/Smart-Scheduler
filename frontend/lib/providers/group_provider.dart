@@ -49,8 +49,24 @@ class GroupProvider with ChangeNotifier {
   String? get error => _error;
 
   void setChatId(String? id) {
-    if (_chatId == id) return;
-    _chatId = id;
+    if (id == null || id.isEmpty) return;
+    
+    String finalId = id.trim();
+    
+    // Handle Telegram invite links
+    // e.g., https://t.me/+cZuAHkVHFS43YTIi or https://t.me/joinchat/...
+    if (finalId.contains("t.me/")) {
+      if (finalId.contains("+")) {
+         final inviteParts = finalId.split("+");
+         if (inviteParts.length > 1) finalId = inviteParts.last;
+      } else if (finalId.contains("joinchat/")) {
+         final inviteParts = finalId.split("joinchat/");
+         if (inviteParts.length > 1) finalId = inviteParts.last;
+      }
+    }
+    
+    if (_chatId == finalId) return;
+    _chatId = finalId;
     _participants = []; // Reset on change
     notifyListeners();
     if (_chatId != null) {
