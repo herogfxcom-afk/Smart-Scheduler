@@ -117,4 +117,60 @@ class TelegramService {
     }
     return null;
   }
+
+  /// Parses initData from URI (Recommended approach for reliability)
+  Map<String, String>? parseInitDataFromUrl(String url) {
+    try {
+      final uri = Uri.parse(url);
+      
+      // Look for tgWebAppData or just startapp directly
+      String? dataRaw = uri.queryParameters['tgWebAppData'];
+      
+      // Case 1: Standard tgWebAppData (found in direct frame URL)
+      if (dataRaw != null) {
+        final decoded = Uri.decodeComponent(dataRaw);
+        return Uri.splitQueryString(decoded);
+      }
+      
+      // Case 2: In fragment (sometimes Flutter HashStrategy puts it there)
+      if (uri.fragment.contains('tgWebAppData=')) {
+         final fragmentQuery = uri.fragment.contains('?') 
+             ? uri.fragment.split('?').last 
+             : uri.fragment;
+         final fragmentParts = Uri.splitQueryString(fragmentQuery);
+         final fragmentDataRaw = fragmentParts['tgWebAppData'];
+         if (fragmentDataRaw != null) {
+           return Uri.splitQueryString(Uri.decodeComponent(fragmentDataRaw));
+         }
+      }
+    } catch (e) {
+      print("Error parsing init data from URL: $e");
+    }
+    return null;
+  }
+
+  String? getStartParamFromUrl(String url) {
+    // 1. Try tgWebAppData parsing
+    final data = parseInitDataFromUrl(url);
+    if (data != null && data['start_param'] != null) {
+      return data['start_param'];
+    }
+    
+    // 2. Fallback to direct startapp query param
+    final uri = Uri.parse(url);
+    if (uri.queryParameters['startapp'] != null) {
+      return uri.queryParameters['startapp'];
+    }
+    
+    // 3. Fallback to fragment startapp
+    if (uri.fragment.contains('startapp=')) {
+       final fragmentQuery = uri.fragment.contains('?') 
+           ? uri.fragment.split('?').last 
+           : uri.fragment;
+       final parts = Uri.splitQueryString(fragmentQuery);
+       return parts['startapp'];
+    }
+    
+    return null;
+  }
 }

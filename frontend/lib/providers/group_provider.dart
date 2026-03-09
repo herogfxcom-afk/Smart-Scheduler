@@ -51,6 +51,7 @@ class GroupProvider with ChangeNotifier {
   void setChatId(String? id) {
     if (_chatId == id) return;
     _chatId = id;
+    _participants = []; // Reset on change
     notifyListeners();
     if (_chatId != null) {
       syncWithGroup();

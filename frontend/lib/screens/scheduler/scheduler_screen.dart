@@ -23,17 +23,42 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
   @override
   void initState() {
     super.initState();
+    _initDataLoading();
+  }
+
+  void _initDataLoading() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final scheduler = context.read<SchedulerProvider>();
       final groupProvider = context.read<GroupProvider>();
       
-      // Load group participants and REFRESH them to trigger ghost cleanup
+      // Listen for participant changes to update slots
+      groupProvider.addListener(_onGroupChanged);
+      
+      // Initial sync if ID is already there
       if (groupProvider.chatId != null) {
-        groupProvider.syncWithGroup().then((_) {
-          scheduler.fetchCommonSlots(groupProvider.participants.map((p) => p.telegramId).toList());
-        });
+        groupProvider.syncWithGroup();
       }
     });
+  }
+
+  void _onGroupChanged() {
+    if (!mounted) return;
+    final groupProvider = context.read<GroupProvider>();
+    final scheduler = context.read<SchedulerProvider>();
+    
+    if (groupProvider.participants.isNotEmpty) {
+      final ids = groupProvider.participants.map((p) => p.telegramId).toList();
+      print("DEBUG: Participants updated, fetching slots for: $ids");
+      scheduler.fetchCommonSlots(ids);
+    }
+  }
+
+  @override
+  void dispose() {
+    // Remove listener safely
+    try {
+      context.read<GroupProvider>().removeListener(_onGroupChanged);
+    } catch (_) {}
+    super.dispose();
   }
 
   @override
@@ -41,7 +66,34 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
     final scheduler = context.watch<SchedulerProvider>();
     final groupProvider = context.watch<GroupProvider>();
     
-    // Group slots by day
+    if (groupProvider.chatId == null && !groupProvider.isLoading) {
+      return Scaffold(
+        backgroundColor: Colors.black,
+        appBar: AppBar(title: const Text("Team Availability")),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.group_off, size: 64, color: Colors.grey),
+                const SizedBox(height: 16),
+                const Text(
+                  "No group context found.\nPlease open the app from a Telegram group using the Magic Sync button.",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.white70),
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton(
+                  onPressed: () => context.pop(),
+                  child: const Text("Go Back"),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
     final Map<String, List<TimeSlot>> groupedSlots = {};
     for (var slot in scheduler.suggestedSlots) {
       final dateKey = "${slot.start.year}-${slot.start.month}-${slot.start.day}";
@@ -59,6 +111,13 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
         elevation: 0,
         leading: BackButton(onPressed: () => Navigator.of(context).pop()),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: "Refresh sync",
+            onPressed: () {
+               context.read<GroupProvider>().syncWithGroup();
+            },
+          ),
           IconButton(
             icon: Icon(_isHeatmapView ? Icons.calendar_view_day : Icons.grid_on),
             onPressed: () => setState(() => _isHeatmapView = !_isHeatmapView),

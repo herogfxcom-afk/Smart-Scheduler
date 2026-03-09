@@ -57,57 +57,40 @@ class _SmartSchedulerAppState extends State<SmartSchedulerApp> with WidgetsBindi
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     
-    // Parse deep link group context
+    // Parse deep link group context with high robustness
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final telegram = context.read<TelegramService>();
-      String? startParam = telegram.getStartParam();
-      
-      print("DEBUG: Telegram startParam: $startParam");
-      
-      // Fallback to Uri.base if Telegram start_param is null (common on Desktop/Web)
-      if (startParam == null) {
-        final uri = Uri.base;
-        print("DEBUG: URI.base: $uri");
-        print("DEBUG: URI.queryParameters: ${uri.queryParameters}");
-        print("DEBUG: URI.fragment: ${uri.fragment}");
+      // Small delay to ensure all providers are fully ready
+      Future.delayed(const Duration(milliseconds: 300), () {
+        if (!mounted) return;
         
-        startParam = uri.queryParameters['startapp'];
+        final telegram = context.read<TelegramService>();
+        final currentUrl = Uri.base.toString();
         
-        // Robust fragment parsing (HashStrategy support)
-        if (startParam == null && uri.fragment.isNotEmpty) {
-          // Case 1: #/?startapp=...
-          // Case 2: #/scheduler?startapp=...
-          final fragmentQueryIndex = uri.fragment.indexOf('?');
-          if (fragmentQueryIndex != -1) {
-            final fragmentQuery = uri.fragment.substring(fragmentQueryIndex + 1);
-            final fragmentParts = Uri.splitQueryString(fragmentQuery);
-            startParam = fragmentParts['startapp'];
-          } else if (uri.fragment.contains('startapp=')) {
-            // Case 3: #startapp=... (no question mark)
-            final parts = Uri.splitQueryString(uri.fragment.startsWith('/') 
-                ? uri.fragment.substring(1) 
-                : uri.fragment);
-            startParam = parts['startapp'];
-          }
+        // 1. Try built-in start_param (Standard way)
+        String? startParam = telegram.getStartParam();
+        
+        // 2. Try URL parsing (Fallback for some mobile/web cases)
+        if (startParam == null) {
+          startParam = telegram.getStartParamFromUrl(currentUrl);
         }
-      }
-
-      print("DEBUG: Final extracted startParam: $startParam");
-
-      if (startParam != null && startParam.startsWith("group_")) {
-        final chatId = startParam.replaceFirst("group_", "");
-        print("DEBUG: Setting chatId: $chatId");
-        context.read<GroupProvider>().setChatId(chatId);
         
-        // Also show a small snackbar for 1s to confirm to the user
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Syncing with group: $chatId"),
-            duration: const Duration(seconds: 1),
-            behavior: SnackBarBehavior.floating,
-          )
-        );
-      }
+        print("DEBUG: Final extracted startParam: $startParam");
+
+        if (startParam != null && startParam.startsWith("group_")) {
+          final chatId = startParam.replaceFirst("group_", "");
+          print("DEBUG: Setting chatId: $chatId");
+          context.read<GroupProvider>().setChatId(chatId);
+          
+          // Debug snackbar
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text("Magic Sync Group ID: $chatId"),
+              backgroundColor: Colors.blue,
+              duration: const Duration(seconds: 2),
+            )
+          );
+        }
+      });
     });
   }
 
