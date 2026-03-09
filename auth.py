@@ -40,23 +40,32 @@ def validate_init_data(init_data: str) -> dict:
         import time
         auth_date = int(vals.get("auth_date", 0))
         if time.time() - auth_date > 86400: # 24 hours
+            print("AUTH ERROR: InitData expired")
             raise HTTPException(status_code=401, detail="InitData expired")
         
         user_data = json.loads(vals.get("user", "{}"))
         return user_data
+    except HTTPException:
+        raise
     except Exception as e:
+        print(f"AUTH ERROR EXCEPTION: {str(e)}")
         raise HTTPException(status_code=401, detail=f"Auth error: {str(e)}")
 
 from typing import Optional
 
 def get_current_user(init_data: Optional[str] = Header(None), db: Session = Depends(get_db)):
     """Dependency to get or create user based on Telegram initData."""
+    print(f"===> DEBUG AUTH: Received init_data header: {init_data}")
+    
     if not init_data:
+        print("===> DEBUG AUTH: Fail! init-data header is entirely missing.")
         raise HTTPException(status_code=401, detail="init-data header missing")
+        
     user_info = validate_init_data(init_data)
     telegram_id = user_info.get("id")
     
     if not telegram_id:
+        print("===> DEBUG AUTH: Fail! Telegram ID missing in validated data.")
         raise HTTPException(status_code=401, detail="User ID missing in initData")
     
     user = db.query(User).filter(User.telegram_id == telegram_id).first()
