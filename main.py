@@ -223,7 +223,7 @@ async def api_status():
     return {
         "status": "ok", 
         "message": "Smart Scheduler API", 
-        "version": "2.4-webhook-fixed",
+        "version": "3.5-final",
         "bot_webhook": bool(os.getenv("BOT_TOKEN") and os.getenv("API_URL"))
     }
 
