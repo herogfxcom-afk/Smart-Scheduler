@@ -475,126 +475,48 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
     );
   }
 
-  /// Shows a detailed booking dialog with time fine-tuning.
-  void _showBookingOptions(BuildContext context, SchedulerProvider scheduler, TimeSlot slot) async {
-    DateTime startTime = slot.start.toLocal();
-    DateTime endTime = slot.end.toLocal();
-    final TextEditingController titleController = TextEditingController(text: "Group Sync Meeting");
-
-    showDialog(
+  /// Shows a high-fidelity Google-style booking form.
+  void _showBookingOptions(
+    BuildContext context,
+    SchedulerProvider scheduler,
+    TimeSlot slot,
+  ) {
+    showModalBottomSheet(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          backgroundColor: const Color(0xFF1E1E1E),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: const Text("Параметры встречи", style: TextStyle(color: Colors.white)),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: titleController,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: const InputDecoration(
-                    labelText: "Тема",
-                    labelStyle: TextStyle(color: Colors.blue),
-                    enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text("Начало", style: TextStyle(color: Colors.white70, fontSize: 14)),
-                  subtitle: Text(
-                    DateFormat('HH:mm (d MMMM)').format(startTime),
-                    style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  trailing: const Icon(Icons.access_time, color: Colors.blue),
-                  onTap: () async {
-                    final time = await showTimePicker(
-                      context: context,
-                      initialTime: TimeOfDay.fromDateTime(startTime),
-                    );
-                    if (time != null) {
-                      setDialogState(() {
-                        startTime = DateTime(startTime.year, startTime.month, startTime.day, time.hour, time.minute);
-                        // Adjust end time to maintain duration
-                        endTime = startTime.add(const Duration(minutes: 30));
-                      });
-                    }
-                  },
-                ),
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text("Конец", style: TextStyle(color: Colors.white70, fontSize: 14)),
-                  subtitle: Text(
-                    DateFormat('HH:mm').format(endTime),
-                    style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  trailing: const Icon(Icons.access_time, color: Colors.blue),
-                  onTap: () async {
-                    final time = await showTimePicker(
-                      context: context,
-                      initialTime: TimeOfDay.fromDateTime(endTime),
-                    );
-                    if (time != null) {
-                      setDialogState(() {
-                        endTime = DateTime(endTime.year, endTime.month, endTime.day, time.hour, time.minute);
-                      });
-                    }
-                  },
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  "Ваше местное время (UTC${DateTime.now().timeZoneOffset.inHours >= 0 ? '+' : ''}${DateTime.now().timeZoneOffset.inHours})",
-                  style: const TextStyle(color: Colors.grey, fontSize: 12),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text("Отмена", style: TextStyle(color: Colors.grey)),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
-              onPressed: scheduler.isLoading ? null : () async {
-                final finalSlot = TimeSlot(
-                  start: startTime,
-                  end: endTime,
-                  type: slot.type,
-                  availability: slot.availability,
-                );
-                
-                final success = await scheduler.createMeeting(
-                  title: titleController.text,
-                  slot: finalSlot,
-                  chatId: context.read<GroupProvider>().chatId,
-                );
+      isScrollControlled: true, // full-height sheet
+      backgroundColor: Colors.transparent,
+      builder: (_) => BookingFormSheet(
+        initialSlot: slot,
+        onConfirm: (title, start, end) async {
+          final updatedSlot = TimeSlot(
+            start: start,
+            end: end,
+            type: slot.type,
+            availability: slot.availability,
+          );
+          final groupProvider = context.read<GroupProvider>();
 
-                if (success && mounted) {
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text("Встреча успешно забронирована!")),
-                  );
-                  // Trigger finalization to update Telegram
-                  await scheduler.finalizeMeeting(
-                    chatId: context.read<GroupProvider>().chatId!,
-                    timeStr: "${DateFormat('HH:mm').format(startTime)} - ${DateFormat('HH:mm').format(endTime)} (${DateFormat('d MMMM').format(startTime)})",
-                  );
-                } else if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text("Ошибка: ${scheduler.error ?? 'Не удалось забронировать'}")),
-                  );
-                }
-              },
-              child: scheduler.isLoading 
-                ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                : const Text("Забронировать", style: TextStyle(color: Colors.white)),
-            ),
-          ],
-        ),
+          final success = await scheduler.createMeeting(
+            title: title,
+            slot: updatedSlot,
+            chatId: groupProvider.chatId,
+          );
+
+          if (success && context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('✅ Встреча успешно забронирована!'),
+                backgroundColor: Color(0xFF2ECC71),
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+            // Trigger finalization to update Telegram
+            await scheduler.finalizeMeeting(
+              chatId: groupProvider.chatId!,
+              timeStr: "${DateFormat('HH:mm').format(start)} - ${DateFormat('HH:mm').format(end)} (${DateFormat('d MMMM').format(start)})",
+            );
+          }
+        },
       ),
     );
   }
@@ -603,4 +525,444 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
     const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     return days[weekday - 1];
   }
+}
+
+// ---------- Booking Form Sheet Widget (Google Style) ----------
+
+class BookingFormSheet extends StatefulWidget {
+  final TimeSlot initialSlot;
+  final Future<void> Function(String title, DateTime start, DateTime end) onConfirm;
+
+  const BookingFormSheet({
+    super.key,
+    required this.initialSlot,
+    required this.onConfirm,
+  });
+
+  @override
+  State<BookingFormSheet> createState() => _BookingFormSheetState();
+}
+
+class _BookingFormSheetState extends State<BookingFormSheet>
+    with SingleTickerProviderStateMixin {
+
+  final _titleController = TextEditingController();
+  final _titleFocus = FocusNode();
+  late DateTime _startTime;
+  late DateTime _endTime;
+  bool _isLoading = false;
+
+  late final AnimationController _animCtrl;
+  late final Animation<Offset> _slideAnim;
+  late final Animation<double> _fadeAnim;
+
+  bool get _canSubmit =>
+      _titleController.text.trim().isNotEmpty && !_isLoading;
+
+  @override
+  void initState() {
+    super.initState();
+    _startTime = widget.initialSlot.start.toLocal();
+    _endTime   = widget.initialSlot.end.toLocal();
+
+    _animCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 380),
+    );
+    _slideAnim = Tween<Offset>(
+      begin: const Offset(0, 0.08),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(parent: _animCtrl, curve: Curves.easeOutCubic));
+    _fadeAnim = CurvedAnimation(parent: _animCtrl, curve: Curves.easeOut);
+
+    _animCtrl.forward();
+    _titleController.addListener(() => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _titleFocus.dispose();
+    _animCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickTime({required bool isStart}) async {
+    final initial = isStart ? _startTime : _endTime;
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(initial),
+      builder: (ctx, child) => Theme(
+        data: Theme.of(ctx).copyWith(
+          colorScheme: const ColorScheme.dark(
+            primary: Color(0xFF4A90E2),
+            surface: Color(0xFF252525),
+          ),
+        ),
+        child: child!,
+      ),
+    );
+    if (picked == null) return;
+
+    setState(() {
+      if (isStart) {
+        _startTime = DateTime(
+          _startTime.year, _startTime.month, _startTime.day,
+          picked.hour, picked.minute,
+        );
+        if (!_endTime.isAfter(_startTime)) {
+          _endTime = _startTime.add(const Duration(minutes: 30));
+        }
+      } else {
+        final candidate = DateTime(
+          _startTime.year, _startTime.month, _startTime.day,
+          picked.hour, picked.minute,
+        );
+        if (candidate.isAfter(_startTime)) {
+          _endTime = candidate;
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('⚠️ Время окончания должно быть позже начала'),
+              backgroundColor: Color(0xFFE74C3C),
+            ),
+          );
+        }
+      }
+    });
+  }
+
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _startTime,
+      firstDate: DateTime.now(),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+      builder: (ctx, child) => Theme(
+        data: Theme.of(ctx).copyWith(
+          colorScheme: const ColorScheme.dark(
+            primary: Color(0xFF4A90E2),
+            surface: Color(0xFF252525),
+          ),
+        ),
+        child: child!,
+      ),
+    );
+    if (picked == null) return;
+
+    setState(() {
+      final diff = _endTime.difference(_startTime);
+      _startTime = DateTime(
+        picked.year, picked.month, picked.day,
+        _startTime.hour, _startTime.minute,
+      );
+      _endTime = _startTime.add(diff);
+    });
+  }
+
+  Future<void> _submit() async {
+    if (!_canSubmit) return;
+    setState(() => _isLoading = true);
+    await widget.onConfirm(
+      _titleController.text.trim(),
+      _startTime,
+      _endTime,
+    );
+    if (mounted) {
+      setState(() => _isLoading = false);
+      Navigator.pop(context);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomPad = MediaQuery.of(context).viewInsets.bottom;
+
+    return FadeTransition(
+      opacity: _fadeAnim,
+      child: SlideTransition(
+        position: _slideAnim,
+        child: Container(
+          margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1E1E1E),
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.5),
+                blurRadius: 40,
+                offset: const Offset(0, -8),
+              ),
+            ],
+          ),
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(0, 0, 0, bottomPad),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildHandle(),
+                _buildHeader(),
+                const Divider(color: Color(0xFF2A2A2A), height: 1),
+                Flexible(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                    child: Column(
+                      children: [
+                        const SizedBox(height: 12),
+                        _buildTitleField(),
+                        const SizedBox(height: 4),
+                        _buildDateRow(),
+                        const SizedBox(height: 4),
+                        _buildTimeRow(),
+                        const SizedBox(height: 24),
+                      ],
+                    ),
+                  ),
+                ),
+                _buildFooter(),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHandle() => Padding(
+    padding: const EdgeInsets.only(top: 12, bottom: 4),
+    child: Container(
+      width: 36, height: 4,
+      decoration: BoxDecoration(
+        color: const Color(0xFF404040),
+        borderRadius: BorderRadius.circular(2),
+      ),
+    ),
+  );
+
+  Widget _buildHeader() => Padding(
+    padding: const EdgeInsets.fromLTRB(20, 8, 8, 12),
+    child: Row(
+      children: [
+        const Icon(Icons.event_rounded, color: Color(0xFF4A90E2), size: 22),
+        const SizedBox(width: 10),
+        const Text(
+          'Новая встреча',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.2,
+          ),
+        ),
+        const Spacer(),
+        IconButton(
+          icon: const Icon(Icons.close, color: Color(0xFF707070), size: 22),
+          onPressed: () => Navigator.pop(context),
+        ),
+      ],
+    ),
+  );
+
+  Widget _buildTitleField() => TextField(
+    controller: _titleController,
+    focusNode: _titleFocus,
+    autofocus: true,
+    style: const TextStyle(
+      color: Colors.white,
+      fontSize: 22,
+      fontWeight: FontWeight.w500,
+    ),
+    decoration: const InputDecoration(
+      hintText: 'Название встречи',
+      hintStyle: TextStyle(
+        color: Color(0xFF505050),
+        fontSize: 22,
+        fontWeight: FontWeight.w400,
+      ),
+      border: InputBorder.none,
+      contentPadding: EdgeInsets.symmetric(vertical: 8),
+    ),
+    textCapitalization: TextCapitalization.sentences,
+    onSubmitted: (_) => FocusScope.of(context).unfocus(),
+  );
+
+  Widget _buildDateRow() => _InfoRow(
+    icon: Icons.calendar_today_rounded,
+    label: DateFormat('EEEE, d MMMM yyyy', 'ru').format(_startTime),
+    onTap: _pickDate,
+  );
+
+  Widget _buildTimeRow() => Row(
+    children: [
+      const SizedBox(width: 4),
+      const Icon(Icons.schedule_rounded, color: Color(0xFF606060), size: 20),
+      const SizedBox(width: 12),
+      Expanded(
+        child: Row(
+          children: [
+            _TimeChip(
+              time: _startTime,
+              onTap: () => _pickTime(isStart: true),
+            ),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 8),
+              child: Text('—', style: TextStyle(color: Color(0xFF606060))),
+            ),
+            _TimeChip(
+              time: _endTime,
+              onTap: () => _pickTime(isStart: false),
+            ),
+            const SizedBox(width: 8),
+            _DurationBadge(start: _startTime, end: _endTime),
+          ],
+        ),
+      ),
+    ],
+  );
+
+  Widget _buildFooter() => Container(
+    padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+    decoration: const BoxDecoration(
+      border: Border(top: BorderSide(color: Color(0xFF2A2A2A))),
+    ),
+    child: SizedBox(
+      width: double.infinity,
+      height: 52,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        child: ElevatedButton(
+          onPressed: _canSubmit ? _submit : null,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: _canSubmit
+                ? const Color(0xFF4A90E2)
+                : const Color(0xFF2A2A2A),
+            foregroundColor: _canSubmit
+                ? Colors.white
+                : const Color(0xFF505050),
+            elevation: _canSubmit ? 4 : 0,
+            shadowColor: const Color(0xFF4A90E2).withOpacity(0.4),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+          ),
+          child: _isLoading
+              ? const SizedBox(
+                  width: 22, height: 22,
+                  child: CircularProgressIndicator(
+                    color: Colors.white, strokeWidth: 2.5,
+                  ),
+                )
+              : const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.check_circle_outline_rounded, size: 20),
+                    SizedBox(width: 8),
+                    Text(
+                      'Забронировать',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                  ],
+                ),
+        ),
+      ),
+    ),
+  );
+}
+
+class _InfoRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  const _InfoRow({required this.icon, required this.label, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) => InkWell(
+    onTap: onTap,
+    borderRadius: BorderRadius.circular(8),
+    child: Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+      child: Row(
+        children: [
+          Icon(icon, color: const Color(0xFF606060), size: 20),
+          const SizedBox(width: 12),
+          Text(
+            label,
+            style: const TextStyle(
+              color: Color(0xFFD0D0D0),
+              fontSize: 15,
+            ),
+          ),
+          const Spacer(),
+          const Icon(Icons.chevron_right_rounded,
+              color: Color(0xFF404040), size: 18),
+        ],
+      ),
+    ),
+  );
+}
+
+class _TimeChip extends StatelessWidget {
+  final DateTime time;
+  final VoidCallback onTap;
+
+  const _TimeChip({required this.time, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: onTap,
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: const Color(0xFF2A2A2A),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFF3A3A3A)),
+      ),
+      child: Text(
+        DateFormat('HH:mm').format(time),
+        style: const TextStyle(
+          color: Color(0xFF4A90E2),
+          fontSize: 15,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    ),
+  );
+}
+
+class _DurationBadge extends StatelessWidget {
+  final DateTime start;
+  final DateTime end;
+
+  const _DurationBadge({required this.start, required this.end});
+
+  String get _label {
+    final mins = end.difference(start).inMinutes;
+    if (mins < 0) return '0 мин';
+    if (mins < 60) return '$mins мин';
+    final h = mins ~/ 60;
+    final m = mins % 60;
+    return m == 0 ? '$h ч' : '$h ч $m м';
+  }
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+    decoration: BoxDecoration(
+      color: const Color(0xFF4A90E2).withOpacity(0.12),
+      borderRadius: BorderRadius.circular(6),
+    ),
+    child: Text(
+      _label,
+      style: const TextStyle(
+        color: Color(0xFF4A90E2),
+        fontSize: 12,
+        fontWeight: FontWeight.w500,
+      ),
+    ),
+  );
 }
