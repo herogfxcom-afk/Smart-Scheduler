@@ -40,52 +40,84 @@ class HomeScreen extends StatelessWidget {
             children: [
               // Group Sync Section (Magic Sync)
               if (groupProvider.chatId != null) ...[
-                const Text(
-                  "📊 Magic Sync",
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                Text(
+                  "📊 Syncing with: ${groupProvider.chatId}",
+                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.blue),
                 ),
                 const SizedBox(height: 16),
-                SizedBox(
-                  height: 100,
-                  child: ListView.builder(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: groupProvider.participants.length,
-                    itemBuilder: (context, index) {
-                      final p = groupProvider.participants[index];
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                        child: Column(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(3),
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: p.isSynced ? Colors.green : Colors.grey.withOpacity(0.5),
-                                  width: 3,
+                if (groupProvider.isLoading)
+                  const CircularProgressIndicator()
+                else if (groupProvider.participants.isEmpty)
+                  const Text("No participants yet. Click refresh or wait.", style: TextStyle(color: Colors.grey))
+                else
+                  SizedBox(
+                    height: 100,
+                    child: ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: groupProvider.participants.length,
+                      itemBuilder: (context, index) {
+                        final p = groupProvider.participants[index];
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                          child: Column(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(3),
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: p.isSynced ? Colors.green : Colors.grey.withOpacity(0.5),
+                                    width: 3,
+                                  ),
+                                ),
+                                child: CircleAvatar(
+                                  radius: 25,
+                                  backgroundImage: p.photoUrl != null ? NetworkImage(p.photoUrl!) : null,
+                                  child: p.photoUrl == null ? const Icon(Icons.person) : null,
                                 ),
                               ),
-                              child: CircleAvatar(
-                                radius: 25,
-                                backgroundImage: p.photoUrl != null ? NetworkImage(p.photoUrl!) : null,
-                                child: p.photoUrl == null ? const Icon(Icons.person) : null,
+                              const SizedBox(height: 4),
+                              Text(
+                                p.firstName ?? "User",
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: p.isSynced ? Colors.green : Colors.grey,
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              p.firstName ?? "User",
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: p.isSynced ? Colors.green : Colors.grey,
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
+                            ],
+                          ),
+                        );
+                      },
+                    ),
                   ),
-                ),
                 const Divider(),
+              ] else ...[
+                 // Debug / Manual Part
+                 ExpansionTile(
+                   title: const Text("Technical Help / Manual Sync", style: TextStyle(fontSize: 12, color: Colors.grey)),
+                   children: [
+                     Padding(
+                       padding: const EdgeInsets.all(8.0),
+                       child: Column(
+                         children: [
+                           Text("URL: ${Uri.base}", style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                           const SizedBox(height: 8),
+                           TextField(
+                             decoration: const InputDecoration(
+                               hintText: "Enter Group ID manually",
+                               hintStyle: TextStyle(fontSize: 12),
+                               border: OutlineInputBorder(),
+                               contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 5)
+                             ),
+                             onSubmitted: (val) {
+                               if (val.isNotEmpty) groupProvider.setChatId(val);
+                             },
+                           ),
+                         ],
+                       ),
+                     )
+                   ],
+                 )
               ],
 
               const SizedBox(height: 24),
