@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, Header
+from fastapi import FastAPI, Depends, HTTPException, Header, Request as FastAPIRequest
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,6 +17,7 @@ from caldav_service import AppleCalendarService
 import json
 import os
 import requests
+import asyncio
 
 app = FastAPI(title="Smart Scheduler API")
 
@@ -70,10 +71,89 @@ app.add_middleware(CORSEverywhere)
 # Connect Routers
 app.include_router(google_auth_router)
 
-# API status debug
-@app.get("/api/status")
-async def api_status():
-    return {"status": "ok", "message": "Smart Scheduler API", "version": "2.0-cors-fix"}
+# ─────────────────── TELEGRAM BOT WEBHOOK ───────────────────
+# Bot runs as a webhook inside FastAPI - no separate process needed!
+
+async def _setup_webhook():
+    """Registers the webhook URL with Telegram on startup."""
+    bot_token = os.getenv("BOT_TOKEN")
+    api_url = os.getenv("API_URL", "")
+    if not bot_token or not api_url:
+        print("BOT WEBHOOK: Skipping - BOT_TOKEN or API_URL not set")
+        return
+    webhook_url = f"{api_url.rstrip('/')}/webhook/bot"
+    resp = requests.post(
+        f"https://api.telegram.org/bot{bot_token}/setWebhook",
+        json={"url": webhook_url, "drop_pending_updates": True}
+    )
+    print(f"BOT WEBHOOK: setWebhook → {resp.json()}")
+
+@app.on_event("startup")
+async def on_startup_webhook():
+    asyncio.create_task(_setup_webhook())
+
+@app.post("/webhook/bot")
+async def telegram_webhook(req: FastAPIRequest, db: Session = Depends(get_db)):
+    """Receives Telegram updates and handles /sync command."""
+    bot_token = os.getenv("BOT_TOKEN")
+    if not bot_token:
+        return {"ok": False}
+    
+    try:
+        update = await req.json()
+    except Exception:
+        return {"ok": False}
+    
+    message = update.get("message") or update.get("edited_message")
+    if not message:
+        return {"ok": True}
+    
+    text = message.get("text", "")
+    chat = message.get("chat", {})
+    chat_id = chat.get("id")
+    chat_type = chat.get("type", "")
+    chat_title = chat.get("title", "Group")
+    
+    # Only respond to /sync in groups
+    if text.startswith("/sync") and chat_type in ["group", "supergroup"]:
+        # Get bot's username  
+        bot_info_resp = requests.get(f"https://api.telegram.org/bot{bot_token}/getMe")
+        bot_username = bot_info_resp.json().get("result", {}).get("username", "smartschedulertime_bot")
+        
+        deep_link = f"https://t.me/{bot_username}/app?startapp=group_{chat_id}"
+        
+        payload = {
+            "chat_id": chat_id,
+            "text": f"📊 *Синхронизация калendarей для: {chat_title}*\n\n"
+                    "Нажмите кнопку ниже, чтобы синхронизировать свой календарь и найти общее время!",
+            "parse_mode": "Markdown",
+            "reply_markup": json.dumps({
+                "inline_keyboard": [[{
+                    "text": "📊 Magic Sync",
+                    "url": deep_link
+                }]]
+            })
+        }
+        
+        result = requests.post(
+            f"https://api.telegram.org/bot{bot_token}/sendMessage",
+            json=payload
+        ).json()
+        
+        # Save group to DB
+        import models as _models
+        group = db.query(_models.Group).filter(_models.Group.telegram_chat_id == chat_id).first()
+        if not group:
+            group = _models.Group(telegram_chat_id=chat_id, title=chat_title)
+            db.add(group)
+        if result.get("ok"):
+            group.last_invite_message_id = result["result"]["message_id"]
+        db.commit()
+        
+        print(f"BOT: Sent Magic Sync to {chat_title} (chat_id={chat_id}), link={deep_link}")
+    
+    return {"ok": True}
+# ─────────────────────────────────────────────────────────────
 
 @app.get("/cors-debug")
 async def cors_debug():
