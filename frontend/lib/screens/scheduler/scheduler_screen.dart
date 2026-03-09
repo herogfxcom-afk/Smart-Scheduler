@@ -537,13 +537,17 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
                           
                           // Trigger Background Sync to repaint grid
                           if (mounted) {
-                            context.read<SyncProvider>().sync().then((_) {
+                            Future.delayed(const Duration(seconds: 2), () {
                               if (mounted) {
-                                final groupProvider = context.read<GroupProvider>();
-                                final scheduler = context.read<SchedulerProvider>();
-                                groupProvider.syncWithGroup();
-                                final ids = groupProvider.participants.map((p) => p.telegramId).toList();
-                                scheduler.fetchCommonSlots(ids);
+                                context.read<SyncProvider>().sync().then((_) {
+                                  if (mounted) {
+                                    final groupProvider = context.read<GroupProvider>();
+                                    final scheduler = context.read<SchedulerProvider>();
+                                    groupProvider.syncWithGroup();
+                                    final ids = groupProvider.participants.map((p) => p.telegramId).toList();
+                                    scheduler.fetchCommonSlots(ids);
+                                  }
+                                });
                               }
                             });
                             Navigator.of(context).pop(); // Close sheet
