@@ -53,6 +53,7 @@ class SchedulerProvider extends ChangeNotifier {
     try {
       final response = await _apiService.post('/calendar/free-slots', {
         'telegram_ids': telegramIds,
+        'tz_offset': DateTime.now().timeZoneOffset.inHours,
       });
       final List<dynamic> data = response.data['free_slots'] ?? [];
       _suggestedSlots = data.map((e) => TimeSlot.fromJson(e)).toList();

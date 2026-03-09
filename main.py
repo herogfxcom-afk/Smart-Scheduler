@@ -530,9 +530,10 @@ async def sync_calendar(current_user: User = Depends(get_current_user), db: Sess
 
 @app.get("/calendar/busy-slots")
 async def get_busy_slots(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Returns cached busy slots for the user."""
+    """Returns cached busy slots for the user with Z suffix."""
+    slots = db.query(BusySlot).filter(BusySlot.user_id == current_user.id).all()
     return [
-        {"start": s.start_time.isoformat(), "end": s.end_time.isoformat()} 
+        {"start": s.start_time.isoformat() + "Z", "end": s.end_time.isoformat() + "Z"} 
         for s in slots
     ]
 
@@ -684,14 +685,15 @@ async def get_free_slots(data: dict, db: Session = Depends(get_db)):
 
         # 5. Find intersections
         from calendar_service import find_common_free_slots
-        print(f"DEBUG: Finding slots for TG IDs: {tg_ids} (Internal IDs: {internal_ids})")
-        print(f"DEBUG: Search range: {start} to {end}")
+        tz_offset = data.get("tz_offset", 0)
+        print(f"DEBUG: Finding slots for TG IDs: {tg_ids} Offset: {tz_offset}")
         
         free_windows = find_common_free_slots(
             busy_slots_per_user,
             start_date=start,
             end_date=end,
-            user_availabilities=user_availabilities
+            user_availabilities=user_availabilities,
+            tz_offset_hours=tz_offset
         )
         
         print(f"DEBUG: Found {len(free_windows)} free windows")

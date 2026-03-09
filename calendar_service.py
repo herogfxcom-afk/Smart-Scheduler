@@ -87,11 +87,13 @@ def find_common_free_slots(
     busy_slots_per_user: list[list[tuple[datetime, datetime]]], 
     start_date: datetime, 
     end_date: datetime,
-    user_availabilities: list[dict] = None
+    user_availabilities: list[dict] = None,
+    tz_offset_hours: float = 0
 ) -> list[dict]:
     """
     Finds time slots where everyone OR most users are free, respecting per-user working hours.
     user_availabilities: list of dicts. each dict is {day_of_week (0-6): {"start": hour_int, "end": hour_int, "enabled": bool}}
+    tz_offset_hours: The timezone offset of the user (e.g. +2 for UTC+2), used to align UTC loop with local working hours.
     """
     num_users = len(busy_slots_per_user)
     if num_users == 0:
@@ -118,6 +120,11 @@ def find_common_free_slots(
                 segment_start = current.replace(hour=hour, minute=minute)
                 segment_end = segment_start + timedelta(minutes=30)
                 
+                # Adjust segment_start to LOCAL time for working hours check
+                local_segment_start = segment_start + timedelta(hours=tz_offset_hours)
+                local_segment_end = segment_end + timedelta(hours=tz_offset_hours)
+                local_weekday = local_segment_start.weekday()
+                
                 if segment_start < start_date:
                     continue
                 if segment_start >= end_date:
@@ -128,19 +135,18 @@ def find_common_free_slots(
                 busy_count = 0
                 
                 for i in range(num_users):
-                    u_avail = user_availabilities[i].get(weekday, {"start": 7, "end": 23, "enabled": True})
+                    u_avail = user_availabilities[i].get(local_weekday, {"start": 7, "end": 23, "enabled": True})
                     
-                    # Is this user "at work" during this segment?
-                    # We check if segment is within u_avail["start"] and u_avail["end"]
+                    # Is this user "at work" during this segment (based on their LOCAL time)?
                     is_working = u_avail["enabled"] and \
-                                 segment_start.hour >= u_avail["start"] and \
-                                 segment_end.hour <= u_avail["end"]
+                                 local_segment_start.hour >= u_avail["start"] and \
+                                 local_segment_end.hour <= u_avail["end"]
                     
-                    # Boundary edge case: if end is 18:00, segment 17:30-18:00 is working, but 18:00-18:30 is not.
+                    # Boundary edge case
                     if u_avail["enabled"]:
-                         if segment_start.hour < u_avail["start"]: is_working = False
-                         elif segment_end.hour > u_avail["end"]: is_working = False
-                         elif segment_end.hour == u_avail["end"] and segment_end.minute > 0: is_working = False
+                         if local_segment_start.hour < u_avail["start"]: is_working = False
+                         elif local_segment_end.hour > u_avail["end"]: is_working = False
+                         elif local_segment_end.hour == u_avail["end"] and local_segment_end.minute > 0: is_working = False
                     
                     if not is_working:
                         continue # User not available for meetings now
