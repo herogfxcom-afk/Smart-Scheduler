@@ -12,6 +12,9 @@ import 'screens/login/login_screen.dart';
 import 'screens/home/home_screen.dart';
 import 'screens/scheduler/scheduler_screen.dart';
 import 'providers/group_provider.dart';
+import 'providers/meeting_provider.dart';
+import 'providers/availability_provider.dart';
+import 'screens/settings/availability_settings_screen.dart';
 
 void main() {
   final TelegramService telegramService = TelegramService();
@@ -37,6 +40,12 @@ void main() {
         ),
         ChangeNotifierProvider(
           create: (_) => SchedulerProvider(apiService),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => MeetingProvider(apiService),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => AvailabilityProvider(apiService),
         ),
       ],
       child: const SmartSchedulerApp(),
@@ -133,6 +142,10 @@ class _SmartSchedulerAppState extends State<SmartSchedulerApp> with WidgetsBindi
         GoRoute(
           path: '/scheduler',
           builder: (context, state) => const SchedulerScreen(),
+        ),
+        GoRoute(
+          path: '/availability',
+          builder: (context, state) => const AvailabilitySettingsScreen(),
         ),
       ],
       redirect: (context, state) {

@@ -59,6 +59,25 @@ def migrate_db():
     except Exception as e:
         print(f"Migration Note (telegram_chat_id): {e}. This might be expected on SQLite or if already migrated.")
 
+    # Check user_availability table
+    if not inspector.has_table('user_availability'):
+        try:
+            models.Base.metadata.tables['user_availability'].create(engine)
+            print("Migration: Created user_availability table.")
+        except Exception as e:
+            print(f"Migration Error (user_availability): {e}")
+
+    # Check group_meetings table for user_id column
+    meeting_cols = [col['name'] for col in inspector.get_columns('group_meetings')]
+    if 'user_id' not in meeting_cols:
+        try:
+            with engine.connect() as conn:
+                conn.execute(text("ALTER TABLE group_meetings ADD COLUMN user_id INTEGER REFERENCES users(id)"))
+                conn.commit()
+                print("Migration: Added user_id column to group_meetings table.")
+        except Exception as e:
+            print(f"Migration Error (user_id): {e}")
+
 # CORS - raw middleware that always injects correct headers regardless of origin
 class CORSEverywhere(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
@@ -236,9 +255,9 @@ async def _send_sync_invite(bot_token: str, chat_id: int, chat_title: str, db: S
 async def api_status():
     return {
         "status": "online",
-        "version": "4.3-final-polish",
+        "version": "5.0-dev",
         "database": "connected",
-        "message": "Magic Sync, robust notifications, and grid-scaling ready.",
+        "message": "Dashboard, Meeting Management, and Custom Availability ready.",
         "bot_webhook": bool(os.getenv("BOT_TOKEN") and os.getenv("API_URL"))
     }
 
@@ -512,11 +531,105 @@ async def sync_calendar(current_user: User = Depends(get_current_user), db: Sess
 @app.get("/calendar/busy-slots")
 async def get_busy_slots(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Returns cached busy slots for the user."""
-    slots = db.query(BusySlot).filter(BusySlot.user_id == current_user.id).all()
     return [
         {"start": s.start_time.isoformat(), "end": s.end_time.isoformat()} 
         for s in slots
     ]
+
+# ─────────────────── AVAILABILITY ENDPOINTS ───────────────────
+@app.get("/api/availability")
+async def get_availability(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Returns the user's working hours for each day of the week."""
+    avail = db.query(models.UserAvailability).filter(models.UserAvailability.user_id == current_user.id).all()
+    
+    # If not set, return defaults
+    if not avail:
+        return [
+            {"day_of_week": i, "start_time": "09:00", "end_time": "18:00", "is_enabled": 1}
+            for i in range(7)
+        ]
+        
+    return [
+        {
+            "day_of_week": a.day_of_week,
+            "start_time": a.start_time,
+            "end_time": a.end_time,
+            "is_enabled": a.is_enabled
+        } for a in avail
+    ]
+
+@app.post("/api/availability")
+async def update_availability(data: list[dict], current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Updates user's working hours."""
+    # Clear existing
+    db.query(models.UserAvailability).filter(models.UserAvailability.user_id == current_user.id).delete()
+    
+    for item in data:
+        new_avail = models.UserAvailability(
+            user_id=current_user.id,
+            day_of_week=item["day_of_week"],
+            start_time=item["start_time"],
+            end_time=item["end_time"],
+            is_enabled=item.get("is_enabled", 1)
+        )
+        db.add(new_avail)
+    
+    db.commit()
+    return {"status": "success"}
+
+# ─────────────────── MEETING MANAGEMENT ───────────────────
+@app.get("/api/meetings/my")
+async def get_my_meetings(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Returns meetings created by the user or in groups they belong to."""
+    # 1. Meetings created by user (regardless of group)
+    created = db.query(models.GroupMeeting).filter(models.GroupMeeting.user_id == current_user.id).all()
+    
+    # 2. Meetings in groups user belongs to
+    user_group_ids = [p.group_id for p in current_user.groups]
+    group_meetings = db.query(models.GroupMeeting).filter(models.GroupMeeting.group_id.in_(user_group_ids)).all()
+    
+    # Combine and deduplicate
+    all_meetings = {m.id: m for m in created}
+    for m in group_meetings:
+        all_meetings[m.id] = m
+        
+    result = []
+    for m in sorted(all_meetings.values(), key=lambda x: x.start_time):
+        result.append({
+            "id": m.id,
+            "title": m.title,
+            "start": m.start_time.isoformat() + "Z",
+            "end": m.end_time.isoformat() + "Z",
+            "location": m.location,
+            "group_id": m.group_id
+        })
+    return result
+
+@app.delete("/api/meetings/{meeting_id}")
+async def delete_meeting(meeting_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Deletes a meeting. Currently anyone in the group can delete (simplified)."""
+    meeting = db.query(models.GroupMeeting).filter(models.GroupMeeting.id == meeting_id).first()
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+        
+    db.delete(meeting)
+    db.commit()
+    return {"status": "success"}
+
+@app.patch("/api/meetings/{meeting_id}")
+async def update_meeting(meeting_id: int, data: dict, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Updates meeting details."""
+    meeting = db.query(models.GroupMeeting).filter(models.GroupMeeting.id == meeting_id).first()
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+        
+    if "title" in data: meeting.title = data["title"]
+    if "location" in data: meeting.location = data["location"]
+    if "start" in data: meeting.start_time = datetime.fromisoformat(data["start"].replace('Z', ''))
+    if "end" in data: meeting.end_time = datetime.fromisoformat(data["end"].replace('Z', ''))
+    
+    db.commit()
+    return {"status": "success"}
 
 @app.post("/calendar/free-slots")
 async def get_free_slots(data: dict, db: Session = Depends(get_db)):
@@ -550,22 +663,35 @@ async def get_free_slots(data: dict, db: Session = Depends(get_db)):
             ).all()
             busy_slots_per_user.append([(s.start_time, s.end_time) for s in user_busy])
             
-        # 4. Find intersections
+        # 4. Fetch User Availabilities (Working Hours)
+        user_availabilities = []
+        for uid in internal_ids:
+            avail = db.query(models.UserAvailability).filter(models.UserAvailability.user_id == uid).all()
+            if not avail:
+                # Default: 9-18
+                u_dict = {i: {"start": 9, "end": 18, "enabled": True} for i in range(7)}
+            else:
+                u_dict = {}
+                for a in avail:
+                    # Parse "HH:MM" to int hour
+                    try:
+                        h_start = int(a.start_time.split(":")[0])
+                        h_end = int(a.end_time.split(":")[0])
+                        u_dict[a.day_of_week] = {"start": h_start, "end": h_end, "enabled": bool(a.is_enabled)}
+                    except:
+                        u_dict[a.day_of_week] = {"start": 9, "end": 18, "enabled": True}
+            user_availabilities.append(u_dict)
+
+        # 5. Find intersections
         from calendar_service import find_common_free_slots
         print(f"DEBUG: Finding slots for TG IDs: {tg_ids} (Internal IDs: {internal_ids})")
         print(f"DEBUG: Search range: {start} to {end}")
-        
-        for i, slots in enumerate(busy_slots_per_user):
-            print(f"DEBUG: User {internal_ids[i]} has {len(slots)} busy slots in range.")
-            if len(slots) > 0:
-                print(f"DEBUG: First busy slot for user {internal_ids[i]}: {slots[0]}")
         
         free_windows = find_common_free_slots(
             busy_slots_per_user,
             start_date=start,
             end_date=end,
-            work_start_hour=7,
-            work_end_hour=23 
+            user_availabilities=user_availabilities
         )
         
         print(f"DEBUG: Found {len(free_windows)} free windows")
@@ -653,6 +779,7 @@ async def create_meeting(data: dict, current_user: User = Depends(get_current_us
 
     new_meeting = models.GroupMeeting(
         group_id=group_id,
+        user_id=current_user.id, # Now tracked
         title=summary,
         start_time=start_time,
         end_time=end_time,

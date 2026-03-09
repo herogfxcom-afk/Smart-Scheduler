@@ -86,77 +86,105 @@ class GoogleCalendarService:
 def find_common_free_slots(
     busy_slots_per_user: list[list[tuple[datetime, datetime]]], 
     start_date: datetime, 
-    end_date: datetime, 
-    work_start_hour: int = 9, 
-    work_end_hour: int = 19
+    end_date: datetime,
+    user_availabilities: list[dict] = None
 ) -> list[dict]:
     """
-    Finds time slots where everyone OR most users are free.
+    Finds time slots where everyone OR most users are free, respecting per-user working hours.
+    user_availabilities: list of dicts. each dict is {day_of_week (0-6): {"start": hour_int, "end": hour_int, "enabled": bool}}
     """
     num_users = len(busy_slots_per_user)
     if num_users == 0:
         return []
 
+    # Default availability if not provided (7:00 - 23:00 for everyone)
+    if not user_availabilities:
+        default_day = {"start": 7, "end": 23, "enabled": True}
+        user_availabilities = [{d: default_day for d in range(7)} for _ in range(num_users)]
+
     free_slots = []
+    # Start searching from the beginning of the day of start_date
     curr_day_start = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
     last_day = end_date.replace(hour=0, minute=0, second=0, microsecond=0)
     
     current = curr_day_start
     while current <= last_day:
-        work_start = current.replace(hour=work_start_hour)
-        work_end = current.replace(hour=work_end_hour)
+        weekday = current.weekday() # 0 = Monday
         
-        # We'll check every 30-minute block for simplicity and precision
-        segment_start = max(work_start, start_date)
-        while segment_start < work_end:
-            segment_end = segment_start + timedelta(minutes=30)
-            if segment_end > work_end:
-                segment_end = work_end
-            
-            # Count how many users are busy during this specific segment
-            busy_count = 0
-            for user_busy in busy_slots_per_user:
-                is_busy = False
-                for b_start, b_end in user_busy:
-                    # Check for overlap
-                    if max(segment_start, b_start) < min(segment_end, b_end):
-                        is_busy = True
-                        break
-                if is_busy:
-                    busy_count += 1
-            
-            free_count = num_users - busy_count
-            availability = free_count / num_users if num_users > 0 else 1.0
-            
-            # For heatmap, we show everything above 0% to allow picking "mostly free" slots
-            if free_count > 0:
-                # Type label based on availability percentage
-                if availability == 1.0:
-                    type_label = "match"
-                elif availability >= 0.75:
-                    type_label = "high"
-                elif availability >= 0.5:
-                    type_label = "partial"
-                else:
-                    type_label = "low"
+        # Check every 30-minute block of the 24h day
+        # But we only care about blocks that are within AT LEAST ONE user's work hours
+        for hour in range(24):
+            for minute in [0, 30]:
+                segment_start = current.replace(hour=hour, minute=minute)
+                segment_end = segment_start + timedelta(minutes=30)
                 
-                # We always create new slots for heatmap to preserve per-segment availability
-                # unless they are exactly the same and contiguous
-                if free_slots and free_slots[-1]["type"] == type_label and \
-                   free_slots[-1]["end"] == segment_start.isoformat() and \
-                   free_slots[-1].get("availability") == availability:
-                    free_slots[-1]["end"] = segment_end.isoformat()
-                else:
-                    free_slots.append({
-                        "start": segment_start.isoformat() + "Z",
-                        "end": segment_end.isoformat() + "Z",
-                        "type": type_label,
-                        "free_count": free_count,
-                        "total_count": num_users,
-                        "availability": availability
-                    })
-            
-            segment_start = segment_end
+                if segment_start < start_date:
+                    continue
+                if segment_start >= end_date:
+                    break
+                
+                # Count availability for this specific segment
+                active_users_in_segment = 0
+                busy_count = 0
+                
+                for i in range(num_users):
+                    u_avail = user_availabilities[i].get(weekday, {"start": 7, "end": 23, "enabled": True})
+                    
+                    # Is this user "at work" during this segment?
+                    # We check if segment is within u_avail["start"] and u_avail["end"]
+                    is_working = u_avail["enabled"] and \
+                                 segment_start.hour >= u_avail["start"] and \
+                                 segment_end.hour <= u_avail["end"]
+                    
+                    # Boundary edge case: if end is 18:00, segment 17:30-18:00 is working, but 18:00-18:30 is not.
+                    if u_avail["enabled"]:
+                         if segment_start.hour < u_avail["start"]: is_working = False
+                         elif segment_end.hour > u_avail["end"]: is_working = False
+                         elif segment_end.hour == u_avail["end"] and segment_end.minute > 0: is_working = False
+                    
+                    if not is_working:
+                        continue # User not available for meetings now
+                    
+                    active_users_in_segment += 1
+                    
+                    # Check if user is busy with a calendar event
+                    is_busy = False
+                    for b_start, b_end in busy_slots_per_user[i]:
+                        if max(segment_start, b_start) < min(segment_end, b_end):
+                            is_busy = True
+                            break
+                    if is_busy:
+                        busy_count += 1
+                
+                if active_users_in_segment > 0:
+                    free_count = active_users_in_segment - busy_count
+                    availability = free_count / active_users_in_segment
+                    
+                    # For heatmap, we show segments where at least some active users are free
+                    if free_count > 0:
+                        if availability == 1.0:
+                            type_label = "match"
+                        elif availability >= 0.75:
+                            type_label = "high"
+                        elif availability >= 0.5:
+                            type_label = "partial"
+                        else:
+                            type_label = "low"
+                        
+                        if free_slots and free_slots[-1]["type"] == type_label and \
+                           free_slots[-1]["end"] == segment_start.isoformat() + "Z" and \
+                           free_slots[-1].get("availability") == availability and \
+                           free_slots[-1].get("total_count") == active_users_in_segment:
+                            free_slots[-1]["end"] = segment_end.isoformat() + "Z"
+                        else:
+                            free_slots.append({
+                                "start": segment_start.isoformat() + "Z",
+                                "end": segment_end.isoformat() + "Z",
+                                "type": type_label,
+                                "free_count": free_count,
+                                "total_count": active_users_in_segment,
+                                "availability": availability
+                            })
             
         current += timedelta(days=1)
         

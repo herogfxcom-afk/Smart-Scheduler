@@ -51,4 +51,28 @@ class ApiService {
       throw Exception('Failed to fetch user profile: $e');
     }
   }
+
+  // Meeting Management
+  Future<List<dynamic>> getMyMeetings() async {
+    final response = await _dio.get('/api/meetings/my');
+    return response.data as List<dynamic>;
+  }
+
+  Future<void> deleteMeeting(int id) async {
+    await _dio.delete('/api/meetings/$id');
+  }
+
+  Future<void> updateMeeting(int id, Map<String, dynamic> data) async {
+    await _dio.patch('/api/meetings/$id', data: data);
+  }
+
+  // Availability
+  Future<List<dynamic>> getAvailability() async {
+    final response = await _dio.get('/api/availability');
+    return response.data as List<dynamic>;
+  }
+
+  Future<void> updateAvailability(List<Map<String, dynamic>> data) async {
+    await _dio.post('/api/availability', data: data);
+  }
 }

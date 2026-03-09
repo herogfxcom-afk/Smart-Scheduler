@@ -21,6 +21,7 @@ class User(Base):
     busy_slots = relationship("BusySlot", back_populates="user")
     created_meetings = relationship("Meeting", back_populates="creator")
     groups = relationship("GroupParticipant", back_populates="user")
+    availability = relationship("UserAvailability", back_populates="user")
 
 class Group(Base):
     __tablename__ = "groups"
@@ -51,6 +52,7 @@ class GroupMeeting(Base):
     __tablename__ = "group_meetings"
     id = Column(Integer, primary_key=True)
     group_id = Column(Integer, ForeignKey("groups.id"))
+    user_id = Column(Integer, ForeignKey("users.id"))  # Track the creator
     start_time = Column(DateTime, nullable=False)
     end_time = Column(DateTime, nullable=False)
     title = Column(String(255))
@@ -58,6 +60,7 @@ class GroupMeeting(Base):
     idempotency_key = Column(String(255), unique=True)
     
     group = relationship("Group", back_populates="meetings")
+    creator = relationship("User")
 
 class Meeting(Base):
     __tablename__ = "meetings"
@@ -84,4 +87,20 @@ class BusySlot(Base):
 
     __table_args__ = (
         UniqueConstraint('user_id', 'start_time', 'end_time', name='_user_slot_uc'),
+    )
+
+class UserAvailability(Base):
+    __tablename__ = "user_availability"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    day_of_week = Column(Integer, nullable=False)  # 0=Monday, 6=Sunday
+    start_time = Column(String(5), nullable=False, default="09:00")
+    end_time = Column(String(5), nullable=False, default="18:00")
+    is_enabled = Column(Integer, default=1)  # 1=Enabled, 0=Disabled/Day Off
+
+    user = relationship("User", back_populates="availability")
+
+    __table_args__ = (
+        UniqueConstraint('user_id', 'day_of_week', name='_user_day_uc'),
     )

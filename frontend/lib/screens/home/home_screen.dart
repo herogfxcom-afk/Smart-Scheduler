@@ -4,6 +4,9 @@ import 'package:go_router/go_router.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/sync_provider.dart';
 import '../../providers/group_provider.dart';
+import '../../providers/meeting_provider.dart';
+import '../../providers/availability_provider.dart';
+import '../../models/meeting.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -16,6 +19,14 @@ class _HomeScreenState extends State<HomeScreen> {
   final TextEditingController _groupController = TextEditingController();
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<MeetingProvider>().fetchMyMeetings();
+    });
+  }
+
+  @override
   void dispose() {
     _groupController.dispose();
     super.dispose();
@@ -25,19 +36,25 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final authProvider = context.watch<AuthProvider>();
     final syncProvider = context.watch<SyncProvider>();
-    final user = authProvider.user;
     final groupProvider = context.watch<GroupProvider>();
+    final meetingProvider = context.watch<MeetingProvider>();
+    final user = authProvider.user;
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(groupProvider.chatId != null ? "Group Sync (${groupProvider.chatId})" : "Smart Scheduler"),
+        title: const Text("Magic Sync Dashboard"),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: () {
               authProvider.init();
               groupProvider.syncWithGroup();
+              meetingProvider.fetchMyMeetings();
             },
+          ),
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: () => context.push('/availability'),
           ),
           IconButton(
             icon: const Icon(Icons.logout),
@@ -45,226 +62,339 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-      body: Center(
+      body: RefreshIndicator(
+        onRefresh: () async {
+          await authProvider.init();
+          await groupProvider.syncWithGroup();
+          await meetingProvider.fetchMyMeetings();
+        },
         child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Group Sync Section (Magic Sync)
-              if (groupProvider.chatId != null) ...[
-                Text(
-                  "📊 Syncing with Group",
-                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.blue),
-                ),
-                if (groupProvider.error != null)
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(8),
-                    margin: const EdgeInsets.only(bottom: 16),
-                    decoration: BoxDecoration(color: Colors.red.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-                    child: Text(groupProvider.error!, style: const TextStyle(color: Colors.red, fontSize: 12), textAlign: TextAlign.center),
-                  ),
-                if (groupProvider.isLoading)
-                  const CircularProgressIndicator()
-                else if (groupProvider.participants.isEmpty)
-                  const Text("Нет участников. Поделитесь ботом в группе или обновите.", style: TextStyle(color: Colors.grey))
-                else
-                  SizedBox(
-                    height: 120,
-                    child: ListView.builder(
-                      scrollDirection: Axis.horizontal,
-                      itemCount: groupProvider.participants.length,
-                      itemBuilder: (context, index) {
-                        final p = groupProvider.participants[index];
-                        final isMe = p.telegramId == authProvider.user?.telegramId;
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 12.0),
-                          child: Column(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(3),
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: p.isSynced ? Colors.green : Colors.grey.withOpacity(0.5),
-                                    width: 3,
-                                  ),
-                                ),
-                                child: CircleAvatar(
-                                  radius: 30,
-                                  backgroundImage: (p.photoUrl != null && p.photoUrl!.isNotEmpty) 
-                                      ? NetworkImage(p.photoUrl!) : null,
-                                  child: (p.photoUrl == null || p.photoUrl!.isEmpty) 
-                                      ? const Icon(Icons.person, size: 30) : null,
-                                ),
-                              ),
-                              const SizedBox(height: 6),
-                              Text(
-                                isMe ? "You" : (p.firstName ?? "User"),
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: isMe ? FontWeight.bold : FontWeight.normal,
-                                  color: p.isSynced ? Colors.green : Colors.grey,
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
+              // User Header
+              Row(
+                children: [
+                   CircleAvatar(
+                     radius: 25,
+                     backgroundImage: (user?.photoUrl != null && user!.photoUrl!.isNotEmpty) 
+                         ? NetworkImage(user.photoUrl!) : null,
+                     child: (user?.photoUrl == null || user!.photoUrl!.isEmpty) 
+                         ? const Icon(Icons.person, size: 25) : null,
+                   ),
+                   const SizedBox(width: 16),
+                   Column(
+                     crossAxisAlignment: CrossAxisAlignment.start,
+                     children: [
+                       Text(
+                         "Привет, ${user?.firstName ?? 'Пользователь'}!",
+                         style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                       ),
+                       Text(
+                         user?.username != null ? "@${user!.username}" : "Настройте ваш профиль",
+                         style: const TextStyle(color: Colors.grey),
+                       ),
+                     ],
+                   ),
+                ],
+              ),
+              const SizedBox(height: 24),
+
+              // Upcoming Meetings Section
+              const Text(
+                "Ближайшие встречи",
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 12),
+              _buildMeetingsSection(meetingProvider),
+              
+              const SizedBox(height: 32),
+
+              // Active Sync Section
+              const Text(
+                "Групповая синхронизация",
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 12),
+              _buildGroupSyncSection(groupProvider, authProvider),
+
+              const SizedBox(height: 32),
+
+              // Quick Actions / Services
+              const Text(
+                "Сервисы и настройки",
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 12),
+              _buildQuickActions(context, authProvider, syncProvider, groupProvider),
+              
+              const SizedBox(height: 24),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMeetingsSection(MeetingProvider provider) {
+    if (provider.isLoading) {
+      return const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator()));
+    }
+    if (provider.meetings.isEmpty) {
+      return Card(
+        color: Colors.grey.withOpacity(0.05),
+        child: const Padding(
+          padding: EdgeInsets.all(24.0),
+          child: Center(
+            child: Text("Запланированных встреч нет", style: TextStyle(color: Colors.grey)),
+          ),
+        ),
+      );
+    }
+
+    return ListView.separated(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: provider.meetings.take(3).length, // Show top 3
+      separatorBuilder: (context, index) => const SizedBox(height: 8),
+      itemBuilder: (context, index) {
+        final m = provider.meetings[index];
+        return Card(
+          child: ListTile(
+            leading: const CircleAvatar(backgroundColor: Colors.blue, child: Icon(Icons.event, color: Colors.white)),
+            title: Text(m.title, style: const TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: Text("${_formatDate(m.start)} • ${_formatTime(m.start)}"),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => _showMeetingDetails(context, m),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildGroupSyncSection(GroupProvider groupProvider, AuthProvider authProvider) {
+    if (groupProvider.chatId == null) {
+      return Card(
+        child: ExpansionTile(
+          title: const Text("Подключить группу", style: TextStyle(color: Colors.blue)),
+          subtitle: const Text("Для командного планирования"),
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                children: [
+                  TextField(
+                    controller: _groupController,
+                    decoration: const InputDecoration(
+                      hintText: "ID группы или ссылка",
+                      border: OutlineInputBorder(),
                     ),
                   ),
-                if (groupProvider.participants.length == 1)
-                  const Padding(
-                    padding: EdgeInsets.only(top: 8.0),
-                    child: Text("Остальные участники скоро появятся...", style: TextStyle(fontSize: 11, color: Colors.orange)),
-                  ),
-                const Divider(),
-              ] else ...[
-                 // Manual Group Join
-                 ExpansionTile(
-                   initiallyExpanded: false,
-                   title: const Text("Подключить группу вручную", style: TextStyle(fontSize: 14, color: Colors.blue)),
-                   subtitle: const Text("Вставьте ID группы или ссылку-приглашение", style: TextStyle(fontSize: 11)),
-                   children: [
-                     Padding(
-                       padding: const EdgeInsets.all(16.0),
-                       child: Column(
-                         children: [
-                           TextField(
-                             controller: _groupController,
-                             decoration: InputDecoration(
-                               hintText: "Например, -10012345 или t.me/join...",
-                               hintStyle: const TextStyle(fontSize: 13, color: Colors.grey),
-                               border: const OutlineInputBorder(),
-                               suffixIcon: IconButton(
-                                 icon: const Icon(Icons.clear, color: Colors.grey),
-                                 onPressed: () {
-                                   _groupController.clear();
-                                 },
-                               )
-                             ),
-                             onSubmitted: (val) {
-                               if (val.trim().isNotEmpty) groupProvider.setChatId(val.trim());
-                             },
-                           ),
-                           const SizedBox(height: 12),
-                           SizedBox(
-                             width: double.infinity,
-                             child: ElevatedButton(
-                               style: ElevatedButton.styleFrom(
-                                 backgroundColor: Colors.blue,
-                                 foregroundColor: Colors.white,
-                               ),
-                               onPressed: () {
-                                 final val = _groupController.text.trim();
-                                 if (val.isNotEmpty) {
-                                   groupProvider.setChatId(val);
-                                   FocusScope.of(context).unfocus();
-                                 }
-                               },
-                               child: const Text("Синхронизировать"),
-                             ),
-                           ),
-                         ],
-                       ),
-                     )
-                   ],
-                 )
-              ],
-
-              const SizedBox(height: 24),
-              Text(
-                "Welcome, ${user?.firstName ?? 'User'}!",
-                style: Theme.of(context).textTheme.headlineSmall,
-              ),
-              const SizedBox(height: 16),
-              
-              // Calendar Status Chips
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  Chip(
-                    avatar: Icon(Icons.check_circle, color: authProvider.isConnected ? Colors.green : Colors.grey),
-                    label: const Text("Google"),
-                  ),
-                  Chip(
-                    avatar: Icon(Icons.check_circle, color: authProvider.isAppleConnected ? Colors.green : Colors.grey),
-                    label: const Text("Apple"),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        if (_groupController.text.isNotEmpty) groupProvider.setChatId(_groupController.text);
+                      },
+                      child: const Text("Подключить"),
+                    ),
                   ),
                 ],
               ),
-              
-              const SizedBox(height: 32),
-              
-              // Sync Section
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text("Calendar Sync", style: TextStyle(fontWeight: FontWeight.bold)),
-                          if (syncProvider.isSyncing)
-                            const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          else
-                            const Icon(Icons.sync, color: Colors.blue),
-                        ],
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Card(
+      child: Column(
+        children: [
+          ListTile(
+            title: Text("Группа: ${groupProvider.chatId}"),
+            subtitle: Text("Участников онлайн: ${groupProvider.participants.length}"),
+            trailing: IconButton(
+              icon: const Icon(Icons.search, color: Colors.blue),
+              onPressed: () => context.push('/scheduler'),
+            ),
+          ),
+          const Divider(height: 1),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12.0),
+            child: SizedBox(
+              height: 70,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                itemCount: groupProvider.participants.length,
+                itemBuilder: (context, index) {
+                  final p = groupProvider.participants[index];
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 12.0),
+                    child: Tooltip(
+                      message: p.firstName ?? "User",
+                      child: CircleAvatar(
+                        radius: 25,
+                        backgroundColor: p.isSynced ? Colors.green : Colors.grey,
+                        child: CircleAvatar(
+                          radius: 22,
+                          backgroundImage: (p.photoUrl != null && p.photoUrl!.isNotEmpty) 
+                              ? NetworkImage(p.photoUrl!) : null,
+                          child: (p.photoUrl == null || p.photoUrl!.isEmpty) 
+                              ? const Icon(Icons.person, size: 20) : null,
+                        ),
                       ),
-                      const Divider(),
-                      if (syncProvider.lastSyncTime != null)
-                        Column(
-                          children: [
-                            Text("Last synced: ${syncProvider.lastSyncTime.toString().split('.')[0]}"),
-                            Text("Events found: ${syncProvider.syncedCount}", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
-                          ],
-                        )
-                      else
-                        const Text("Never synced"),
-                      const SizedBox(height: 16),
-                      ElevatedButton(
-                        onPressed: syncProvider.isSyncing ? null : () => syncProvider.sync(),
-                        child: const Text("Sync Now"),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              
-              const SizedBox(height: 32),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: () {
-                    if (groupProvider.chatId == null) {
-                       ScaffoldMessenger.of(context).showSnackBar(
-                         const SnackBar(content: Text("Сначала подключитесь к группе (поле выше)"))
-                       );
-                    } else {
-                       context.push('/scheduler');
-                    }
-                  },
-                  icon: const Icon(Icons.search),
-                  label: const Text("Найти свободное время (Team)"),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.all(16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
                     ),
-                  ),
+                  );
+                },
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuickActions(BuildContext context, AuthProvider auth, SyncProvider sync, GroupProvider group) {
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: _ActionCard(
+                icon: Icons.access_time,
+                title: "Рабочие часы",
+                description: "Настройте доступность",
+                color: Colors.orange,
+                onTap: () => context.push('/availability'),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _ActionCard(
+                icon: Icons.sync,
+                title: "Синхронизация",
+                description: sync.isSyncing ? "В процессе..." : "Обновить календарь",
+                color: Colors.blue,
+                isLoading: sync.isSyncing,
+                onTap: () => sync.sync(),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  String _formatDate(DateTime dt) {
+    return "${dt.day}.${dt.month}.${dt.year}";
+  }
+
+  String _formatTime(DateTime dt) {
+    return "${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}";
+  }
+
+  void _showMeetingDetails(BuildContext context, Meeting meeting) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(meeting.title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
                 ),
+                IconButton(
+                  icon: const Icon(Icons.delete, color: Colors.red),
+                  onPressed: () {
+                    context.read<MeetingProvider>().deleteMeeting(meeting.id);
+                    Navigator.pop(context);
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                const Icon(Icons.calendar_today, size: 18, color: Colors.blue),
+                const SizedBox(width: 8),
+                Text("${_formatDate(meeting.start)} с ${_formatTime(meeting.start)} до ${_formatTime(meeting.end)}"),
+              ],
+            ),
+            if (meeting.location != null) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  const Icon(Icons.location_on, size: 18, color: Colors.blue),
+                  const SizedBox(width: 8),
+                  Text(meeting.location!),
+                ],
               ),
             ],
-          ),
+            const SizedBox(height: 32),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text("Закрыть"),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ActionCard extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String description;
+  final Color color;
+  final VoidCallback onTap;
+  final bool isLoading;
+
+  const _ActionCard({
+    required this.icon,
+    required this.title,
+    required this.description,
+    required this.color,
+    required this.onTap,
+    this.isLoading = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: isLoading ? null : onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: color.withOpacity(0.3)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (isLoading)
+              const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))
+            else
+              Icon(icon, color: color, size: 28),
+            const SizedBox(height: 12),
+            Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+            const SizedBox(height: 4),
+            Text(description, style: TextStyle(color: Colors.grey.shade400, fontSize: 11)),
+          ],
         ),
       ),
     );
