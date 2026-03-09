@@ -4,12 +4,15 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# ENCRYPTION_KEY must be a stable 32-byte base64 encoded string from .env
+# ENCRYPTION_KEY should be a stable 32-byte base64 encoded string from .env
 # To generate one: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY")
 
 if not ENCRYPTION_KEY:
-    raise RuntimeError("ENCRYPTION_KEY missing in .env! Security logic disabled to prevent data loss.")
+    # Use a fallback key for development/first-run only
+    # In production, ALWAYS set ENCRYPTION_KEY via Environment Variables
+    ENCRYPTION_KEY = "tNqJMnoMia-LcFCL2FwxmH4wUfn6dBemEcz5wBazmlA=" 
+    print("WARNING: ENCRYPTION_KEY missing. Using dummy key. NOT SAFE FOR PRODUCTION.")
 
 cipher_suite = Fernet(ENCRYPTION_KEY.encode())
 antiviral_key = None # Placeholder for potential expansion
