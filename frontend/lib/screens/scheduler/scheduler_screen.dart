@@ -396,8 +396,10 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
   }
 
   Widget _buildSlotCard(TimeSlot slot, SchedulerProvider scheduler) {
-    final start = "${slot.start.hour}:${slot.start.minute.toString().padLeft(2, '0')}";
-    final end = "${slot.end.hour}:${slot.end.minute.toString().padLeft(2, '0')}";
+    final localStart = slot.start.toLocal();
+    final localEnd = slot.end.toLocal();
+    final start = "${localStart.hour}:${localStart.minute.toString().padLeft(2, '0')}";
+    final end = "${localEnd.hour}:${localEnd.minute.toString().padLeft(2, '0')}";
     
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -486,11 +488,11 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
                 "Забронировать время?",
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               ),
-              const SizedBox(height: 16),
-              Text(
-                "Дата: ${DateFormat('d MMMM').format(slot.start)}\nВремя: ${slot.start.hour}:${slot.start.minute.toString().padLeft(2, '0')} - ${slot.end.hour}:${slot.end.minute.toString().padLeft(2, '0')}",
-                textAlign: TextAlign.center,
-              ),
+            const SizedBox(height: 16),
+            Text(
+              "Дата: ${DateFormat('d MMMM').format(slot.start.toLocal())}\nВремя: ${slot.start.toLocal().hour}:${slot.start.toLocal().minute.toString().padLeft(2, '0')} - ${slot.end.toLocal().hour}:${slot.end.toLocal().minute.toString().padLeft(2, '0')}",
+              textAlign: TextAlign.center,
+            ),
               const SizedBox(height: 32),
               ElevatedButton(
                 onPressed: scheduler.isLoading 

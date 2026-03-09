@@ -82,8 +82,8 @@ class SchedulerProvider extends ChangeNotifier {
 
       await _apiService.post('/meeting/create', {
         'title': title,
-        'start': slot.start.toIso8601String(),
-        'end': slot.end.toIso8601String(),
+        'start': slot.start.toUtc().toIso8601String(),
+        'end': slot.end.toUtc().toIso8601String(),
         'attendee_emails': attendeeEmails ?? [],
         'idempotency_key': idempotencyKey,
       });
