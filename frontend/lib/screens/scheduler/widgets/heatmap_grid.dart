@@ -21,7 +21,9 @@ class HeatmapGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     // 1. Calculate the start of the current week (Monday) relative to selectedDay
     final int daysToMinus = selectedDay.weekday - 1;
-    final DateTime weekStart = selectedDay.subtract(Duration(days: daysToMinus));
+    // Normalize to Monday 00:00:00 to prevent diff calculation errors
+    final DateTime weekStart = DateTime(selectedDay.year, selectedDay.month, selectedDay.day)
+        .subtract(Duration(days: daysToMinus));
 
     // 2. Group slots by hour and offset date
     final Map<int, Map<int, TimeSlot?>> gridData = {};
@@ -31,8 +33,9 @@ class HeatmapGrid extends StatelessWidget {
 
     for (final slot in slots) {
       final hour = slot.start.hour;
-      // Find which day of the visible week this belongs to
-      final diff = slot.start.difference(weekStart).inDays;
+      // Get exact day difference (0 = Monday, 1 = Tuesday etc.)
+      final int diff = slot.start.difference(weekStart).inDays;
+      
       if (hour >= 7 && hour < 23 && diff >= 0 && diff < 7) {
         gridData[hour]![diff] = slot;
       }
