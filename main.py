@@ -902,7 +902,10 @@ def debug_paths():
 @app.get("/")
 async def root():
     if os.path.exists(os.path.join(STATIC_DIR, "index.html")):
-        return FileResponse(os.path.join(STATIC_DIR, "index.html"))
+        return FileResponse(
+            os.path.join(STATIC_DIR, "index.html"),
+            headers={"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0"}
+        )
     return {"status": "ok", "message": "API is running. Backend v3.0"}
 
 # Mount static assets (JS, CSS, fonts etc) at /static-assets to avoid overriding API
@@ -920,11 +923,17 @@ if os.path.exists(STATIC_DIR):
     # Serve individual frontend files explicitly
     @app.get("/flutter_bootstrap.js")
     async def flutter_bootstrap():
-        return FileResponse(os.path.join(STATIC_DIR, "flutter_bootstrap.js"))
+        return FileResponse(
+            os.path.join(STATIC_DIR, "flutter_bootstrap.js"),
+            headers={"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0"}
+        )
     
     @app.get("/main.dart.js")
     async def main_dart_js():
-        return FileResponse(os.path.join(STATIC_DIR, "main.dart.js"))
+        return FileResponse(
+            os.path.join(STATIC_DIR, "main.dart.js"),
+            headers={"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0"}
+        )
     
     @app.get("/manifest.json")
     async def manifest():
