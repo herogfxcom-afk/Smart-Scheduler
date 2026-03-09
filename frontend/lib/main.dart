@@ -52,52 +52,48 @@ class SmartSchedulerApp extends StatefulWidget {
 }
 
 class _SmartSchedulerAppState extends State<SmartSchedulerApp> with WidgetsBindingObserver {
+  void _parseDeepLink() async {
+    final telegram = context.read<TelegramService>();
+    final groupProvider = context.read<GroupProvider>();
+    
+    // Attempt detection multiple times as WebApp might not be ready immediately
+    for (int i = 0; i < 5; i++) {
+      if (groupProvider.chatId != null) break;
+      
+      String? startParam = telegram.getStartParam();
+      if (startParam == null) {
+        startParam = telegram.getStartParamFromUrl(Uri.base.toString());
+      }
+      
+      if (startParam != null && startParam.startsWith("group_")) {
+        final chatIdStr = startParam.replaceFirst("group_", "");
+        final chatId = chatIdStr.startsWith("n") 
+            ? chatIdStr.replaceFirst("n", "-")
+            : chatIdStr;
+            
+        print("DEBUG: Deep link matched group: $chatId");
+        groupProvider.setChatId(chatId);
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text("Connected to group: $chatId"),
+              backgroundColor: Colors.green,
+              behavior: SnackBarBehavior.floating,
+            )
+          );
+        }
+        return;
+      }
+      await Future.delayed(Duration(milliseconds: 300 * (i + 1)));
+    }
+  }
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    
-    // Parse deep link group context with high robustness
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      // Small delay to ensure all providers are fully ready
-      Future.delayed(const Duration(milliseconds: 300), () {
-        if (!mounted) return;
-        
-        final telegram = context.read<TelegramService>();
-        final currentUrl = Uri.base.toString();
-        
-        // 1. Try built-in start_param (Standard way)
-        String? startParam = telegram.getStartParam();
-        
-        // 2. Try URL parsing (Fallback for some mobile/web cases)
-        if (startParam == null) {
-          startParam = telegram.getStartParamFromUrl(currentUrl);
-        }
-        
-        print("DEBUG: Final extracted startParam: $startParam");
-
-        if (startParam != null && startParam.startsWith("group_")) {
-          // Deep link startapp values cannot have '-' sign. 
-          // We use 'n' as a prefix for negative IDs in main.py
-          final chatIdStr = startParam.replaceFirst("group_", "");
-          final chatId = chatIdStr.startsWith("n") 
-              ? chatIdStr.replaceFirst("n", "-")
-              : chatIdStr;
-              
-          print("DEBUG: Setting final decoded chatId: $chatId");
-          context.read<GroupProvider>().setChatId(chatId);
-          
-          // Debug snackbar
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text("Magic Sync Group ID: $chatId"),
-              backgroundColor: Colors.blue,
-              duration: const Duration(seconds: 2),
-            )
-          );
-        }
-      });
-    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _parseDeepLink());
   }
 
   @override

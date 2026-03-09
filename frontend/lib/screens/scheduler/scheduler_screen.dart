@@ -69,7 +69,7 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
     if (groupProvider.chatId == null && !groupProvider.isLoading) {
       return Scaffold(
         backgroundColor: Colors.black,
-        appBar: AppBar(title: const Text("Team Availability")),
+        appBar: AppBar(title: const Text("Доступность участников")),
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(24.0),
@@ -78,15 +78,50 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
               children: [
                 const Icon(Icons.group_off, size: 64, color: Colors.grey),
                 const SizedBox(height: 16),
+                const SizedBox(height: 16),
                 const Text(
-                  "Группа не определена.\nПожалуйста, откройте приложение из Telegram группы кнопкой Magic Sync.",
+                  "Группа не определена.\nИспользуйте кнопку Magic Sync в Telegram или введите данные ниже.",
                   textAlign: TextAlign.center,
                   style: TextStyle(color: Colors.white70),
                 ),
                 const SizedBox(height: 24),
-                ElevatedButton(
-                  onPressed: () => context.pop(),
-                  child: const Text("Назад"),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.05),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: TextField(
+                    onSubmitted: (val) {
+                      if (val.trim().isNotEmpty) {
+                        groupProvider.setChatId(val.trim());
+                      }
+                    },
+                    style: const TextStyle(color: Colors.white),
+                    decoration: const InputDecoration(
+                      hintText: "ID группы или ссылка-приглашение",
+                      hintStyle: TextStyle(color: Colors.white38),
+                      border: InputBorder.none,
+                      contentPadding: EdgeInsets.symmetric(vertical: 15),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    TextButton(
+                      onPressed: () => context.pop(),
+                      child: const Text("Домой"),
+                    ),
+                    const SizedBox(width: 16),
+                    ElevatedButton(
+                      onPressed: () {
+                         context.pop();
+                      },
+                      child: const Text("Ручной ввод"),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -106,7 +141,7 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
-        title: const Text("Team Availability"),
+        title: const Text("Доступность команды"),
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: BackButton(onPressed: () => Navigator.of(context).pop()),

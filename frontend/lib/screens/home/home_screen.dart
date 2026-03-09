@@ -5,8 +5,21 @@ import '../../providers/auth_provider.dart';
 import '../../providers/sync_provider.dart';
 import '../../providers/group_provider.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  final TextEditingController _groupController = TextEditingController();
+
+  @override
+  void dispose() {
+    _groupController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -44,11 +57,18 @@ class HomeScreen extends StatelessWidget {
                   "📊 Syncing with Group",
                   style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.blue),
                 ),
-                const SizedBox(height: 16),
+                if (groupProvider.error != null)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(8),
+                    margin: const EdgeInsets.only(bottom: 16),
+                    decoration: BoxDecoration(color: Colors.red.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+                    child: Text(groupProvider.error!, style: const TextStyle(color: Colors.red, fontSize: 12), textAlign: TextAlign.center),
+                  ),
                 if (groupProvider.isLoading)
                   const CircularProgressIndicator()
                 else if (groupProvider.participants.isEmpty)
-                  const Text("No participants yet. Click refresh to check for others.", style: TextStyle(color: Colors.grey))
+                  const Text("Нет участников. Поделитесь ботом в группе или обновите.", style: TextStyle(color: Colors.grey))
                 else
                   SizedBox(
                     height: 120,
@@ -94,28 +114,33 @@ class HomeScreen extends StatelessWidget {
                       },
                     ),
                   ),
+                if (groupProvider.participants.length == 1)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 8.0),
+                    child: Text("Остальные участники скоро появятся...", style: TextStyle(fontSize: 11, color: Colors.orange)),
+                  ),
                 const Divider(),
               ] else ...[
                  // Manual Group Join
                  ExpansionTile(
                    initiallyExpanded: false,
-                   title: const Text("Join a Group Manually", style: TextStyle(fontSize: 14, color: Colors.blue)),
-                   subtitle: const Text("Paste the group ID or invite link here", style: TextStyle(fontSize: 11)),
+                   title: const Text("Подключить группу вручную", style: TextStyle(fontSize: 14, color: Colors.blue)),
+                   subtitle: const Text("Вставьте ID группы или ссылку-приглашение", style: TextStyle(fontSize: 11)),
                    children: [
                      Padding(
                        padding: const EdgeInsets.all(16.0),
                        child: Column(
                          children: [
                            TextField(
+                             controller: _groupController,
                              decoration: InputDecoration(
-                               hintText: "e.g. -10012345 or t.me/join...",
+                               hintText: "Например, -10012345 или t.me/join...",
                                hintStyle: const TextStyle(fontSize: 13, color: Colors.grey),
                                border: const OutlineInputBorder(),
                                suffixIcon: IconButton(
-                                 icon: const Icon(Icons.check_circle, color: Colors.blue),
+                                 icon: const Icon(Icons.clear, color: Colors.grey),
                                  onPressed: () {
-                                   // Focus scope refresh
-                                   FocusScope.of(context).unfocus();
+                                   _groupController.clear();
                                  },
                                )
                              ),
@@ -127,12 +152,18 @@ class HomeScreen extends StatelessWidget {
                            SizedBox(
                              width: double.infinity,
                              child: ElevatedButton(
-                               style: ElevatedButton.styleFrom(backgroundColor: Colors.blue.withOpacity(0.1)),
+                               style: ElevatedButton.styleFrom(
+                                 backgroundColor: Colors.blue,
+                                 foregroundColor: Colors.white,
+                               ),
                                onPressed: () {
-                                 // Logic to trigger groupProvider.setChatId with current text
-                                 // (Note: usually we would wrap TextField in a Form or use a controller)
+                                 final val = _groupController.text.trim();
+                                 if (val.isNotEmpty) {
+                                   groupProvider.setChatId(val);
+                                   FocusScope.of(context).unfocus();
+                                 }
                                },
-                               child: const Text("Connect Group", style: TextStyle(color: Colors.blue)),
+                               child: const Text("Синхронизировать"),
                              ),
                            ),
                          ],
@@ -212,10 +243,16 @@ class HomeScreen extends StatelessWidget {
                 width: double.infinity,
                 child: ElevatedButton.icon(
                   onPressed: () {
-                    context.push('/scheduler');
+                    if (groupProvider.chatId == null) {
+                       ScaffoldMessenger.of(context).showSnackBar(
+                         const SnackBar(content: Text("Сначала подключитесь к группе (поле выше)"))
+                       );
+                    } else {
+                       context.push('/scheduler');
+                    }
                   },
                   icon: const Icon(Icons.search),
-                  label: const Text("Find Best Time Slots"),
+                  label: const Text("Найти свободное время (Team)"),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.blue,
                     foregroundColor: Colors.white,
