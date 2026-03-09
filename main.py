@@ -160,23 +160,8 @@ async def api_status():
     return {
         "status": "ok", 
         "message": "Smart Scheduler API", 
-        "version": "2.3-debug-config",
+        "version": "2.4-webhook-fixed",
         "bot_webhook": bool(os.getenv("BOT_TOKEN") and os.getenv("API_URL"))
-    }
-
-@app.get("/api/config-check")
-async def config_check():
-    """Public debug of OAuth config (masked secrets)."""
-    import os
-    all_keys = list(os.environ.keys())
-    client_id = os.getenv("GOOGLE_CLIENT_ID")
-    redirect_uri = os.getenv("GOOGLE_REDIRECT_URI")
-    return {
-        "all_keys": all_keys,
-        "google_client_id_exists": bool(client_id),
-        "google_client_id_starts": str(client_id)[:10] if client_id else None,
-        "google_redirect_uri": redirect_uri,
-        "api_url": os.getenv("API_URL")
     }
 
 @app.get("/cors-debug")
