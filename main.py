@@ -489,9 +489,16 @@ async def create_meeting(data: dict, current_user: User = Depends(get_current_us
 
 # Serve the Flutter frontend
 # We mount this at the very end so it doesn't override API paths
+STATIC_DIR = "frontend/build/web"
+
 @app.get("/")
 async def root():
-    return FileResponse("frontend/build/web/index.html")
+    if os.path.exists(os.path.join(STATIC_DIR, "index.html")):
+        return FileResponse(os.path.join(STATIC_DIR, "index.html"))
+    return {"status": "ok", "message": "API is running, but frontend build is missing. Please check deployment logs."}
 
 # Static files and SPA fallback
-app.mount("/", StaticFiles(directory="frontend/build/web", html=True), name="frontend")
+if os.path.exists(STATIC_DIR):
+    app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="frontend")
+else:
+    print(f"WARNING: Static directory {STATIC_DIR} not found!")
