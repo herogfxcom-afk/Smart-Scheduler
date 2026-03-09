@@ -263,11 +263,8 @@ async def sync_group(data: dict, current_user: User = Depends(get_current_user),
     if not raw_chat_id:
         raise HTTPException(status_code=400, detail="chat_id is required")
     
-    # Robust integer parsing for large TG IDs
-    try:
-        chat_id = int(raw_chat_id)
-    except (ValueError, TypeError):
-        chat_id = raw_chat_id # Fallback to hash if it's truly not an int string
+    # Use the ID as-is (string) for database consistency with invite tokens
+    chat_id = str(raw_chat_id)
     
     # Check if group exists
     print(f"DEBUG: sync_group called for chat_id={chat_id} by user={current_user.id}")
@@ -308,6 +305,13 @@ async def sync_group(data: dict, current_user: User = Depends(get_current_user),
                 models.GroupParticipant.group_id == group.id,
                 models.GroupParticipant.is_synced == 1
             ).count()
+            
+            # Safe int for TG API
+            try:
+                target_chat = int(chat_id)
+            except:
+                target_chat = chat_id
+
             bot_token = os.getenv("BOT_TOKEN")
             # Fetch bot username for deep linking
             bot_resp = requests.get(f"https://api.telegram.org/bot{bot_token}/getMe").json()
@@ -320,15 +324,17 @@ async def sync_group(data: dict, current_user: User = Depends(get_current_user),
             )
             
             # Build inline keyboard manually for reliability across different bot versions
+            # Ensure startapp parameter uses 'n' prefix for negative IDs
+            clean_param = chat_id.replace("-", "n")
             reply_markup = {
                 "inline_keyboard": [[{
                     "text": "📊 Magic Sync",
-                    "url": f"https://t.me/{bot_username}/app?startapp=group_{chat_id}"
+                    "url": f"https://t.me/{bot_username}/app?startapp=group_{clean_param}"
                 }]]
             }
             
             resp = requests.post(f"https://api.telegram.org/bot{bot_token}/editMessageText", json={
-                "chat_id": int(chat_id),
+                "chat_id": target_chat,
                 "message_id": int(group.last_invite_message_id),
                 "text": new_text,
                 "parse_mode": "Markdown",

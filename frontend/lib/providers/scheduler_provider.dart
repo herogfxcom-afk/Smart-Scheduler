@@ -40,9 +40,9 @@ class SchedulerProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> findBestTime() async {
-    if (_selectedParticipants.isEmpty) return;
-    await fetchCommonSlots(_selectedParticipants);
+  Future<void> findBestTime(List<int> telegramIds) async {
+    if (telegramIds.isEmpty) return;
+    await fetchCommonSlots(telegramIds);
   }
 
   Future<void> fetchCommonSlots(List<int> telegramIds) async {
@@ -76,7 +76,7 @@ class SchedulerProvider extends ChangeNotifier {
 
     try {
       // Idempotency key to avoid duplicates (chatId + start time)
-      final idempotencyKey = chatId != null 
+      final idempotencyKey = chatId != null
           ? "group_${chatId}_${slot.start.millisecondsSinceEpoch}"
           : "user_${slot.start.millisecondsSinceEpoch}";
 

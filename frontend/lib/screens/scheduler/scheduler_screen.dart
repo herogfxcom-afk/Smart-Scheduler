@@ -188,8 +188,12 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
                         _ignoredParticipantIds.add(p.id.toString());
                       }
                     });
-                    // Re-fetch slots or filter locally
-                    scheduler.findBestTime();
+                    // Re-fetch slots
+                    final availableIds = context.read<GroupProvider>().participants
+                      .map((p) => p.telegramId)
+                      .where((id) => !_ignoredParticipantIds.contains(id.toString()))
+                      .toList();
+                    scheduler.findBestTime(availableIds);
                   },
                   child: Container(
                     width: 70,
