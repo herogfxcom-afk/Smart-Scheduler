@@ -488,7 +488,7 @@ async def create_meeting(data: dict, current_user: User = Depends(get_current_us
     return {"status": "success", "results": results}
 
 # Serve the Flutter frontend
-# We mount this at the very end so it doesn't override API paths
+# IMPORTANT: Mount static files ONLY for non-API paths to avoid conflict!
 STATIC_DIR = "frontend/build/web"
 
 @app.on_event("startup")
@@ -506,13 +506,45 @@ def debug_paths():
 
 @app.get("/")
 async def root():
-
     if os.path.exists(os.path.join(STATIC_DIR, "index.html")):
         return FileResponse(os.path.join(STATIC_DIR, "index.html"))
-    return {"status": "ok", "message": "API is running, but frontend build is missing. Please check deployment logs."}
+    return {"status": "ok", "message": "API is running. Backend v3.0"}
 
-# Static files and SPA fallback
+# Mount static assets (JS, CSS, fonts etc) at /static-assets to avoid overriding API
+# The key fix: we use a separate StaticFiles mount for assets onl
+from fastapi.responses import Response as StarletteResponse
+from starlette.staticfiles import StaticFiles as StarletteStaticFiles
+
 if os.path.exists(STATIC_DIR):
-    app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="frontend")
+    # Mount specific asset directories - NOT the root, to preserve API routes
+    for sub in ["assets", "icons", "canvaskit"]:
+        sub_path = os.path.join(STATIC_DIR, sub)
+        if os.path.exists(sub_path):
+            app.mount(f"/{sub}", StaticFiles(directory=sub_path), name=f"static_{sub}")
+    
+    # Serve individual frontend files explicitly
+    @app.get("/flutter_bootstrap.js")
+    async def flutter_bootstrap():
+        return FileResponse(os.path.join(STATIC_DIR, "flutter_bootstrap.js"))
+    
+    @app.get("/main.dart.js")
+    async def main_dart_js():
+        return FileResponse(os.path.join(STATIC_DIR, "main.dart.js"))
+    
+    @app.get("/manifest.json")
+    async def manifest():
+        return FileResponse(os.path.join(STATIC_DIR, "manifest.json"))
+    
+    @app.get("/favicon.png")
+    async def favicon():
+        return FileResponse(os.path.join(STATIC_DIR, "favicon.png"))
+    
+    @app.get("/flutter.js")
+    async def flutter_js():
+        f = os.path.join(STATIC_DIR, "flutter.js")
+        if os.path.exists(f): return FileResponse(f)
+        return StarletteResponse(status_code=404)
+
+    print(f"INFO: Frontend static assets mounted from {STATIC_DIR}")
 else:
     print(f"WARNING: Static directory {STATIC_DIR} not found!")
