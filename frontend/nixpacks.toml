@@ -2,7 +2,7 @@
 nixPkgs = ["git", "bash", "curl", "unzip", "python3"]
 
 [phases.build]
-cmds = ["bash build.sh"]
+cmds = []
 
 [start]
-cmd = "python3 -m http.server $PORT --directory build/web"
+cmd = ""

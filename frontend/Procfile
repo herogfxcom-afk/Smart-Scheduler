@@ -1,1 +1,2 @@
-web: python3 -m http.server $PORT --directory build/web
+# This file intentionally left blank.
+# The backend is started from the root Procfile using uvicorn.
