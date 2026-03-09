@@ -31,10 +31,17 @@ SCOPES = [
 @router.get("/url")
 async def get_google_auth_url(current_user: User = Depends(get_current_user)):
     """Returns the Google OAuth2 authorization URL."""
+    # Debug logging to identify why Google might see client_id as None
+    client_id = os.getenv("GOOGLE_CLIENT_ID")
+    redirect_uri = os.getenv("GOOGLE_REDIRECT_URI")
+    print(f"DEBUG GOOGLE OAUTH: Fetching URL for user {current_user.id}")
+    print(f"DEBUG GOOGLE OAUTH: CLIENT_ID starts with: {str(client_id)[:10]}... (len: {len(str(client_id)) if client_id else 0})")
+    print(f"DEBUG GOOGLE OAUTH: REDIRECT_URI: {redirect_uri}")
+
     base_url = "https://accounts.google.com/o/oauth2/v2/auth"
     params = {
-        "client_id": CLIENT_ID,
-        "redirect_uri": REDIRECT_URI,
+        "client_id": client_id,
+        "redirect_uri": redirect_uri,
         "response_type": "code",
         "scope": " ".join(SCOPES),
         "access_type": "offline",
@@ -50,11 +57,15 @@ async def google_oauth_callback(code: str, state: str, db: Session = Depends(get
     """Handles the Google OAuth2 callback and stores tokens."""
     token_url = "https://oauth2.googleapis.com/token"
     
+    client_id = os.getenv("GOOGLE_CLIENT_ID")
+    client_secret = os.getenv("GOOGLE_CLIENT_SECRET")
+    redirect_uri = os.getenv("GOOGLE_REDIRECT_URI")
+    
     data = {
         "code": code,
-        "client_id": CLIENT_ID,
-        "client_secret": CLIENT_SECRET,
-        "redirect_uri": REDIRECT_URI,
+        "client_id": client_id,
+        "client_secret": client_secret,
+        "redirect_uri": redirect_uri,
         "grant_type": "authorization_code",
     }
     
