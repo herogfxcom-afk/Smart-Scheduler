@@ -17,7 +17,7 @@ ntuser.dat*
 .idea/
 
 # Flutter/Dart (if applicable)
-/build/
+#/build/
 .dart_tool/
 .packages
 .pub-cache/

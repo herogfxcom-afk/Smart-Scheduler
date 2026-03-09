@@ -28371,7 +28371,7 @@ PB:function PB(a,b){this.a=a
 this.b=b},
 PA:function PA(a,b){this.a=a
 this.b=b},
-aPr(a){var s=A.aPy("https://web-production-ed04f.up.railway.app",B.oo,B.oo),r=new A.O1(A.b([B.Db],t.i6))
+aPr(a){var s=A.aPy("https://smart-scheduler-production-2006.up.railway.app",B.oo,B.oo),r=new A.O1(A.b([B.Db],t.i6))
 r.R(r,B.KJ)
 r=new A.a4T($,r,$,new A.a8d(51200),!1)
 r.a_8$=s
