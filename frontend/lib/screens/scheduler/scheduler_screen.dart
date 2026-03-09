@@ -79,14 +79,14 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
                 const Icon(Icons.group_off, size: 64, color: Colors.grey),
                 const SizedBox(height: 16),
                 const Text(
-                  "No group context found.\nPlease open the app from a Telegram group using the Magic Sync button.",
+                  "Группа не определена.\nПожалуйста, откройте приложение из Telegram группы кнопкой Magic Sync.",
                   textAlign: TextAlign.center,
                   style: TextStyle(color: Colors.white70),
                 ),
                 const SizedBox(height: 24),
                 ElevatedButton(
                   onPressed: () => context.pop(),
-                  child: const Text("Go Back"),
+                  child: const Text("Назад"),
                 ),
               ],
             ),
@@ -284,7 +284,7 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
             },
             icon: const Icon(Icons.calendar_today, color: Colors.white),
             label: Text(
-              scheduler.suggestedSlots.isNotEmpty ? "Book Best Time" : "Book a Meeting",
+              scheduler.suggestedSlots.isNotEmpty ? "Забронировать лучшее время" : "Назначить встречу",
               style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
             ),
             style: ElevatedButton.styleFrom(
@@ -443,12 +443,12 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               const Text(
-                "Book this slot?",
+                "Забронировать время?",
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 16),
               Text(
-                "Date: ${_selectedDay.day}/${_selectedDay.month}\nTime: ${slot.start.hour}:${slot.start.minute.toString().padLeft(2, '0')} - ${slot.end.hour}:${slot.end.minute.toString().padLeft(2, '0')}",
+                "Дата: ${DateFormat('d MMMM').format(slot.start)}\nВремя: ${slot.start.hour}:${slot.start.minute.toString().padLeft(2, '0')} - ${slot.end.hour}:${slot.end.minute.toString().padLeft(2, '0')}",
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 32),
@@ -491,7 +491,7 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
                 ),
                 child: scheduler.isLoading
                   ? const CircularProgressIndicator(color: Colors.white)
-                  : const Text("Confirm"),
+                  : const Text("Подтвердить"),
               ),
             ],
           ),

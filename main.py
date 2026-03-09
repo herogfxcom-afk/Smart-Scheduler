@@ -155,6 +155,15 @@ async def telegram_webhook(req: FastAPIRequest, db: Session = Depends(get_db)):
     return {"ok": True}
 # ─────────────────────────────────────────────────────────────
 
+@app.get("/api/status")
+async def api_status():
+    return {
+        "status": "ok", 
+        "message": "Smart Scheduler API", 
+        "version": "2.2-webhook-sync",
+        "bot_webhook": bool(os.getenv("BOT_TOKEN") and os.getenv("API_URL"))
+    }
+
 @app.get("/cors-debug")
 async def cors_debug():
     return {"cors": "enabled", "middleware": "CORSEverywhere"}
@@ -229,17 +238,20 @@ async def sync_group(data: dict, current_user: User = Depends(get_current_user),
                 f"Нажмите кнопку ниже, чтобы синхронизировать календари."
             )
             
-            # Use direct deep link for reliability
-            from aiogram.utils.keyboard import InlineKeyboardBuilder
-            builder = InlineKeyboardBuilder()
-            builder.button(text="📊 Magic Sync", url=f"https://t.me/{bot_username}/app?startapp=group_{chat_id}")
+            # Build inline keyboard manually for reliability across different bot versions
+            reply_markup = {
+                "inline_keyboard": [[{
+                    "text": "📊 Magic Sync",
+                    "url": f"https://t.me/{bot_username}/app?startapp=group_{chat_id}"
+                }]]
+            }
             
             resp = requests.post(f"https://api.telegram.org/bot{bot_token}/editMessageText", json={
                 "chat_id": int(chat_id),
                 "message_id": int(group.last_invite_message_id),
                 "text": new_text,
                 "parse_mode": "Markdown",
-                "reply_markup": builder.as_markup().model_dump()
+                "reply_markup": json.dumps(reply_markup)
             }, timeout=3).json()
             print(f"DEBUG: Message update result: {resp}")
         except Exception as e:
@@ -555,7 +567,21 @@ async def create_meeting(data: dict, current_user: User = Depends(get_current_us
             results["apple"] = f"error: {str(e)}"
             
     # Save to our DB history
+    group_id = None
+    if idempotency_key and "group_" in idempotency_key:
+        try:
+            # Extract chat_id from group_CHATID_TIMESTAMP
+            parts = idempotency_key.split("_")
+            if len(parts) >= 2:
+                tg_chat_id = parts[1]
+                group = db.query(models.Group).filter(models.Group.telegram_chat_id == tg_chat_id).first()
+                if group:
+                    group_id = group.id
+        except Exception as e:
+            print(f"DEBUG: Failed to extract chat_id from idempotency_key: {e}")
+
     new_meeting = models.GroupMeeting(
+        group_id=group_id,
         title=summary,
         start_time=start_time,
         end_time=end_time,
@@ -565,7 +591,56 @@ async def create_meeting(data: dict, current_user: User = Depends(get_current_us
     db.add(new_meeting)
     db.commit()
     
-    return {"status": "success", "results": results}
+    return {"status": "success", "results": results, "id": new_meeting.id}
+
+@app.post("/meeting/finalize")
+async def finalize_meeting(data: dict, db: Session = Depends(get_db)):
+    """Finalizes meeting by updating Telegram message with the final date/time."""
+    chat_id = data.get("chat_id")
+    time_str = data.get("time_str")
+    
+    if not chat_id or not time_str:
+        raise HTTPException(status_code=400, detail="chat_id and time_str are required")
+        
+    group = db.query(models.Group).filter(models.Group.telegram_chat_id == chat_id).first()
+    if not group or not group.last_invite_message_id:
+        return {"status": "error", "message": "group_not_found_or_no_message"}
+        
+    bot_token = os.getenv("BOT_TOKEN")
+    if not bot_token:
+        return {"status": "error", "message": "bot_token_missing"}
+        
+    try:
+        new_text = (
+            f"📅 **Встреча назначена!**\n\n"
+            f"📍 Тема: {group.title or 'Встреча'}\n"
+            f"⏰ Время: **{time_str}**\n\n"
+            "Добавляйте в календарь!"
+        )
+        
+        # Build a different keyboard or remove it
+        reply_markup = {
+            "inline_keyboard": [[{
+                "text": "📅 Посмотреть детали",
+                "url": f"https://t.me/smartschedulertime_bot/app?startapp=group_{chat_id}"
+            }]]
+        }
+        
+        resp = requests.post(
+            f"https://api.telegram.org/bot{bot_token}/editMessageText",
+            json={
+                "chat_id": int(chat_id),
+                "message_id": int(group.last_invite_message_id),
+                "text": new_text,
+                "parse_mode": "Markdown",
+                "reply_markup": json.dumps(reply_markup)
+            }
+        ).json()
+        
+        return {"status": "success", "tg_response": resp}
+    except Exception as e:
+        print(f"ERROR in finalize_meeting: {e}")
+        return {"status": "error", "message": str(e)}
 
 # Serve the Flutter frontend
 # IMPORTANT: Mount static files ONLY for non-API paths to avoid conflict!
