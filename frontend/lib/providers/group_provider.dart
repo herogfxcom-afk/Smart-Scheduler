@@ -96,7 +96,12 @@ class GroupProvider with ChangeNotifier {
       // 2. Fetch all participants
       await fetchParticipants();
     } catch (e) {
-      _error = e.toString();
+      if (e is DioException && e.response?.data != null) {
+        final data = e.response!.data;
+        _error = data is Map ? (data['detail'] ?? e.message) : e.message;
+      } else {
+        _error = e.toString();
+      }
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -108,7 +113,7 @@ class GroupProvider with ChangeNotifier {
     
     try {
       print("DEBUG: Fetching participants for chat_id: $_chatId");
-      final response = await _apiService.get('/groups/$_chatId/participants'); // Use string chat_id directly
+      final response = await _apiService.get('/groups/$_chatId/participants');
       _participants = (response.data as List)
           .map((p) => GroupParticipant.fromJson(p))
           .toList();
@@ -116,7 +121,12 @@ class GroupProvider with ChangeNotifier {
       print("DEBUG: Synced with group. Participants: ${_participants.length}");
       notifyListeners();
     } catch (e) {
-      _error = e.toString();
+      if (e is DioException && e.response?.data != null) {
+        final data = e.response!.data;
+        _error = data is Map ? (data['detail'] ?? e.message) : e.message;
+      } else {
+        _error = e.toString();
+      }
       print("ERROR: Failed to fetch participants for chat_id $_chatId: $e");
       notifyListeners();
     }

@@ -269,6 +269,15 @@ class _HomeScreenState extends State<HomeScreen> {
                       child: const Text("Подключить"),
                     ),
                   ),
+                  if (groupProvider.error != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8.0),
+                      child: Text(
+                        groupProvider.error!,
+                        style: const TextStyle(color: Colors.red, fontSize: 13),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -288,6 +297,15 @@ class _HomeScreenState extends State<HomeScreen> {
               onPressed: () => context.push('/scheduler'),
             ),
           ),
+          if (groupProvider.participants.isEmpty)
+            const Padding(
+              padding: EdgeInsets.all(12.0),
+              child: Text(
+                "Бот не видит участников. Убедитесь, что @smartschedulertime_bot добавлен в группу и имеет права администратора (для супергрупп).",
+                style: TextStyle(color: Colors.orange, fontSize: 12),
+                textAlign: TextAlign.center,
+              ),
+            ),
           const Divider(height: 1),
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 12.0),

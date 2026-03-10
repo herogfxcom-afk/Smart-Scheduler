@@ -199,12 +199,17 @@ def is_user_in_chat(chat_id: str, user_telegram_id: int) -> bool:
         }, timeout=5).json()
         
         if not resp.get("ok"):
-            print(f"DEBUG: is_user_in_chat API Error: {resp.get('description')}")
-            return False
+            desc = resp.get('description', '')
+            if 'chat not found' in desc.lower():
+                return "bot_not_in_chat"
+            print(f"DEBUG: is_user_in_chat API Error: {desc}")
+            return "error"
             
         status = resp.get("result", {}).get("status")
         # Allowed statuses
-        return status in ["member", "administrator", "creator", "restricted"]
+        if status in ["member", "administrator", "creator", "restricted"]:
+            return "ok"
+        return "not_member"
     except Exception as e:
         print(f"TRACE: is_user_in_chat system error: {e}")
         return True # Soft fail on network error
@@ -432,8 +437,11 @@ async def sync_group(data: dict, current_user: User = Depends(get_current_user),
     ).first()
 
     # 1.5 Verify Telegram Membership (Security Fix)
-    if not is_user_in_chat(chat_id, current_user.telegram_id):
-        print(f"DEBUG: Denying group sync - user {current_user.telegram_id} NOT in chat {chat_id}")
+    membership_status = is_user_in_chat(chat_id, current_user.telegram_id)
+    if membership_status == "bot_not_in_chat":
+        raise HTTPException(status_code=400, detail="Bot is not a member of this group. Please add @smartschedulertime_bot to the chat.")
+    elif membership_status != "ok":
+        print(f"DEBUG: Denying group sync - user {current_user.telegram_id} status {membership_status} in chat {chat_id}")
         # If user was a participant, remove them
         if participant:
             db.delete(participant)
@@ -512,7 +520,11 @@ async def get_group_participants(chat_id: str, current_user: models.User = Depen
         return []
     
     # Security Check: Verify requesting user is in the group
-    if not is_user_in_chat(chat_id, current_user.telegram_id):
+    membership_status = is_user_in_chat(chat_id, current_user.telegram_id)
+    if membership_status == "bot_not_in_chat":
+        print(f"DEBUG: Bot missing from chat {chat_id}")
+        return [] # Return empty for now, but frontend can infer from sync_group failures
+    elif membership_status != "ok":
         print(f"DEBUG: Denying /participants fetch - user {current_user.telegram_id} NOT in chat {chat_id}")
         return []
 
@@ -532,14 +544,10 @@ async def get_group_participants(chat_id: str, current_user: models.User = Depen
             except:
                 target_chat = str(chat_id)
 
-            resp = requests.get(f"https://api.telegram.org/bot{bot_token}/getChatMember", params={
-                "chat_id": target_chat,
-                "user_id": int(u.telegram_id)
-            }, timeout=3).json()
+            # Check if user is still in chat
+            status = is_user_in_chat(chat_id, u.telegram_id)
             
-            if not resp.get("ok"):
-                print(f"DEBUG: TG API Error for user {u.telegram_id}: {resp.get('description')}")
-                # Fallback: if chat not found or other API error, we keep THEM as they were synced
+            if status == "ok":
                 active_participants.append({
                     "id": u.id,
                     "telegram_id": u.telegram_id,
@@ -549,22 +557,7 @@ async def get_group_participants(chat_id: str, current_user: models.User = Depen
                     "email": u.email,
                     "is_synced": bool(p.is_synced)
                 })
-                continue
-
-            status = resp.get("result", {}).get("status")
-            print(f"DEBUG: User {u.telegram_id} status in chat: {status}")
-            
-            if status in ["member", "administrator", "creator", "restricted"]:
-                active_participants.append({
-                    "id": u.id,
-                    "telegram_id": u.telegram_id,
-                    "username": u.username,
-                    "first_name": u.first_name,
-                    "photo_url": u.photo_url,
-                    "email": u.email,
-                    "is_synced": bool(p.is_synced)
-                })
-            elif status in ["left", "kicked"]:
+            elif status in ["not_member", "left", "kicked"]:
                 print(f"DEBUG: HARD DELETE ghost participant {u.telegram_id} (status: {status})")
                 db.delete(p)
                 db.commit()
