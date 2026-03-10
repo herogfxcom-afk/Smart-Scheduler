@@ -219,6 +219,12 @@ async def _send_sync_invite(bot_token: str, chat_id: int, chat_title: str, db: S
     clean_chat_id = str(chat_id).replace("-", "n")
     deep_link = f"https://t.me/{bot_username}/app?startapp=group_{clean_chat_id}"
     
+    # Build the web_app URL — pass group chat_id as query param
+    # The frontend reads window.location.search or Telegram's startParam for group context
+    frontend_url = os.getenv("API_URL", "https://smart-scheduler-production-2006.up.railway.app")
+    # Use the Vercel frontend URL (separate from Railway backend)
+    web_app_url = f"https://frontend-five-gules-5u3aqd6fzp.vercel.app/?startapp=group_{clean_chat_id}"
+
     payload = {
         "chat_id": chat_id,
         "text": f"📊 *Синхронизация календарей для: {chat_title}*\n\n"
@@ -227,7 +233,7 @@ async def _send_sync_invite(bot_token: str, chat_id: int, chat_title: str, db: S
         "reply_markup": json.dumps({
             "inline_keyboard": [[{
                 "text": "📊 Magic Sync",
-                "url": deep_link
+                "web_app": {"url": web_app_url}
             }]]
         })
     }
@@ -602,17 +608,30 @@ async def get_my_meetings(current_user: User = Depends(get_current_user), db: Se
             "start": m.start_time.isoformat() + "Z",
             "end": m.end_time.isoformat() + "Z",
             "location": m.location,
-            "group_id": m.group_id
+            "group_id": m.group_id,
+            "is_creator": m.user_id == current_user.id,
+            "google_event_id": m.google_event_id
         })
     return result
 
 @app.delete("/api/meetings/{meeting_id}")
 async def delete_meeting(meeting_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Deletes a meeting. Currently anyone in the group can delete (simplified)."""
+    """Deletes a meeting from DB and Google Calendar if applicable."""
     meeting = db.query(models.GroupMeeting).filter(models.GroupMeeting.id == meeting_id).first()
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
         
+    # Delete from Google Calendar if event exists and user is connected
+    if meeting.google_event_id and current_user.google_refresh_token:
+        try:
+            from calendar_service import GoogleCalendarService
+            from encryption import decrypt_token
+            refresh_token = decrypt_token(current_user.google_refresh_token)
+            g_service = GoogleCalendarService(refresh_token)
+            await g_service.delete_event(meeting.google_event_id)
+        except Exception as e:
+            print(f"DEBUG: Failed to delete Google Event {meeting.google_event_id}: {e}")
+            
     db.delete(meeting)
     db.commit()
     return {"status": "success"}
@@ -637,7 +656,7 @@ async def update_meeting(meeting_id: int, data: dict, current_user: User = Depen
     return {"status": "success"}
 
 @app.post("/calendar/free-slots")
-async def get_free_slots(data: dict, db: Session = Depends(get_db)):
+async def get_free_slots(data: dict, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """
     Finds common free slots for a list of telegram user IDs.
     """
@@ -647,9 +666,19 @@ async def get_free_slots(data: dict, db: Session = Depends(get_db)):
         if not tg_ids:
             return {"free_slots": [], "debug": "no_tg_ids_provided"}
             
+        # Ensure the requesting user's telegram_id is always included (if they are syncing themselves)
+        if current_user.telegram_id not in tg_ids:
+            tg_ids.append(current_user.telegram_id)
+            
         # 2. Find internal user IDs
         users = db.query(User).filter(User.telegram_id.in_(tg_ids)).all()
         internal_ids = [u.id for u in users]
+        
+        requesting_user_index = -1
+        try:
+            requesting_user_index = internal_ids.index(current_user.id)
+        except ValueError:
+            pass
         
         if not internal_ids:
             print(f"DEBUG: No internal users found for TG IDs: {tg_ids}")
@@ -697,7 +726,8 @@ async def get_free_slots(data: dict, db: Session = Depends(get_db)):
             start_date=start,
             end_date=end,
             user_availabilities=user_availabilities,
-            tz_offset_hours=tz_offset
+            tz_offset_hours=tz_offset,
+            requesting_user_index=requesting_user_index
         )
         
         print(f"DEBUG: Found {len(free_windows)} free windows")
@@ -730,6 +760,7 @@ async def create_meeting(data: dict, current_user: User = Depends(get_current_us
     location = data.get("location", "")
     idempotency_key = data.get("idempotency_key")
     attendee_emails = data.get("attendee_emails", [])
+    meeting_type = data.get("meeting_type", "online")  # 'online' or 'offline'
     
     if not start_str or not end_str:
         raise HTTPException(status_code=400, detail="Start and End times are required")
@@ -765,11 +796,13 @@ async def create_meeting(data: dict, current_user: User = Depends(get_current_us
     results = {"google": "not_connected", "apple": "not_connected"}
     
     # 1. Google
+    google_event_id = None
     if current_user.google_refresh_token:
         try:
             refresh_token = decrypt_token(current_user.google_refresh_token)
             g_service = GoogleCalendarService(refresh_token)
-            await g_service.create_event(summary, start_time, end_time, attendees=attendee_emails, location=location)
+            g_event = await g_service.create_event(summary, start_time, end_time, attendees=attendee_emails, location=location, meeting_type=meeting_type)
+            google_event_id = g_event.get('id')
             results["google"] = "success"
         except Exception as e:
             results["google"] = f"error: {str(e)}"
@@ -806,7 +839,8 @@ async def create_meeting(data: dict, current_user: User = Depends(get_current_us
         start_time=start_time,
         end_time=end_time,
         location=location,
-        idempotency_key=idempotency_key
+        idempotency_key=idempotency_key,
+        google_event_id=google_event_id
     )
     db.add(new_meeting)
     db.commit()
@@ -830,10 +864,12 @@ async def finalize_meeting(data: dict, db: Session = Depends(get_db)):
         
     # Deep link optimization (handle 'n' prefix for negative IDs)
     clean_param = str(chat_id).replace("-", "n")
+    import time
+    timestamp = str(int(time.time()))
     reply_markup = {
         "inline_keyboard": [[{
             "text": "📅 Посмотреть детали",
-            "url": f"https://t.me/smartschedulertime_bot/app?startapp=group_{clean_param}"
+            "url": f"https://t.me/smartschedulertime_bot/app?startapp=group_{clean_param}&v={timestamp}"
         }]]
     }
 
@@ -901,12 +937,25 @@ def debug_paths():
 
 @app.get("/")
 async def root():
-    if os.path.exists(os.path.join(STATIC_DIR, "index.html")):
-        return FileResponse(
-            os.path.join(STATIC_DIR, "index.html"),
-            headers={"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0"}
-        )
-    return {"status": "ok", "message": "API is running. Backend v5.6.5"}
+    index_path = os.path.join(STATIC_DIR, "index.html")
+    if os.path.exists(index_path):
+        import time
+        ts = str(int(time.time()))
+        try:
+            with open(index_path, "r", encoding="utf-8") as f:
+                content = f.read()
+            # Cache-busting: inject timestamp into JS asset URLs
+            content = content.replace('main.dart.js', f'main.dart.js?v={ts}')
+            content = content.replace('flutter_bootstrap.js', f'flutter_bootstrap.js?v={ts}')
+            return HTMLResponse(
+                content=content,
+                headers={"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0"}
+            )
+        except Exception as e:
+            print(f"Error serving dynamic index: {e}")
+            return FileResponse(index_path)
+            
+    return {"status": "ok", "message": "API is running. Backend v5.6.7"}
 
 # Mount static assets (JS, CSS, fonts etc) at /static-assets to avoid overriding API
 # The key fix: we use a separate StaticFiles mount for assets onl

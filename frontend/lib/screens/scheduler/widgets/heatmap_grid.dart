@@ -8,6 +8,7 @@ class HeatmapGrid extends StatelessWidget {
   final DateTime selectedDay;
   final Function(TimeSlot) onSlotSelected;
   final List<String> ignoredParticipantIds;
+  final List<dynamic> myMeetings;
 
   const HeatmapGrid({
     super.key,
@@ -15,6 +16,7 @@ class HeatmapGrid extends StatelessWidget {
     required this.selectedDay,
     required this.onSlotSelected,
     this.ignoredParticipantIds = const [],
+    this.myMeetings = const [],
   });
 
   @override
@@ -169,12 +171,33 @@ class HeatmapGrid extends StatelessWidget {
   Color _getSlotColor(TimeSlot? slot) {
     if (slot == null) return Colors.white.withOpacity(0.02);
     
-    final val = slot.availability;
-    if (val == 1.0) return const Color(0xFF2E7D32).withOpacity(0.8);
-    if (val >= 0.8) return const Color(0xFF43A047).withOpacity(0.6);
-    if (val >= 0.6) return const Color(0xFFFBC02D).withOpacity(0.5);
-    if (val >= 0.4) return const Color(0xFFF57C00).withOpacity(0.4);
-    if (val > 0) return const Color(0xFFD32F2F).withOpacity(0.3);
+    // 4-Color Logic
+    if (slot.isFullMatch) {
+      return const Color(0xFF2E7D32).withOpacity(0.8); // Green: Everyone is free
+    } else if (slot.isMyBusy) {
+      // Подсчет: если это слот моей встречи из приложения, красим в фиолетовый
+      final sStart = slot.start.toLocal();
+      bool isAppMeeting = false;
+      
+      for (final m in myMeetings) {
+        final mStart = DateTime.parse(m['start']).toLocal();
+        final mEnd = DateTime.parse(m['end']).toLocal();
+        if ((sStart.isAtSameMomentAs(mStart) || sStart.isAfter(mStart)) && sStart.isBefore(mEnd)) {
+          isAppMeeting = true;
+          break;
+        }
+      }
+      
+      if (isAppMeeting) {
+        return Colors.purple.withOpacity(0.6); // Purple: App created meeting
+      } else {
+        return Colors.blue.withOpacity(0.6); // Blue: Personal Google event
+      }
+    } else if (slot.isOthersBusy) {
+      return Colors.deepOrange.withOpacity(0.5); // Orange: Someone else is busy
+    }
+    
+    // Fallback
     return Colors.black.withOpacity(0.05);
   }
 }

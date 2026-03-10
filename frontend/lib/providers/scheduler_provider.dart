@@ -14,10 +14,12 @@ class SchedulerProvider extends ChangeNotifier {
 
   List<User> _allUsers = [];
   List<int> _selectedParticipants = [];
+  List<dynamic> _myMeetings = [];
 
   List<User> get allUsers => _allUsers;
   List<int> get selectedParticipants => _selectedParticipants;
   List<TimeSlot> get suggestedSlots => _suggestedSlots;
+  List<dynamic> get myMeetings => _myMeetings;
   bool get isLoading => _isLoading;
 
   Future<void> fetchUsers() async {
@@ -40,9 +42,36 @@ class SchedulerProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> fetchMyMeetings() async {
+    try {
+      _myMeetings = await _apiService.getMyMeetings();
+      notifyListeners();
+    } catch (e) {
+      print("Fetch My Meetings Error: $e");
+    }
+  }
+
   Future<void> findBestTime(List<int> telegramIds) async {
     if (telegramIds.isEmpty) return;
+    await fetchMyMeetings();
     await fetchCommonSlots(telegramIds);
+  }
+
+  Future<bool> deleteMeeting(int meetingId) async {
+    try {
+      _isLoading = true;
+      notifyListeners();
+      await _apiService.deleteMeeting(meetingId);
+      await fetchMyMeetings();
+      await fetchCommonSlots(_selectedParticipants);
+      return true;
+    } catch (e) {
+      print("Delete Meeting Error: $e");
+      _error = e.toString();
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
   }
 
   Future<void> fetchCommonSlots(List<int> telegramIds) async {
@@ -70,6 +99,8 @@ class SchedulerProvider extends ChangeNotifier {
     required TimeSlot slot,
     List<String>? attendeeEmails,
     String? chatId,
+    String meetingType = 'online',
+    String? location,
   }) async {
     _isLoading = true;
     _error = null;
@@ -97,9 +128,13 @@ class SchedulerProvider extends ChangeNotifier {
         'end': slot.end.toUtc().toIso8601String(),
         'attendee_emails': attendeeEmails ?? [],
         'idempotency_key': idempotencyKey,
+        'meeting_type': meetingType,
+        'location': location ?? '',
       });
 
       print("DEBUG: Server response: ${response.data}");
+      await fetchMyMeetings();
+      await fetchCommonSlots(_selectedParticipants);
       return true;
     } catch (e) {
       print("DEBUG: createMeeting Error: $e");

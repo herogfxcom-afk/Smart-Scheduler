@@ -49,7 +49,8 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
     if (groupProvider.participants.isNotEmpty) {
       final ids = groupProvider.participants.map((p) => p.telegramId).toList();
       print("DEBUG: Participants updated, fetching slots for: $ids");
-      scheduler.fetchCommonSlots(ids);
+      // Always fetch myMeetings first so purple coloring is correct after reload
+      scheduler.fetchMyMeetings().then((_) => scheduler.fetchCommonSlots(ids));
     }
   }
 
@@ -142,7 +143,7 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
-        title: const Text("Доступность команды v5.7.1-stable"),
+        title: const Text("Доступность команды v6.1.0"),
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: BackButton(onPressed: () => Navigator.of(context).pop()),
@@ -304,7 +305,8 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
                       slots: scheduler.suggestedSlots,
                       selectedDay: _selectedDay,
                       ignoredParticipantIds: _ignoredParticipantIds,
-                      onSlotSelected: (slot) => _showBookingOptions(context, scheduler, slot),
+                      myMeetings: scheduler.myMeetings,
+                      onSlotSelected: (slot) => _handleSlotSelected(context, scheduler, slot),
                     )
                   : _buildListSlots(slotsForDay, scheduler),
             ),
@@ -475,14 +477,137 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
     );
   }
 
+  void _handleSlotSelected(BuildContext context, SchedulerProvider scheduler, TimeSlot slot) {
+    // 1. If it's a perfect match, proceed to booking
+    if (slot.isFullMatch) {
+      _showBookingOptions(context, scheduler, slot);
+      return;
+    }
+
+    // 2. If I am busy, check if it's an app-created meeting I can delete
+    if (slot.isMyBusy) {
+      final utcStart = slot.start.toUtc().toIso8601String().replaceAll('.000', '');
+      
+      // Look for a matching meeting in myMeetings
+      final matchedMeeting = scheduler.myMeetings.firstWhere(
+        (m) {
+          final mStart = DateTime.parse(m['start']).toLocal();
+          final mEnd = DateTime.parse(m['end']).toLocal();
+          final sStart = slot.start.toLocal();
+          
+          // slot starts exactly at or after meeting start AND slot starts strictly before meeting end
+          return (sStart.isAtSameMomentAs(mStart) || sStart.isAfter(mStart)) && sStart.isBefore(mEnd);
+        },
+        orElse: () => null,
+      );
+
+      if (matchedMeeting != null && matchedMeeting['is_creator'] == true) {
+        _showMeetingDetailsOptions(context, scheduler, matchedMeeting);
+        return;
+      }
+
+      // If no match found or not creator, it's a personal Google event
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('В это время у вас запланированы личные дела (внешний календарь).')),
+      );
+      return;
+    }
+
+    // 3. Someone else is busy
+    if (slot.isOthersBusy) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Один или несколько участников заняты в это время.')),
+      );
+      return;
+    }
+  }
+
+  void _showMeetingDetailsOptions(BuildContext context, SchedulerProvider scheduler, Map<String, dynamic> meetingData) {
+    final title = meetingData['title'] ?? 'Встреча';
+    final meetingId = meetingData['id'];
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        bool isDeleting = false;
+        return StatefulBuilder(
+          builder: (context, setState) => Container(
+            margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1E1E1E),
+              borderRadius: BorderRadius.circular(24),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.event_note, color: Colors.blue, size: 48),
+                const SizedBox(height: 16),
+                Text(
+                  title,
+                  style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: ElevatedButton(
+                    onPressed: isDeleting ? null : () async {
+                      setState(() => isDeleting = true);
+                      final success = await scheduler.deleteMeeting(meetingId);
+                      if (context.mounted) {
+                        Navigator.pop(context);
+                        if (success) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Встреча успешно удалена'), backgroundColor: Colors.green),
+                          );
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Ошибка удаления встречи'), backgroundColor: Colors.red),
+                          );
+                        }
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red.withOpacity(0.2),
+                      foregroundColor: Colors.redAccent,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      side: const BorderSide(color: Colors.redAccent, width: 1),
+                    ),
+                    child: isDeleting 
+                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.redAccent, strokeWidth: 2))
+                      : const Text('Отменить встречу', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Назад', style: TextStyle(color: Colors.grey, fontSize: 16)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   void _showBookingOptions(BuildContext context, 
       SchedulerProvider scheduler, TimeSlot slot) {
     
     DateTime startTime = slot.start.toLocal();
     DateTime endTime = slot.end.toLocal();
     final titleController = TextEditingController();
+    final locationController = TextEditingController();
     bool hasPickedTime = false;
     bool isLoading = false;
+    bool isOnline = true; // Default to online (video call)
 
     showModalBottomSheet(
       context: context,
@@ -600,44 +725,45 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
                           ),
                         ),
                       ),
-                      // Время
-                      InkWell(
-                        onTap: () async {
-                          final picked = await showTimePicker(
-                            context: context,
-                            initialTime: TimeOfDay
-                                .fromDateTime(startTime),
-                            builder: (ctx, child) => Theme(
-                              data: Theme.of(ctx).copyWith(
-                                colorScheme: ColorScheme.dark(
-                                  primary: Color(0xFF4A90E2),
-                                  surface: Color(0xFF252525),
-                                ),
-                              ),
-                              child: child!,
-                            ),
-                          );
-                          if (picked != null) {
-                            setState(() {
-                              hasPickedTime = true;
-                              final dur = endTime.difference(startTime);
-                              startTime = DateTime(startTime.year,
-                                  startTime.month, startTime.day,
-                                  picked.hour, picked.minute);
-                              endTime = startTime.add(dur);
-                            });
-                          }
-                        },
-                        child: Padding(
-                          padding: EdgeInsets.symmetric(vertical: 10),
-                          child: Row(
-                            children: [
-                              Icon(Icons.schedule_rounded,
-                                  color: Color(0xFF606060), size: 20),
-                              SizedBox(width: 12),
-                              Container(
-                                padding: EdgeInsets.symmetric(
-                                    horizontal: 12, vertical: 6),
+                      // Время (Отдельные кнопки для Start и End)
+                      Padding(
+                        padding: EdgeInsets.symmetric(vertical: 10),
+                        child: Row(
+                          children: [
+                            Icon(Icons.schedule_rounded, color: Color(0xFF606060), size: 20),
+                            SizedBox(width: 12),
+                            
+                            // Начало
+                            InkWell(
+                              onTap: () async {
+                                final picked = await showTimePicker(
+                                  context: context,
+                                  initialTime: TimeOfDay.fromDateTime(startTime),
+                                  builder: (ctx, child) => Theme(
+                                    data: Theme.of(ctx).copyWith(
+                                      colorScheme: ColorScheme.dark(
+                                        primary: Color(0xFF4A90E2),
+                                        surface: Color(0xFF252525),
+                                      ),
+                                    ),
+                                    child: child!,
+                                  ),
+                                );
+                                if (picked != null) {
+                                  setState(() {
+                                    hasPickedTime = true;
+                                    startTime = DateTime(startTime.year,
+                                        startTime.month, startTime.day,
+                                        picked.hour, picked.minute);
+                                    // Авто-правка конца, если он стал раньше начала
+                                    if (endTime.isBefore(startTime)) {
+                                      endTime = startTime.add(Duration(hours: 1));
+                                    }
+                                  });
+                                }
+                              },
+                              child: Container(
+                                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                                 decoration: BoxDecoration(
                                   color: Color(0xFF2A2A2A),
                                   borderRadius: BorderRadius.circular(8),
@@ -649,15 +775,52 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
                                       fontWeight: FontWeight.w600),
                                 ),
                               ),
-                              Padding(
-                                padding: EdgeInsets.symmetric(horizontal: 8),
-                                child: Text('—', 
-                                    style: TextStyle(
-                                        color: Color(0xFF606060))),
-                              ),
-                              Container(
-                                padding: EdgeInsets.symmetric(
-                                    horizontal: 12, vertical: 6),
+                            ),
+                            
+                            Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 8),
+                              child: Text('—', style: TextStyle(color: Color(0xFF606060))),
+                            ),
+                            
+                            // Конец
+                            InkWell(
+                              onTap: () async {
+                                final picked = await showTimePicker(
+                                  context: context,
+                                  initialTime: TimeOfDay.fromDateTime(endTime),
+                                  builder: (ctx, child) => Theme(
+                                    data: Theme.of(ctx).copyWith(
+                                      colorScheme: ColorScheme.dark(
+                                        primary: Color(0xFF4A90E2),
+                                        surface: Color(0xFF252525),
+                                      ),
+                                    ),
+                                    child: child!,
+                                  ),
+                                );
+                                if (picked != null) {
+                                  setState(() {
+                                    hasPickedTime = true;
+                                    final newEnd = DateTime(endTime.year,
+                                        endTime.month, endTime.day,
+                                        picked.hour, picked.minute);
+                                    
+                                    // Защита от выбора времени конца ДО времени начала
+                                    if (newEnd.isAfter(startTime)) {
+                                      endTime = newEnd;
+                                    } else {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text('Конец встречи не может быть раньше начала!'),
+                                          backgroundColor: Colors.red,
+                                        )
+                                      );
+                                    }
+                                  });
+                                }
+                              },
+                              child: Container(
+                                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                                 decoration: BoxDecoration(
                                   color: Color(0xFF2A2A2A),
                                   borderRadius: BorderRadius.circular(8),
@@ -669,10 +832,104 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
                                       fontWeight: FontWeight.w600),
                                 ),
                               ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
                       ),
+                      SizedBox(height: 16),
+
+                      // Тип встречи: Online / Offline
+                      Container(
+                        decoration: BoxDecoration(
+                          color: Color(0xFF252525),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        padding: EdgeInsets.all(4),
+                        child: Row(
+                          children: [
+                            // Online
+                            Expanded(
+                              child: GestureDetector(
+                                onTap: () => setState(() => isOnline = true),
+                                child: AnimatedContainer(
+                                  duration: Duration(milliseconds: 200),
+                                  padding: EdgeInsets.symmetric(vertical: 10),
+                                  decoration: BoxDecoration(
+                                    color: isOnline ? Color(0xFF4A90E2) : Colors.transparent,
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(Icons.videocam_rounded,
+                                          color: isOnline ? Colors.white : Colors.grey,
+                                          size: 18),
+                                      SizedBox(width: 6),
+                                      Text('Онлайн',
+                                          style: TextStyle(
+                                            color: isOnline ? Colors.white : Colors.grey,
+                                            fontWeight: isOnline ? FontWeight.w600 : FontWeight.normal,
+                                          )),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                            // Offline
+                            Expanded(
+                              child: GestureDetector(
+                                onTap: () => setState(() => isOnline = false),
+                                child: AnimatedContainer(
+                                  duration: Duration(milliseconds: 200),
+                                  padding: EdgeInsets.symmetric(vertical: 10),
+                                  decoration: BoxDecoration(
+                                    color: !isOnline ? Color(0xFF27AE60) : Colors.transparent,
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(Icons.location_on_rounded,
+                                          color: !isOnline ? Colors.white : Colors.grey,
+                                          size: 18),
+                                      SizedBox(width: 6),
+                                      Text('Оффлайн',
+                                          style: TextStyle(
+                                            color: !isOnline ? Colors.white : Colors.grey,
+                                            fontWeight: !isOnline ? FontWeight.w600 : FontWeight.normal,
+                                          )),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      // Поле адреса (только для оффлайн)
+                      if (!isOnline) ...[
+                        SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Icon(Icons.place_rounded, color: Color(0xFF606060), size: 20),
+                            SizedBox(width: 12),
+                            Expanded(
+                              child: TextField(
+                                controller: locationController,
+                                style: TextStyle(color: Colors.white, fontSize: 15),
+                                decoration: InputDecoration(
+                                  hintText: 'Адрес или место встречи',
+                                  hintStyle: TextStyle(color: Color(0xFF505050)),
+                                  border: InputBorder.none,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        Divider(color: Color(0xFF2A2A2A)),
+                      ],
+
                       SizedBox(height: 20),
                     ],
                   ),
@@ -695,6 +952,8 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
                           title: titleController.text.trim(),
                           slot: updatedSlot,
                           chatId: groupProvider.chatId,
+                          meetingType: isOnline ? 'online' : 'offline',
+                          location: isOnline ? null : locationController.text.trim(),
                         );
                         setState(() => isLoading = false);
                         if (success && context.mounted) {

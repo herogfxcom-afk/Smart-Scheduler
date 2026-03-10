@@ -25,5 +25,7 @@ class TimeSlot {
   factory TimeSlot.fromJson(Map<String, dynamic> json) => _$TimeSlotFromJson(json);
   Map<String, dynamic> toJson() => _$TimeSlotToJson(this);
   
-  bool get isFullMatch => type == 'match' || availability == 1.0;
+  bool get isFullMatch => type == 'match';
+  bool get isMyBusy => type == 'my_busy';
+  bool get isOthersBusy => type == 'others_busy';
 }
