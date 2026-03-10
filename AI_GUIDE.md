@@ -1,6 +1,6 @@
 # Smart Scheduler - AI Developer Guide
 
-*Current version: v6.0.3-stable*
+*Current version: v6.2.0-stable*
 
 ## 🌟 Project Overview
 Smart Scheduler is a group availability tracking application integrated deeply with Telegram Mini Apps and Google Calendar. It allows users to sync their personal calendars, share their working hours, and find common free slots among selected participants in a group chat to schedule meetings.
@@ -42,13 +42,16 @@ Smart Scheduler is a group availability tracking application integrated deeply w
    ```
 5. *Note:* If the Vercel URL changes, the user MUST update the URL in BotFather (`@BotFather -> /mybots -> Bot Settings -> Menu Button -> Configure menu button`) AND clear their Telegram cache.
 
-## 🔑 Key Features Implemented (Up to v6.0.3)
+## 🔑 Key Features Implemented (Up to v6.2.0)
 1. **Google & Apple Calendar Sync:** Fetches busy slots securely.
-2. **3-Color Heatmap Grid:**
+2. **Online/Offline Meetings:** Users can choose meeting type. Online meetings generate Google Meet links; offline meetings include a location address.
+3. **4-Color Heatmap Grid:**
    - **Green (`match`):** Everyone selected is free.
-   - **Blue (`my_busy`):** The requesting user is busy (personal Google event or app meeting).
+   - **Purple:** App-created meeting (creator can delete).
+   - **Blue (`my_busy`):** The requesting user is busy (personal external event).
    - **Orange (`others_busy`):** The requesting user is free, but one or more other participants are busy.
-3. **Meeting Deletion:** Tapping a Blue slot that represents a meeting *created via the app* opens a details bottom sheet with a "Cancel Meeting" button. Doing so deletes it locally AND removes it from the user's Google Calendar.
+4. **Double-Booking Protection:** Backend validation prevents booking meetings that overlap with existing app meetings OR external Google/Apple calendar events.
+5. **Meeting Deletion:** Tapping a Purple slot opens details with a "Cancel Meeting" button. Deletes locally and from external calendars.
 4. **Out-of-Hours rendering:** Working hours are enforced, but if a user has a meeting outside their working hours, the grid will force-render those slots as Blue (`my_busy`) so they are visible and editable.
 5. **Telegram Invites:** Finalizing a meeting edits the existing bot message in the chat or sends a new one with a deep link back to the mini-app with cache-busting `v=` parameters.
 
