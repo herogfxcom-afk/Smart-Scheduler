@@ -26,12 +26,19 @@ app = FastAPI(title="Smart Scheduler API")
 # Create database tables
 from database import engine
 import models
-models.Base.metadata.create_all(bind=engine)
+# metadata.create_all moved inside migrate_db for safer startup
 
 # Production Migration: Ensure 'email' column exists
 @app.on_event("startup")
 def migrate_db():
     from sqlalchemy import text, inspect
+    # Ensure tables exist first
+    try:
+        models.Base.metadata.create_all(bind=engine)
+        print("Database tables ensured.")
+    except Exception as e:
+        print(f"Table Creation Error: {e}")
+
     inspector = inspect(engine)
     
     # Check users table
@@ -161,28 +168,13 @@ def migrate_db():
     finally:
         db.close()
 
-# CORS - raw middleware that always injects correct headers regardless of origin
-class CORSEverywhere(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next):
-        if request.method == "OPTIONS":
-            response = Response(status_code=200)
-        else:
-            try:
-                response = await call_next(request)
-            except Exception as e:
-                # Ensure even error responses have CORS headers
-                print(f"Middleware Error: {str(e)}")
-                response = Response(content=json.dumps({"detail": str(e)}), status_code=500)
-        
-        origin = request.headers.get("origin", "*")
-        response.headers["Access-Control-Allow-Origin"] = origin
-        response.headers["Access-Control-Allow-Credentials"] = "true"
-        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, PATCH"
-        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With, init-data, accept, origin"
-        response.headers["Access-Control-Max-Age"] = "600"
-        return response
-
-app.add_middleware(CORSEverywhere)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # ─────────────────── TELEGRAM HELPERS ───────────────────
 from functools import lru_cache

@@ -8,8 +8,8 @@ class ApiService {
   ApiService(this._telegramService)
       : _dio = Dio(BaseOptions(
           baseUrl: const String.fromEnvironment('API_URL', defaultValue: 'https://smart-scheduler-production-2006.up.railway.app'),
-          connectTimeout: const Duration(seconds: 15),
-          receiveTimeout: const Duration(seconds: 15),
+          connectTimeout: const Duration(seconds: 30),
+          receiveTimeout: const Duration(seconds: 30),
         )) {
     _dio.interceptors.add(InterceptorsWrapper(
       onRequest: (options, handler) {
