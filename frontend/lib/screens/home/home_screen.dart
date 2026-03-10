@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:js' as js;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -16,19 +17,37 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final TextEditingController _groupController = TextEditingController();
+  Timer? _refreshTimer;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<MeetingProvider>().fetchMyMeetings();
+    });
+    // Auto-refresh every 30s so participants see new invites without manual pull-to-refresh
+    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted) {
+        context.read<MeetingProvider>().fetchMyMeetings();
+      }
     });
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Refresh when app comes back to foreground (e.g. user taps Telegram bot link)
+    if (state == AppLifecycleState.resumed && mounted) {
+      context.read<MeetingProvider>().fetchMyMeetings();
+    }
+  }
+
+  @override
   void dispose() {
+    _refreshTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     _groupController.dispose();
     super.dispose();
   }
