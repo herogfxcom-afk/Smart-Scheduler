@@ -899,7 +899,20 @@ async def get_free_slots(data: dict, current_user: User = Depends(get_current_us
                 BusySlot.end_time >= start,
                 BusySlot.start_time <= end
             ).all()
-            busy_slots_per_user.append([(s.start_time, s.end_time) for s in user_busy])
+            user_slots = [(s.start_time, s.end_time) for s in user_busy]
+            
+            # FIX: Also include GroupMeeting records (app-created meetings) as busy slots
+            # Join via MeetingInvite to get meetings the user is associated with
+            meeting_invites = db.query(models.MeetingInvite).filter(
+                models.MeetingInvite.user_id == uid,
+                models.MeetingInvite.status.in_(["accepted", "pending"])
+            ).all()
+            for mi in meeting_invites:
+                m = mi.meeting
+                if m and m.start_time >= start and m.end_time <= end:
+                    user_slots.append((m.start_time, m.end_time))
+            
+            busy_slots_per_user.append(user_slots)
             
         # 4. Fetch User Availabilities (Working Hours)
         user_availabilities = []
@@ -965,6 +978,9 @@ async def create_meeting(data: dict, background_tasks: BackgroundTasks, current_
     idempotency_key = data.get("idempotency_key")
     attendee_emails = data.get("attendee_emails", [])
     meeting_type = data.get("meeting_type", "online")  # 'online' or 'offline'
+    # FIX: extract invited participants and chat id from payload
+    invited_telegram_ids = data.get("invited_telegram_ids", [])
+    chat_id_from_payload = data.get("chat_id")  # explicit chat_id sent by frontend
     
     if not start_str or not end_str:
         raise HTTPException(status_code=400, detail="Start and End times are required")
@@ -1034,10 +1050,18 @@ async def create_meeting(data: dict, background_tasks: BackgroundTasks, current_
                 results[f"apple_{conn.id}"] = f"error: {str(e)}"
             
     # Save to our DB history
+    # FIX: tg_chat_id and group_id initialized early (in scope for send_notifications)
     group_id = None
-    if idempotency_key and "group_" in idempotency_key:
+    tg_chat_id = None  # this will be used in send_notifications
+
+    # Try to get chat_id from explicit payload first, then from idempotency_key
+    if chat_id_from_payload:
+        tg_chat_id = str(chat_id_from_payload)
+        group = db.query(models.Group).filter(models.Group.telegram_chat_id == tg_chat_id).first()
+        if group:
+            group_id = group.id
+    elif idempotency_key and "group_" in idempotency_key:
         try:
-            # Extract chat_id from group_CHATID_TIMESTAMP
             parts = idempotency_key.split("_")
             if len(parts) >= 2:
                 tg_chat_id = parts[1]

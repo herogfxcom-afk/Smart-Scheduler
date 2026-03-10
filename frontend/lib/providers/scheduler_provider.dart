@@ -137,6 +137,7 @@ class SchedulerProvider extends ChangeNotifier {
         'idempotency_key': idempotencyKey,
         'meeting_type': meetingType,
         'location': location ?? '',
+        if (chatId != null) 'chat_id': chatId,  // FIX: send chat_id explicitly
       });
 
       print("DEBUG: Server response: ${response.data}");
