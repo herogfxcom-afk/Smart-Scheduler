@@ -82,14 +82,19 @@ async def inline_handler(inline_query: types.InlineQuery):
         text="🗓 Open Scheduler",
         url=sync_url
     )
+    builder.button(
+        text="➕ Add to Group",
+        url=f"https://t.me/{bot_user.username}?startgroup=true"
+    )
     
     result = types.InlineQueryResultArticle(
         id=f"sync_{inline_query.id}",
         title=f"📅 Встреча: {query}",
-        description="Создать карточку синхронизации для выбора времени",
+        description="Создать карточку синхронизации и добавить бота",
         input_message_content=types.InputTextMessageContent(
             message_text=f"📊 **Найти лучшее время для встречи: {query}**\n\n"
-                         "Нажмите кнопку ниже, чтобы синхронизировать календари!",
+                         "1. Добавьте бота в группу (если еще не добавлен)\n"
+                         "2. Нажмите кнопку ниже для выбора времени",
             parse_mode="Markdown"
         ),
         reply_markup=builder.as_markup()

@@ -298,12 +298,27 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
           if (groupProvider.participants.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(12.0),
-              child: Text(
-                "Бот не видит участников. Убедитесь, что @smartschedulertime_bot добавлен в группу и имеет права администратора (для супергрупп).",
-                style: TextStyle(color: Colors.orange, fontSize: 12),
-                textAlign: TextAlign.center,
+            Padding(
+              padding: const EdgeInsets.all(12.0),
+              child: Column(
+                children: [
+                  const Text(
+                    "Бот не видит участников. Убедитесь, что @smartschedulertime_bot добавлен в группу и имеет права администратора (для супергрупп).",
+                    style: TextStyle(color: Colors.orange, fontSize: 12),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 8),
+                  ElevatedButton.icon(
+                    onPressed: () => _launchURL("https://t.me/smartschedulertime_bot?startgroup=true"),
+                    icon: const Icon(Icons.add_moderator),
+                    label: const Text("Добавить бота в группу"),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue.withOpacity(0.1),
+                      foregroundColor: Colors.blue,
+                      elevation: 0,
+                    ),
+                  ),
+                ],
               ),
             ),
           const Divider(height: 1),
