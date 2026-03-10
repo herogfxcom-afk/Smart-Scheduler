@@ -177,6 +177,9 @@ class CORSEverywhere(BaseHTTPMiddleware):
 app.add_middleware(CORSEverywhere)
 
 # ─────────────────── TELEGRAM HELPERS ───────────────────
+from functools import lru_cache
+
+@lru_cache(maxsize=128)
 def is_user_in_chat(chat_id: str, user_telegram_id: int) -> bool:
     """Checks if a user is still a member of a Telegram chat."""
     bot_token = os.getenv("BOT_TOKEN")
