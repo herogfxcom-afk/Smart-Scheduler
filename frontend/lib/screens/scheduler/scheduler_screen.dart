@@ -950,7 +950,7 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
                         
                         // Collect IDs of participants who are NOT ignored
                         final invitedIds = groupProvider.participants
-                            .where((p) => !groupProvider.ignoredParticipants.contains(p.telegramId))
+                            .where((p) => !_ignoredParticipantIds.contains(p.id.toString()))
                             .map((p) => p.telegramId)
                             .toList();
 
