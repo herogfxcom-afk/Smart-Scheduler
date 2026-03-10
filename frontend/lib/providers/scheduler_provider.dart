@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:dio/dio.dart';
 import '../core/api/api_service.dart';
 import '../models/time_slot.dart';
 import '../models/user.dart';
@@ -138,7 +139,13 @@ class SchedulerProvider extends ChangeNotifier {
       return true;
     } catch (e) {
       print("DEBUG: createMeeting Error: $e");
-      _error = e.toString();
+      
+      if (e is DioException && e.response?.statusCode == 409) {
+        _error = "Это время уже занято в вашем календаре или другой встречей.";
+      } else {
+        _error = e.toString();
+      }
+      
       // Rollback optimistic update if failed
       await fetchCommonSlots(_selectedParticipants); 
       return false;

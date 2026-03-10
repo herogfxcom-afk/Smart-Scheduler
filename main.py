@@ -781,13 +781,21 @@ async def create_meeting(data: dict, current_user: User = Depends(get_current_us
         if existing:
             return {"status": "success", "message": "already_exists", "id": existing.id}
 
-    # 4. Conflict Check: Is this slot already booked in our GroupMeeting DB?
+    # 4. Conflict Check: Is this slot already booked in our GroupMeeting DB or BusySlot?
     # (Checking if any meeting starts before this one ends AND ends after this one starts)
     conflict = db.query(models.GroupMeeting).filter(
         models.GroupMeeting.user_id == current_user.id,
         models.GroupMeeting.start_time < end_time,
         models.GroupMeeting.end_time > start_time
     ).first()
+    
+    if not conflict:
+        # Also check BusySlot (synced external calendars)
+        conflict = db.query(models.BusySlot).filter(
+            models.BusySlot.user_id == current_user.id,
+            models.BusySlot.start_time < end_time,
+            models.BusySlot.end_time > start_time
+        ).first()
     
     if conflict:
         print(f"DEBUG: Conflict detected for user {current_user.id} at {start_time}")
