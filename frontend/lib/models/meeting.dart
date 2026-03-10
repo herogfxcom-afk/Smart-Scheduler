@@ -5,6 +5,8 @@ class Meeting {
   final DateTime end;
   final String? location;
   final int? groupId;
+  final String? inviteStatus;
+  final bool isCreator;
 
   Meeting({
     required this.id,
@@ -13,6 +15,8 @@ class Meeting {
     required this.end,
     this.location,
     this.groupId,
+    this.inviteStatus,
+    this.isCreator = false,
   });
 
   factory Meeting.fromJson(Map<String, dynamic> json) {
@@ -23,6 +27,8 @@ class Meeting {
       end: DateTime.parse(json['end'] as String).toLocal(),
       location: json['location'] as String?,
       groupId: json['group_id'] as int?,
+      inviteStatus: json['invite_status'] as String?,
+      isCreator: json['is_creator'] as bool? ?? false,
     );
   }
 

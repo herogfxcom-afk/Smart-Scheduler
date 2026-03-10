@@ -734,21 +734,35 @@ async def update_availability(data: list[dict], current_user: User = Depends(get
 # ─────────────────── MEETING MANAGEMENT ───────────────────
 @app.get("/api/meetings/my")
 async def get_my_meetings(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Returns meetings created by the user or in groups they belong to."""
-    # 1. Meetings created by user (regardless of group)
-    created = db.query(models.GroupMeeting).filter(models.GroupMeeting.user_id == current_user.id).all()
+    """Returns meetings created by the user or in groups they belong to, plus pending/accepted/cancelled invites."""
+    # 1. Meetings created by user (only active ones)
+    created = db.query(models.GroupMeeting).filter(
+        models.GroupMeeting.user_id == current_user.id,
+        models.GroupMeeting.status == "active"
+    ).all()
     
-    # 2. Meetings in groups user belongs to
-    user_group_ids = [p.group_id for p in current_user.groups]
-    group_meetings = db.query(models.GroupMeeting).filter(models.GroupMeeting.group_id.in_(user_group_ids)).all()
+    # 2. Meetings the user has accepted, pending, or cancelled invites for
+    user_invites = db.query(models.MeetingInvite).filter(models.MeetingInvite.user_id == current_user.id).all()
+    invited_meeting_ids = [inv.meeting_id for inv in user_invites]
+    invited_meetings = db.query(models.GroupMeeting).filter(
+        models.GroupMeeting.id.in_(invited_meeting_ids),
+        models.GroupMeeting.status == "active" # We only want to show active invited meetings in the main calendar view. Cancelled invites will be handled in pending invites.
+    ).all()
     
     # Combine and deduplicate
     all_meetings = {m.id: m for m in created}
-    for m in group_meetings:
+    for m in invited_meetings:
         all_meetings[m.id] = m
         
     result = []
     for m in sorted(all_meetings.values(), key=lambda x: x.start_time):
+        # find user's invite status for this meeting
+        invite_status = "accepted" if m.user_id == current_user.id else "unknown"
+        for inv in user_invites:
+            if inv.meeting_id == m.id:
+                invite_status = inv.status
+                break
+
         result.append({
             "id": m.id,
             "title": m.title,
@@ -757,7 +771,8 @@ async def get_my_meetings(current_user: User = Depends(get_current_user), db: Se
             "location": m.location,
             "group_id": m.group_id,
             "is_creator": m.user_id == current_user.id,
-            "google_event_id": m.google_event_id
+            "google_event_id": m.google_event_id,
+            "invite_status": invite_status
         })
     return result
 
@@ -769,21 +784,81 @@ async def delete_meeting(meeting_id: int, current_user: User = Depends(get_curre
         raise HTTPException(status_code=404, detail="Meeting not found")
         
     # Delete from Google Calendar if event exists and user is connected
+    from calendar_service import GoogleCalendarService
+    from encryption import decrypt_token
+    
     if meeting.google_event_id and current_user.google_refresh_token:
         try:
-            from calendar_service import GoogleCalendarService
-            from encryption import decrypt_token
             refresh_token = decrypt_token(current_user.google_refresh_token)
             g_service = GoogleCalendarService(refresh_token)
             await g_service.delete_event(meeting.google_event_id)
         except Exception as e:
-            print(f"DEBUG: Failed to delete Google Event {meeting.google_event_id}: {e}")
+            print(f"DEBUG: Failed to delete creator's Google Event {meeting.google_event_id}: {e}")
             
-    db.delete(meeting)
+    # Also delete physical events for all accepted participants
+    for inv in meeting.invites:
+        if inv.status == "accepted" and inv.google_event_id and inv.user_id != meeting.user_id:
+            try:
+                # Find participant's active google connection
+                for conn in inv.user.connections:
+                    if conn.provider == 'google' and conn.is_active:
+                        participant_refresh = decrypt_token(conn.auth_data)
+                        pg_service = GoogleCalendarService(participant_refresh)
+                        await pg_service.delete_event(inv.google_event_id)
+                        break
+            except Exception as e:
+                print(f"DEBUG: Failed to delete participant {inv.user_id} Google Event {inv.google_event_id}: {e}")
+            
+    # Notify group if it's a group meeting
+    if meeting.group_id:
+        group = db.query(models.Group).filter(models.Group.id == meeting.group_id).first()
+        bot_token = os.getenv("BOT_TOKEN")
+        if group and bot_token:
+            try:
+                target_chat = group.telegram_chat_id.replace("n", "-") if group.telegram_chat_id.startswith("n") else group.telegram_chat_id
+                
+                time_str = meeting.start_time.strftime("%d.%m %H:%M")
+                text = (
+                    f"❌ **Встреча отменена ({current_user.first_name or current_user.username})**\n\n"
+                    f"📍 Тема: ~{meeting.title}~\n"
+                    f"⏰ Время: ~{time_str}~"
+                )
+                
+                requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={
+                    "chat_id": target_chat,
+                    "text": text,
+                    "parse_mode": "Markdown"
+                }, timeout=5)
+            except Exception as e:
+                print(f"DEBUG: Failed to send TG cancellation notification: {e}")
+
+    # Mark meeting as cancelled
+    meeting.status = "cancelled"
+    meeting.google_event_id = None
+    
+    # Update all invites
+    involved_user_ids = [meeting.user_id]
+    for inv in meeting.invites:
+        if inv.status != "declined":
+            involved_user_ids.append(inv.user_id)
+            
+        if inv.user_id == meeting.user_id:
+            db.delete(inv) # Creator doesn't need to acknowledge their own cancellation
+        else:
+            inv.status = "cancelled"
+            
+    # Proactively clear matching BusySlots so the time frees up instantly before the next calendar sync
+    db.query(models.BusySlot).filter(
+        models.BusySlot.user_id.in_(involved_user_ids),
+        models.BusySlot.start_time == meeting.start_time,
+        models.BusySlot.end_time == meeting.end_time
+    ).delete(synchronize_session=False)
+
     db.commit()
     return {"status": "success"}
 
 @app.patch("/api/meetings/{meeting_id}")
+
 async def update_meeting(meeting_id: int, data: dict, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Updates meeting details."""
     meeting = db.query(models.GroupMeeting).filter(models.GroupMeeting.id == meeting_id).first()
@@ -923,6 +998,7 @@ async def create_meeting(data: dict, current_user: User = Depends(get_current_us
     idempotency_key = data.get("idempotency_key")
     attendee_emails = data.get("attendee_emails", [])
     meeting_type = data.get("meeting_type", "online")  # 'online' or 'offline'
+    invited_telegram_ids = data.get("invited_telegram_ids", [])
     
     if not start_str or not end_str:
         raise HTTPException(status_code=400, detail="Start and End times are required")
@@ -966,33 +1042,9 @@ async def create_meeting(data: dict, current_user: User = Depends(get_current_us
     results = {}
     google_event_id = None
     
-    for conn in current_user.connections:
-        if not conn.is_active: continue
-        
-        # 1. Google
-        if conn.provider == 'google':
-            try:
-                refresh_token = decrypt_token(conn.auth_data)
-                g_service = GoogleCalendarService(refresh_token)
-                g_event = await g_service.create_event(summary, start_time, end_time, attendees=attendee_emails, location=location, meeting_type=meeting_type)
-                # Store the last successful google event ID (or we might need to store multiple in the future)
-                google_event_id = g_event.get('id')
-                results[f"google_{conn.id}"] = "success"
-            except Exception as e:
-                results[f"google_{conn.id}"] = f"error: {str(e)}"
-                
-        # 2. Apple
-        elif conn.provider == 'apple':
-            try:
-                apple_data = json.loads(decrypt_token(conn.auth_data))
-                a_service = AppleCalendarService(apple_data['email'], apple_data['password'])
-                a_service.create_event(summary, start_time, end_time, location)
-                results[f"apple_{conn.id}"] = "success"
-            except Exception as e:
-                results[f"apple_{conn.id}"] = f"error: {str(e)}"
-            
-    # Save to our DB history
+    # Save to our DB history First (we need the meeting ID for invites)
     group_id = None
+    tg_chat_id = None
     if idempotency_key and "group_" in idempotency_key:
         try:
             # Extract chat_id from group_CHATID_TIMESTAMP
@@ -1013,12 +1065,117 @@ async def create_meeting(data: dict, current_user: User = Depends(get_current_us
         end_time=end_time,
         location=location,
         idempotency_key=idempotency_key,
-        google_event_id=google_event_id
+        google_event_id=None # We might not create it immediately for the creator, or we might. Let's create it for creator.
     )
     db.add(new_meeting)
+    db.flush() # get new_meeting.id
+
+    # Create Invites
+    invited_users = []
+    if invited_telegram_ids:
+        invited_users_db = db.query(models.User).filter(models.User.telegram_id.in_(invited_telegram_ids)).all()
+        for u in invited_users_db:
+            if u.id != current_user.id:
+                invite = models.MeetingInvite(
+                    meeting_id=new_meeting.id,
+                    user_id=u.id,
+                    status="pending"
+                )
+                db.add(invite)
+                invited_users.append(u)
+    
+    # Creator is automatically accepted
+    creator_invite = models.MeetingInvite(
+        meeting_id=new_meeting.id,
+        user_id=current_user.id,
+        status="accepted"
+    )
+    db.add(creator_invite)
+
+    # Automatically add event to Creator's calendar
+    for conn in current_user.connections:
+        if not conn.is_active: continue
+        
+        # 1. Google
+        if conn.provider == 'google':
+            try:
+                refresh_token = decrypt_token(conn.auth_data)
+                g_service = GoogleCalendarService(refresh_token)
+                g_event = await g_service.create_event(summary, start_time, end_time, attendees=attendee_emails, location=location, meeting_type=meeting_type)
+                # Store the last successful google event ID
+                google_event_id = g_event.get('id')
+                new_meeting.google_event_id = google_event_id
+                results[f"google_{conn.id}"] = "success"
+            except Exception as e:
+                results[f"google_{conn.id}"] = f"error: {str(e)}"
+                
+        # 2. Apple
+        elif conn.provider == 'apple':
+            try:
+                apple_data = json.loads(decrypt_token(conn.auth_data))
+                a_service = AppleCalendarService(apple_data['email'], apple_data['password'])
+                a_service.create_event(summary, start_time, end_time, location)
+                results[f"apple_{conn.id}"] = "success"
+            except Exception as e:
+                results[f"apple_{conn.id}"] = f"error: {str(e)}"
+            
     db.commit()
     
+    # Send Telegram Notification to the Group
+    if tg_chat_id:
+        bot_token = os.getenv("BOT_TOKEN")
+        if bot_token:
+            try:
+                target_chat = tg_chat_id.replace("n", "-") if tg_chat_id.startswith("n") else tg_chat_id
+                
+                # Fetch bot username for deep linking
+                bot_resp = requests.get(f"https://api.telegram.org/bot{bot_token}/getMe").json()
+                bot_username = bot_resp.get("result", {}).get("username", "smartschedulertime_bot")
+
+                # Mention users
+                mentions = []
+                for u in invited_users:
+                    if u.username:
+                        mentions.append(f"@{u.username}")
+                    elif u.first_name:
+                        mentions.append(f"[{u.first_name}](tg://user?id={u.telegram_id})")
+                
+                mentions_str = ", ".join(mentions)
+                if not mentions_str:
+                    mentions_str = "коллеги"
+                
+                time_str = start_time.strftime("%d.%m %H:%M")
+                
+                # IMPORTANT: StartApp parameter CANNOT contain the minus (-) sign.
+                clean_chat_id = str(target_chat).replace("-", "n")
+                web_app_url = f"https://frontend-five-gules-5u3aqd6fzp.vercel.app/?startapp=group_{clean_chat_id}"
+
+                text = (
+                    f"📅 **Новое приглашение на встречу от {current_user.first_name or current_user.username}!**\n\n"
+                    f"📍 Тема: {summary}\n"
+                    f"⏰ Время: **{time_str}**\n\n"
+                    f"🔔 Участники: {mentions_str}\n\n"
+                    f"Пожалуйста, зайдите в приложение и подтвердите или отклоните встречу."
+                )
+                
+                reply_markup = {
+                    "inline_keyboard": [[{
+                        "text": "✅ Открыть приглашения",
+                        "web_app": {"url": web_app_url}
+                    }]]
+                }
+                
+                requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={
+                    "chat_id": target_chat,
+                    "text": text,
+                    "parse_mode": "Markdown",
+                    "reply_markup": json.dumps(reply_markup)
+                }, timeout=5)
+            except Exception as e:
+                print(f"DEBUG: Failed to send TG notification for new meeting: {e}")
+
     return {"status": "success", "results": results, "id": new_meeting.id}
+
 
 @app.post("/meeting/finalize")
 async def finalize_meeting(data: dict, db: Session = Depends(get_db)):
@@ -1090,6 +1247,106 @@ async def finalize_meeting(data: dict, db: Session = Depends(get_db)):
     except Exception as e:
         print(f"ERROR in finalize_meeting: {e}")
         return {"status": "error", "message": str(e)}
+
+@app.get("/api/invites")
+async def get_my_invites(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Returns pending and cancelled meeting requests for the current user."""
+    pending = db.query(models.MeetingInvite).filter(
+        models.MeetingInvite.user_id == current_user.id,
+        models.MeetingInvite.status.in_(["pending", "cancelled"])
+    ).all()
+    
+    result = []
+    for inv in pending:
+        if not inv.meeting: continue
+        
+        creator = inv.meeting.creator
+        creator_name = creator.first_name or creator.username if creator else "Кто-то"
+        
+        result.append({
+            "invite_id": inv.id,
+            "meeting_id": inv.meeting.id,
+            "title": inv.meeting.title,
+            "start": inv.meeting.start_time.isoformat() + "Z",
+            "end": inv.meeting.end_time.isoformat() + "Z",
+            "creator_name": creator_name,
+            "status": inv.status
+        })
+    return result
+
+@app.post("/api/invites/{invite_id}/respond")
+async def respond_to_invite(invite_id: int, data: dict, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Allows user to accept or decline an invite. Accepts physically add to Google Calendar."""
+    invite = db.query(models.MeetingInvite).filter(
+        models.MeetingInvite.id == invite_id,
+        models.MeetingInvite.user_id == current_user.id
+    ).first()
+    
+    if not invite:
+        raise HTTPException(status_code=404, detail="Invite not found")
+        
+    action = data.get("action") # 'accept' or 'decline' or 'acknowledge'
+    if action not in ["accept", "decline", "acknowledge"]:
+        raise HTTPException(status_code=400, detail="Invalid action")
+
+    if action == "acknowledge":
+        meeting_id = invite.meeting_id
+        db.delete(invite)
+        db.flush() # Ensure it's deleted before counting
+        
+        # Check if no more invites exist for a cancelled meeting, then hard-delete the meeting.
+        remaining_invites = db.query(models.MeetingInvite).filter(models.MeetingInvite.meeting_id == meeting_id).count()
+        if remaining_invites == 0:
+            meeting_to_delete = db.query(models.GroupMeeting).filter(models.GroupMeeting.id == meeting_id).first()
+            if meeting_to_delete and meeting_to_delete.status == "cancelled":
+                db.delete(meeting_to_delete)
+                
+        db.commit()
+        return {"status": "success", "invite_status": "acknowledged"}
+
+    if action == "decline":
+        invite.status = "declined"
+        db.commit()
+        return {"status": "success", "invite_status": "declined"}
+        
+    # If Accept
+    invite.status = "accepted"
+    meeting = invite.meeting
+
+    results = {}
+    google_event_id = None
+    
+    for conn in current_user.connections:
+        if not conn.is_active: continue
+        
+        if conn.provider == 'google':
+            try:
+                refresh_token = decrypt_token(conn.auth_data)
+                g_service = GoogleCalendarService(refresh_token)
+                g_event = await g_service.create_event(
+                    meeting.title, 
+                    meeting.start_time, 
+                    meeting.end_time, 
+                    location=meeting.location, 
+                    meeting_type="online"
+                )
+                google_event_id = g_event.get('id')
+                invite.google_event_id = google_event_id
+                results[f"google_{conn.id}"] = "success"
+            except Exception as e:
+                results[f"google_{conn.id}"] = f"error: {str(e)}"
+                
+        elif conn.provider == 'apple':
+            try:
+                apple_data = json.loads(decrypt_token(conn.auth_data))
+                a_service = AppleCalendarService(apple_data['email'], apple_data['password'])
+                a_service.create_event(meeting.title, meeting.start_time, meeting.end_time, meeting.location)
+                results[f"apple_{conn.id}"] = "success"
+            except Exception as e:
+                results[f"apple_{conn.id}"] = f"error: {str(e)}"
+    
+    db.commit()
+    return {"status": "success", "invite_status": "accepted", "results": results}
 
 # Serve the Flutter frontend
 # IMPORTANT: Mount static files ONLY for non-API paths to avoid conflict!

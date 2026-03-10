@@ -948,12 +948,20 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
                             end: endTime.toUtc());
                         final groupProvider = 
                             context.read<GroupProvider>();
+                        
+                        // Get all participants that are not ignored
+                        final invitedIds = groupProvider.participants
+                            .where((p) => !_ignoredParticipantIds.contains(p.id.toString()))
+                            .map((p) => p.telegramId)
+                            .toList();
+
                         final success = await scheduler.createMeeting(
                           title: titleController.text.trim(),
                           slot: updatedSlot,
                           chatId: groupProvider.chatId,
                           meetingType: isOnline ? 'online' : 'offline',
                           location: isOnline ? null : locationController.text.trim(),
+                          invitedTelegramIds: invitedIds,
                         );
                         setState(() => isLoading = false);
                         if (success && context.mounted) {

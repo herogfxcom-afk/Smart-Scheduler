@@ -17,11 +17,13 @@ class SchedulerProvider extends ChangeNotifier {
   List<User> _allUsers = [];
   List<int> _selectedParticipants = [];
   List<dynamic> _myMeetings = [];
+  List<dynamic> _pendingInvites = [];
 
   List<User> get allUsers => _allUsers;
   List<int> get selectedParticipants => _selectedParticipants;
   List<TimeSlot> get suggestedSlots => _suggestedSlots;
   List<dynamic> get myMeetings => _myMeetings;
+  List<dynamic> get pendingInvites => _pendingInvites;
   bool get isLoading => _isLoading;
 
   Future<void> fetchUsers() async {
@@ -47,9 +49,26 @@ class SchedulerProvider extends ChangeNotifier {
   Future<void> fetchMyMeetings() async {
     try {
       _myMeetings = await _apiService.getMyMeetings();
+      _pendingInvites = await _apiService.getPendingInvites();
       notifyListeners();
     } catch (e) {
       print("Fetch My Meetings Error: $e");
+    }
+  }
+
+  Future<bool> respondToInvite(int inviteId, String action) async {
+    try {
+      _isLoading = true;
+      notifyListeners();
+      await _apiService.respondToInvite(inviteId, action);
+      await fetchMyMeetings(); // Refresh both meetings AND invites
+      return true;
+    } catch (e) {
+      print("Respond To Invite Error: $e");
+      _error = e.toString();
+      _isLoading = false;
+      notifyListeners();
+      return false;
     }
   }
 
@@ -106,6 +125,7 @@ class SchedulerProvider extends ChangeNotifier {
     String? chatId,
     String meetingType = 'online',
     String? location,
+    List<int>? invitedTelegramIds,
   }) async {
     _isLoading = true;
     _error = null;
@@ -135,6 +155,7 @@ class SchedulerProvider extends ChangeNotifier {
         'idempotency_key': idempotencyKey,
         'meeting_type': meetingType,
         'location': location ?? '',
+        if (invitedTelegramIds != null) 'invited_telegram_ids': invitedTelegramIds,
       });
 
       print("DEBUG: Server response: ${response.data}");
