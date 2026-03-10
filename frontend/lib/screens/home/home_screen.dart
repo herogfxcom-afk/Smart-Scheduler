@@ -8,7 +8,6 @@ import '../../providers/group_provider.dart';
 import '../../providers/meeting_provider.dart';
 import '../../providers/availability_provider.dart';
 import '../../models/meeting.dart';
-import '../../providers/scheduler_provider.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -25,7 +24,6 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<MeetingProvider>().fetchMyMeetings();
-      context.read<SchedulerProvider>().fetchMyMeetings(); // Also fetches pending invites
     });
   }
 
@@ -70,7 +68,6 @@ class _HomeScreenState extends State<HomeScreen> {
           await authProvider.init();
           await groupProvider.syncWithGroup();
           await meetingProvider.fetchMyMeetings();
-          await context.read<SchedulerProvider>().fetchMyMeetings();
         },
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
@@ -104,10 +101,6 @@ class _HomeScreenState extends State<HomeScreen> {
                    ),
                 ],
               ),
-              const SizedBox(height: 24),
-
-              // Pending Invites Section
-              _buildPendingInvitesSection(context.watch<SchedulerProvider>()),
               const SizedBox(height: 24),
 
               // Upcoming Meetings Section
@@ -207,157 +200,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildPendingInvitesSection(SchedulerProvider scheduler) {
-    if (scheduler.pendingInvites.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text(
-              "Новые приглашения",
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.orangeAccent),
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(
-                color: Colors.orangeAccent.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Text(
-                "${scheduler.pendingInvites.length}",
-                style: const TextStyle(color: Colors.orangeAccent, fontWeight: FontWeight.bold),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        ListView.separated(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: scheduler.pendingInvites.length,
-          separatorBuilder: (context, index) => const SizedBox(height: 8),
-          itemBuilder: (context, index) {
-            final inv = scheduler.pendingInvites[index];
-            final start = DateTime.parse(inv['start']).toLocal();
-            
-            return Card(
-              color: Colors.orangeAccent.withOpacity(0.1),
-              shape: RoundedRectangleBorder(
-                side: BorderSide(color: Colors.orangeAccent.withOpacity(0.5)),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(
-                          inv['status'] == 'cancelled' ? Icons.cancel_outlined : Icons.mail_outline, 
-                          color: inv['status'] == 'cancelled' ? Colors.redAccent : Colors.orangeAccent
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            inv['title'] ?? 'Встреча',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold, 
-                              fontSize: 16,
-                              decoration: inv['status'] == 'cancelled' ? TextDecoration.lineThrough : null,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      inv['status'] == 'cancelled' ? "Отменено: ${inv['creator_name']}" : "От: ${inv['creator_name']}",
-                      style: TextStyle(
-                        color: inv['status'] == 'cancelled' ? Colors.redAccent.shade100 : Colors.grey.shade400, 
-                        fontSize: 13
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      "Время: ${_formatDate(start)} в ${_formatTime(start)}",
-                      style: const TextStyle(fontWeight: FontWeight.w500),
-                    ),
-                    const SizedBox(height: 16),
-                    if (inv['status'] == 'cancelled')
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          onPressed: scheduler.isLoading ? null : () async {
-                            final success = await scheduler.respondToInvite(inv['invite_id'], 'acknowledge');
-                            if (success && mounted) {
-                              context.read<MeetingProvider>().fetchMyMeetings();
-                            }
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.grey.shade800,
-                            foregroundColor: Colors.white,
-                          ),
-                          child: const Text("Ознакомлен"),
-                        ),
-                      )
-                    else
-                      Row(
-                        children: [
-                          Expanded(
-                            child: OutlinedButton(
-                              onPressed: scheduler.isLoading ? null : () async {
-                                final success = await scheduler.respondToInvite(inv['invite_id'], 'decline');
-                                if (success && mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text('Встреча отклонена')),
-                                  );
-                                  context.read<MeetingProvider>().fetchMyMeetings();
-                                }
-                              },
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: Colors.redAccent,
-                                side: const BorderSide(color: Colors.redAccent),
-                              ),
-                              child: const Text("Отклонить"),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: ElevatedButton(
-                              onPressed: scheduler.isLoading ? null : () async {
-                                final success = await scheduler.respondToInvite(inv['invite_id'], 'accept');
-                                if (success && mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text('Встреча добавлена в календарь')),
-                                  );
-                                  context.read<MeetingProvider>().fetchMyMeetings();
-                                }
-                              },
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.green,
-                                foregroundColor: Colors.white,
-                              ),
-                              child: const Text("Принять"),
-                            ),
-                          ),
-                        ],
-                      )
-                  ],
-                ),
-              ),
-            );
-          },
-        ),
-      ],
-    );
-  }
-
   void _showComingSoon(String service) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text("$service интеграция скоро появится!")),
@@ -387,24 +229,11 @@ class _HomeScreenState extends State<HomeScreen> {
       separatorBuilder: (context, index) => const SizedBox(height: 8),
       itemBuilder: (context, index) {
         final m = provider.meetings[index];
-        final isPending = m.inviteStatus == "pending";
-        final isDeclined = m.inviteStatus == "declined";
-
-        // Don't show declined meetings here
-        if (isDeclined) return const SizedBox.shrink();
-
-        final icon = m.isCreator 
-            ? Icons.star 
-            : (isPending ? Icons.help_outline : Icons.event);
-        final color = m.isCreator 
-            ? Colors.purple 
-            : (isPending ? Colors.orange : Colors.blue);
-
         return Card(
           child: ListTile(
-            leading: CircleAvatar(backgroundColor: color, child: Icon(icon, color: Colors.white)),
+            leading: const CircleAvatar(backgroundColor: Colors.blue, child: Icon(Icons.event, color: Colors.white)),
             title: Text(m.title, style: const TextStyle(fontWeight: FontWeight.bold)),
-            subtitle: Text("${_formatDate(m.start)} • ${_formatTime(m.start)}${isPending ? ' (Ожидает ответа)' : ''}"),
+            subtitle: Text("${_formatDate(m.start)} • ${_formatTime(m.start)}"),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => _showMeetingDetails(context, m),
           ),
@@ -574,8 +403,6 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _showMeetingDetails(BuildContext context, Meeting meeting) {
-    final isCreator = meeting.isCreator;
-    
     showModalBottomSheet(
       context: context,
       builder: (context) => Padding(
@@ -590,20 +417,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 Expanded(
                   child: Text(meeting.title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
                 ),
-                if (isCreator)
-                  IconButton(
-                    icon: const Icon(Icons.delete, color: Colors.red),
-                    onPressed: () {
-                      context.read<MeetingProvider>().deleteMeeting(meeting.id);
-                      Navigator.pop(context);
-                    },
-                  )
-                else if (meeting.inviteStatus == "pending")
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(color: Colors.orange.withOpacity(0.2), borderRadius: BorderRadius.circular(8)),
-                    child: const Text("Ожидает ответа", style: TextStyle(color: Colors.orange, fontSize: 12)),
-                  ),
+                IconButton(
+                  icon: const Icon(Icons.delete, color: Colors.red),
+                  onPressed: () {
+                    context.read<MeetingProvider>().deleteMeeting(meeting.id);
+                    Navigator.pop(context);
+                  },
+                ),
               ],
             ),
             const SizedBox(height: 16),
@@ -624,12 +444,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
               ),
             ],
-            
-            if (!isCreator && meeting.inviteStatus == "accepted") ...[
-               const SizedBox(height: 16),
-               const Text("Вы приняли это приглашение.", style: TextStyle(color: Colors.green)),
-            ],
-
             const SizedBox(height: 32),
             SizedBox(
               width: double.infinity,

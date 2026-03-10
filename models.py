@@ -79,29 +79,9 @@ class GroupMeeting(Base):
     location = Column(Text, nullable=True)
     idempotency_key = Column(String(255), unique=True)
     google_event_id = Column(String(255), nullable=True)
-    status = Column(String(50), default="active")  # 'active', 'cancelled'
     
-    group = relationship("Group", back_populates="meetings")
     group = relationship("Group", back_populates="meetings")
     creator = relationship("User")
-    invites = relationship("MeetingInvite", back_populates="meeting", cascade="all, delete-orphan")
-
-class MeetingInvite(Base):
-    __tablename__ = "meeting_invites"
-    
-    id = Column(Integer, primary_key=True)
-    meeting_id = Column(Integer, ForeignKey("group_meetings.id"), nullable=False)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    status = Column(String(50), default="pending")  # 'pending', 'accepted', 'declined', 'cancelled'
-    google_event_id = Column(String(255), nullable=True)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
-    
-    meeting = relationship("GroupMeeting", back_populates="invites")
-    user = relationship("User")
-
-    __table_args__ = (
-        UniqueConstraint('meeting_id', 'user_id', name='_meeting_user_invite_uc'),
-    )
 
 class Meeting(Base):
     __tablename__ = "meetings"
