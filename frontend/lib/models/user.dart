@@ -1,4 +1,5 @@
 import 'package:json_annotation/json_annotation.dart';
+import 'calendar_connection.dart';
 
 part 'user.g.dart';
 
@@ -11,6 +12,7 @@ class User {
   final String? photoUrl;
   final bool isConnected;
   final bool isAppleConnected;
+  final List<CalendarConnection> connections;
 
   User({
     this.id,
@@ -20,6 +22,7 @@ class User {
     this.photoUrl,
     this.isConnected = false,
     this.isAppleConnected = false,
+    this.connections = const [],
   });
 
   factory User.fromJson(Map<String, dynamic> json) => _$UserFromJson(json);

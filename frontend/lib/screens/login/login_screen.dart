@@ -84,7 +84,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
               ),
               const SizedBox(height: 8),
               Text(
-                "Connect your calendar to find the best time for meetings with your group.",
+                "Welcome to Smart Scheduler",
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                       color: Colors.white.withOpacity(0.7),
@@ -94,24 +94,9 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
               if (authProvider.isLoading)
                 const CircularProgressIndicator()
               else ...[
-                GoogleButton(
-                  onPressed: () {
-                    telegramService.hapticFeedback();
-                    authProvider.connectGoogle();
-                  },
-                ),
+                const Text("Синхронизация профиля...", style: TextStyle(color: Colors.white70)),
                 const SizedBox(height: 16),
-                TextButton.icon(
-                  onPressed: () {
-                    telegramService.hapticFeedback();
-                    telegramService.close();
-                  },
-                  icon: const Icon(Icons.close, color: Colors.white70),
-                  label: const Text(
-                    "Close and return to bot",
-                    style: TextStyle(color: Colors.white70),
-                  ),
-                ),
+                const CircularProgressIndicator(color: Colors.white70, strokeWidth: 2),
               ],
               if (authProvider.error != null)
                 Padding(

@@ -42,10 +42,13 @@ class AuthProvider extends ChangeNotifier {
     try {
       final userData = await _apiService.getMe();
       _user = User.fromJson(userData);
+      
+      // Update individual flags for backward compatibility or simple UI checks
       _isConnected = userData['is_connected'] ?? false;
       _isAppleConnected = userData['is_apple_connected'] ?? false;
+      
       _error = null;
-      print("Auth State Refreshed: isConnected=$_isConnected");
+      print("Auth State Refreshed: isConnected=$_isConnected, connections=${_user?.connections.length}");
     } catch (e) {
       _error = e.toString();
       print("Auth Refresh Error: $e");

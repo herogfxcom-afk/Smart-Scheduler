@@ -4,11 +4,13 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta, timezone
 import pytz
 from auth import get_current_user
 from google_oauth import router as google_auth_router
+from outlook_oauth import router as outlook_auth_router
 from models import User, BusySlot, Meeting
 from database import get_db
 from encryption import decrypt_token, encrypt_token
@@ -78,6 +80,79 @@ def migrate_db():
         except Exception as e:
             print(f"Migration Error (user_id): {e}")
 
+    # --- PHASE 0: MULTI-CALENDAR MIGRATION ---
+    
+    # 1. Create calendar_connections table if it doesn't exist
+    if not inspector.has_table('calendar_connections'):
+        try:
+            models.CalendarConnection.__table__.create(engine)
+            print("Migration: Created calendar_connections table.")
+        except Exception as e:
+            print(f"Migration Error (calendar_connections): {e}")
+
+    # 2. Add connection_id to busy_slots if it doesn't exist
+    busy_cols = [col['name'] for col in inspector.get_columns('busy_slots')]
+    if 'connection_id' not in busy_cols:
+        try:
+            with engine.connect() as conn:
+                conn.execute(text("ALTER TABLE busy_slots ADD COLUMN connection_id INTEGER REFERENCES calendar_connections(id)"))
+                conn.commit()
+                print("Migration: Added connection_id to busy_slots table.")
+        except Exception as e:
+            print(f"Migration Error (connection_id): {e}")
+
+    # 3. Data Migration: Move tokens from User to CalendarConnection
+    from sqlalchemy.orm import Session
+    from database import SessionLocal
+    db = SessionLocal()
+    
+    # Check if legacy columns exist before trying to query them
+    user_cols = [col['name'] for col in inspector.get_columns('users')]
+    if 'google_refresh_token' not in user_cols and 'apple_auth_data' not in user_cols:
+        print("Migration: Legacy token columns already removed. Skipping data migration.")
+        db.close()
+        return
+
+    try:
+        # Use text() to safely query columns that might be deleted in the code but still exist in DB
+        users_with_tokens = db.execute(text("SELECT id, email, google_refresh_token, apple_auth_data FROM users WHERE google_refresh_token IS NOT NULL OR apple_auth_data IS NOT NULL")).all()
+        
+        for u_id, u_email, g_token, a_token in users_with_tokens:
+            # Migrate Google
+            if g_token:
+                # Check if already migrated
+                exists = db.query(models.CalendarConnection).filter_by(user_id=u_id, provider='google').first()
+                if not exists:
+                    new_conn = models.CalendarConnection(
+                        user_id=u_id,
+                        provider='google',
+                        email=u_email,
+                        auth_data=g_token,
+                        is_active=1
+                    )
+                    db.add(new_conn)
+                    print(f"Migration: Moved Google token for user {u_id}")
+            
+            # Migrate Apple
+            if a_token:
+                exists = db.query(models.CalendarConnection).filter_by(user_id=u_id, provider='apple').first()
+                if not exists:
+                    new_conn = models.CalendarConnection(
+                        user_id=u_id,
+                        provider='apple',
+                        auth_data=a_token,
+                        is_active=1
+                    )
+                    db.add(new_conn)
+                    print(f"Migration: Moved Apple token for user {u_id}")
+        
+        db.commit()
+    except Exception as e:
+        print(f"Migration Error (Data Migration): {e}")
+        db.rollback()
+    finally:
+        db.close()
+
 # CORS - raw middleware that always injects correct headers regardless of origin
 class CORSEverywhere(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
@@ -103,6 +178,7 @@ app.add_middleware(CORSEverywhere)
 
 # Connect Routers
 app.include_router(google_auth_router)
+app.include_router(outlook_auth_router)
 
 # ─────────────────── TELEGRAM BOT WEBHOOK ───────────────────
 # Bot runs as a webhook inside FastAPI - no separate process needed!
@@ -273,15 +349,25 @@ async def cors_debug():
 
 @app.get("/auth/me")
 async def get_me(current_user: User = Depends(get_current_user)):
-    """Returns the current user profile."""
+    """Returns the current user profile including all connected calendars."""
     return {
         "id": current_user.id,
         "telegram_id": current_user.telegram_id,
         "username": current_user.username,
-        "first_name": current_user.first_name,
+        "first_name": current_user.firstName if hasattr(current_user, 'firstName') else current_user.first_name,
         "email": current_user.email,
-        "is_connected": bool(current_user.google_refresh_token),
-        "is_apple_connected": bool(current_user.apple_auth_data)
+        "is_connected": any(c.provider == 'google' and c.is_active for c in current_user.connections),
+        "is_apple_connected": any(c.provider == 'apple' and c.is_active for c in current_user.connections),
+        "connections": [
+            {
+                "id": c.id,
+                "provider": c.provider,
+                "email": c.email,
+                "status": c.status,
+                "is_active": bool(c.is_active),
+                "last_sync": c.last_sync.isoformat() + "Z" if c.last_sync else None
+            } for c in current_user.connections
+        ]
     }
 
 @app.post("/groups/sync")
@@ -316,12 +402,12 @@ async def sync_group(data: dict, current_user: User = Depends(get_current_user),
         participant = models.GroupParticipant(
             group_id=group.id, 
             user_id=current_user.id,
-            is_synced=1 if (current_user.google_refresh_token or current_user.apple_auth_data) else 0
+            is_synced=1 if any(c.is_active for c in current_user.connections) else 0
         )
         db.add(participant)
     else:
         # Update sync status
-        participant.is_synced = 1 if (current_user.google_refresh_token or current_user.apple_auth_data) else 0
+        participant.is_synced = 1 if any(c.is_active for c in current_user.connections) else 0
         
     db.commit()
     
@@ -479,54 +565,75 @@ async def connect_apple(data: dict, current_user: User = Depends(get_current_use
 
 @app.post("/calendar/sync")
 async def sync_calendar(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Syncs busy slots from Google Calendar to the database."""
+    """Syncs busy slots from all connected calendars to the database."""
     try:
-        all_busy_slots = []
+        total_slots = 0
+        active_connections = [c for c in current_user.connections if c.is_active]
         
-        # 1. Sync Google if connected
-        if current_user.google_refresh_token:
-            refresh_token = decrypt_token(current_user.google_refresh_token)
-            g_service = GoogleCalendarService(refresh_token)
-            start = datetime.utcnow()
-            end = start + timedelta(days=14)
-            google_busy = await g_service.get_busy_slots(start, end)
-            all_busy_slots.extend(google_busy)
-            
-        # 2. Sync Apple if connected
-        if current_user.apple_auth_data:
-            print(f"DEBUG: Syncing Apple for user {current_user.id}")
-            apple_data = json.loads(decrypt_token(current_user.apple_auth_data))
-            a_service = AppleCalendarService(apple_data['email'], apple_data['password'])
-            start = datetime.utcnow()
-            end = start + timedelta(days=14)
-            apple_busy = a_service.get_busy_slots(start, end)
-            print(f"DEBUG: Found {len(apple_busy)} slots from Apple")
-            all_busy_slots.extend(apple_busy)
-            
-        if not all_busy_slots and not current_user.google_refresh_token and not current_user.apple_auth_data:
+        if not active_connections:
              print(f"DEBUG: No calendars connected for user {current_user.id}")
              raise HTTPException(status_code=400, detail="No calendars connected")
 
-        # 3. Update DB (Clear old and insert new)
+        # Clear old slots for this user before re-syncing everything
         db.query(BusySlot).filter(BusySlot.user_id == current_user.id).delete()
         
-        for slot in all_busy_slots:
+        start = datetime.utcnow()
+        end = start + timedelta(days=21) # Sync 3 weeks ahead
+
+        for conn in active_connections:
+            all_busy_slots = []
             try:
-                # Better ISO parsing that handles 'Z' and offsets
-                s_out = slot['start'].replace('Z', '+00:00')
-                e_out = slot['end'].replace('Z', '+00:00')
-                new_slot = BusySlot(
-                    user_id=current_user.id,
-                    start_time=datetime.fromisoformat(s_out),
-                    end_time=datetime.fromisoformat(e_out)
-                )
-                db.add(new_slot)
-            except Exception as parse_e:
-                print(f"DEBUG: Error parsing slot {slot}: {parse_e}")
+                # 1. Sync Google
+                if conn.provider == 'google':
+                    refresh_token = decrypt_token(conn.auth_data)
+                    g_service = GoogleCalendarService(refresh_token)
+                    google_busy = await g_service.get_busy_slots(start, end)
+                    all_busy_slots.extend(google_busy)
+                    
+                # 2. Sync Apple
+                elif conn.provider == 'apple':
+                    apple_data = json.loads(decrypt_token(conn.auth_data))
+                    a_service = AppleCalendarService(apple_data['email'], apple_data['password'])
+                    apple_busy = a_service.get_busy_slots(start, end)
+                    all_busy_slots.extend(apple_busy)
+
+                # 3. Sync Outlook (Microsoft Graph)
+                elif conn.provider == 'outlook':
+                    from outlook_service import OutlookCalendarService
+                    refresh_token = decrypt_token(conn.auth_data)
+                    o_service = OutlookCalendarService(refresh_token)
+                    outlook_busy = await o_service.get_busy_slots(start, end)
+                    all_busy_slots.extend(outlook_busy)
+                
+                # Update last sync time
+                conn.last_sync = datetime.utcnow()
+                conn.status = "active"
+                conn.last_error = None
+                
+                # 3. Save slots with connection_id
+                for slot in all_busy_slots:
+                    try:
+                        s_out = slot['start'].replace('Z', '+00:00')
+                        e_out = slot['end'].replace('Z', '+00:00')
+                        new_slot = BusySlot(
+                            user_id=current_user.id,
+                            connection_id=conn.id,
+                            start_time=datetime.fromisoformat(s_out).astimezone(pytz.utc).replace(tzinfo=None),
+                            end_time=datetime.fromisoformat(e_out).astimezone(pytz.utc).replace(tzinfo=None)
+                        )
+                        db.add(new_slot)
+                        total_slots += 1
+                    except Exception as parse_e:
+                        print(f"DEBUG: Error parsing slot {slot}: {parse_e}")
+
+            except Exception as conn_e:
+                print(f"DEBUG: Connection {conn.id} ({conn.provider}) sync failed: {conn_e}")
+                conn.status = "error"
+                conn.last_error = str(conn_e)
         
         db.commit()
-        print(f"DEBUG: Successfully synced {len(all_busy_slots)} slots for user {current_user.id}")
-        return {"status": "success", "synced_count": len(all_busy_slots)}
+        print(f"DEBUG: Successfully synced {total_slots} slots from {len(active_connections)} calendars for user {current_user.id}")
+        return {"status": "success", "synced_count": total_slots, "connections_synced": len(active_connections)}
         
     except Exception as e:
         db.rollback()
@@ -801,30 +908,33 @@ async def create_meeting(data: dict, current_user: User = Depends(get_current_us
         print(f"DEBUG: Conflict detected for user {current_user.id} at {start_time}")
         raise HTTPException(status_code=409, detail="Time slot already booked")
 
-    results = {"google": "not_connected", "apple": "not_connected"}
-    
-    # 1. Google
+    results = {}
     google_event_id = None
-    if current_user.google_refresh_token:
-        try:
-            refresh_token = decrypt_token(current_user.google_refresh_token)
-            g_service = GoogleCalendarService(refresh_token)
-            g_event = await g_service.create_event(summary, start_time, end_time, attendees=attendee_emails, location=location, meeting_type=meeting_type)
-            google_event_id = g_event.get('id')
-            results["google"] = "success"
-        except Exception as e:
-            results["google"] = f"error: {str(e)}"
-            
-    # 2. Apple
-    if current_user.apple_auth_data:
-        try:
-            apple_data = json.loads(decrypt_token(current_user.apple_auth_data))
-            a_service = AppleCalendarService(apple_data['email'], apple_data['password'])
-            # Apple doesn't easily support attendees via simple CalDAV as Google does, skipping for now
-            a_service.create_event(summary, start_time, end_time, location)
-            results["apple"] = "success"
-        except Exception as e:
-            results["apple"] = f"error: {str(e)}"
+    
+    for conn in current_user.connections:
+        if not conn.is_active: continue
+        
+        # 1. Google
+        if conn.provider == 'google':
+            try:
+                refresh_token = decrypt_token(conn.auth_data)
+                g_service = GoogleCalendarService(refresh_token)
+                g_event = await g_service.create_event(summary, start_time, end_time, attendees=attendee_emails, location=location, meeting_type=meeting_type)
+                # Store the last successful google event ID (or we might need to store multiple in the future)
+                google_event_id = g_event.get('id')
+                results[f"google_{conn.id}"] = "success"
+            except Exception as e:
+                results[f"google_{conn.id}"] = f"error: {str(e)}"
+                
+        # 2. Apple
+        elif conn.provider == 'apple':
+            try:
+                apple_data = json.loads(decrypt_token(conn.auth_data))
+                a_service = AppleCalendarService(apple_data['email'], apple_data['password'])
+                a_service.create_event(summary, start_time, end_time, location)
+                results[f"apple_{conn.id}"] = "success"
+            except Exception as e:
+                results[f"apple_{conn.id}"] = f"error: {str(e)}"
             
     # Save to our DB history
     group_id = None

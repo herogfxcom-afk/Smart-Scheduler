@@ -87,18 +87,44 @@ async def google_oauth_callback(code: str, state: str, db: Session = Depends(get
         
         # Encrypt the refresh token before saving
         if refresh_token:
-            user.google_refresh_token = encrypt_token(refresh_token)
-            
-            # Fetch user email
+            # 1. Fetch user email (to use as unique identifier for this connection)
+            user_email = None
             try:
                 user_info_url = "https://www.googleapis.com/oauth2/v3/userinfo"
                 headers = {"Authorization": f"Bearer {tokens.get('access_token')}"}
                 async with httpx.AsyncClient() as client:
                     info_resp = await client.get(user_info_url, headers=headers)
                     user_info = info_resp.json()
-                    user.email = user_info.get("email")
+                    user_email = user_info.get("email")
+                    if user_email:
+                        user.email = user_email # Also keep on User for main profile
             except Exception as e:
                 print(f"Failed to fetch user email: {e}")
+
+            # 2. Create or Update CalendarConnection
+            from models import CalendarConnection
+            encrypted_token = encrypt_token(refresh_token)
+            
+            conn = db.query(CalendarConnection).filter_by(
+                user_id=user.id, 
+                provider='google', 
+                email=user_email
+            ).first()
+            
+            if not conn:
+                conn = CalendarConnection(
+                    user_id=user.id,
+                    provider='google',
+                    email=user_email,
+                    auth_data=encrypted_token,
+                    is_active=1
+                )
+                db.add(conn)
+            else:
+                conn.auth_data = encrypted_token
+                conn.is_active = 1
+                conn.status = "active"
+                conn.last_error = None
                 
             db.commit()
             

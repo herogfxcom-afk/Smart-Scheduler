@@ -155,13 +155,7 @@ class _SmartSchedulerAppState extends State<SmartSchedulerApp> with WidgetsBindi
           return loggingIn ? null : '/login';
         }
 
-        // Check if user is connected to any calendar
-        final isConnected = authProvider.isConnected || authProvider.isAppleConnected;
-        if (!isConnected && state.matchedLocation != '/login') {
-          return '/login'; // Force connection onboarding
-        }
-
-        if (loggingIn && isConnected) {
+        if (loggingIn) {
           return '/home';
         }
 

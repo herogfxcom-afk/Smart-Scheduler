@@ -14,14 +14,34 @@ class User(Base):
     first_name = Column(String(255), nullable=True)
     photo_url = Column(Text, nullable=True)
     email = Column(String(255), nullable=True)  # Added for collective invites
-    google_refresh_token = Column(Text, nullable=True)
-    apple_auth_data = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     busy_slots = relationship("BusySlot", back_populates="user")
     created_meetings = relationship("Meeting", back_populates="creator")
     groups = relationship("GroupParticipant", back_populates="user")
     availability = relationship("UserAvailability", back_populates="user")
+    connections = relationship("CalendarConnection", back_populates="user", cascade="all, delete-orphan")
+
+class CalendarConnection(Base):
+    __tablename__ = "calendar_connections"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    provider = Column(String(50), nullable=False)  # 'google', 'outlook', 'apple'
+    email = Column(String(255), nullable=True)
+    auth_data = Column(Text, nullable=False)  # Encrypted tokens
+    status = Column(String(50), default="active")  # 'active', 'error', 'needs_reauth'
+    last_error = Column(Text, nullable=True)
+    is_active = Column(Integer, default=1)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    last_sync = Column(DateTime, nullable=True)
+
+    user = relationship("User", back_populates="connections")
+    busy_slots = relationship("BusySlot", back_populates="connection", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        UniqueConstraint('user_id', 'provider', 'email', name='_user_provider_email_uc'),
+    )
 
 class Group(Base):
     __tablename__ = "groups"
@@ -81,10 +101,12 @@ class BusySlot(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"))
+    connection_id = Column(Integer, ForeignKey("calendar_connections.id"), nullable=True)
     start_time = Column(DateTime, nullable=False)
     end_time = Column(DateTime, nullable=False)
 
     user = relationship("User", back_populates="busy_slots")
+    connection = relationship("CalendarConnection", back_populates="busy_slots")
 
     __table_args__ = (
         UniqueConstraint('user_id', 'start_time', 'end_time', name='_user_slot_uc'),

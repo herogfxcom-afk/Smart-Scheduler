@@ -122,6 +122,16 @@ class _HomeScreenState extends State<HomeScreen> {
 
               const SizedBox(height: 32),
 
+              // My Calendars Section
+              const Text(
+                "Подключенные календари",
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 12),
+              _buildCalendarsSection(authProvider),
+              
+              const SizedBox(height: 32),
+
               // Quick Actions / Services
               const Text(
                 "Сервисы и настройки",
@@ -135,6 +145,63 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildCalendarsSection(AuthProvider auth) {
+    final connections = auth.user?.connections ?? [];
+    
+    return Column(
+      children: [
+        if (connections.isEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 8.0),
+            child: Text("Нет подключенных календарей", style: TextStyle(color: Colors.grey, fontSize: 13)),
+          ),
+        ...connections.map((conn) => Card(
+          margin: const EdgeInsets.only(bottom: 8),
+          child: ListTile(
+            leading: Icon(
+              conn.provider == 'google' ? Icons.mail : Icons.apple,
+              color: conn.provider == 'google' ? Colors.red : Colors.grey,
+            ),
+            title: Text(conn.email ?? "Подключено"),
+            subtitle: Text(conn.status == 'active' ? "Активен" : "Ошибка: требуется вход"),
+            trailing: conn.status == 'error' 
+              ? ElevatedButton(
+                  onPressed: () => conn.provider == 'google' ? auth.connectGoogle() : null, 
+                  child: const Text("Обновить")
+                )
+              : const Icon(Icons.check_circle, color: Colors.green),
+          ),
+        )),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: () => auth.connectGoogle(),
+                icon: const Icon(Icons.add),
+                label: const Text("Google"),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: () => _showComingSoon("Outlook"),
+                icon: const Icon(Icons.add),
+                label: const Text("Outlook"),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  void _showComingSoon(String service) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text("$service интеграция скоро появится!")),
     );
   }
 
