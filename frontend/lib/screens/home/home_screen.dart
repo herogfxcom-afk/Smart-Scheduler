@@ -1,3 +1,4 @@
+import 'dart:js' as js;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
@@ -387,6 +388,10 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ],
     );
+  }
+
+  void _launchURL(String url) {
+    js.context.callMethod('open', [url, '_blank']);
   }
 
   String _formatDate(DateTime dt) {

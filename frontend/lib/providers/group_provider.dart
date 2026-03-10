@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:dio/dio.dart';
 import '../core/api/api_service.dart';
 
 class GroupParticipant {
