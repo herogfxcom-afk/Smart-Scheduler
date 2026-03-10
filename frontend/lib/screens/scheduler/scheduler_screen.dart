@@ -48,9 +48,9 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
     
     if (groupProvider.participants.isNotEmpty) {
       final ids = groupProvider.participants.map((p) => p.telegramId).toList();
-      print("DEBUG: Participants updated, fetching slots for: $ids");
+      print("DEBUG: Participants updated, fetching slots for: $ids in group: ${groupProvider.chatId}");
       // Always fetch myMeetings first so purple coloring is correct after reload
-      scheduler.fetchMyMeetings().then((_) => scheduler.fetchCommonSlots(ids));
+      scheduler.fetchMyMeetings().then((_) => scheduler.fetchCommonSlots(ids, chatId: groupProvider.chatId));
     }
   }
 
@@ -195,7 +195,7 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
                       .map((p) => p.telegramId)
                       .where((id) => !_ignoredParticipantIds.contains(id.toString()))
                       .toList();
-                    scheduler.findBestTime(availableIds);
+                    scheduler.findBestTime(availableIds, chatId: groupProvider.chatId);
                   },
                   child: Container(
                     width: 70,

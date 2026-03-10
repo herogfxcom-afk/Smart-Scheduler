@@ -65,11 +65,17 @@ class GroupProvider with ChangeNotifier {
       }
     }
     
-    if (_chatId == finalId) return;
+    bool isNewId = _chatId != finalId;
     _chatId = finalId;
-    _participants = []; // Reset on change
+    
+    if (isNewId) {
+      _participants = []; // Only reset list if it's a completely different group
+    }
+    
     notifyListeners();
+    
     if (_chatId != null) {
+      // Always sync to ensure membership is verified on backend
       syncWithGroup();
     }
   }

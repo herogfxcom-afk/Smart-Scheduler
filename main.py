@@ -176,7 +176,37 @@ class CORSEverywhere(BaseHTTPMiddleware):
 
 app.add_middleware(CORSEverywhere)
 
-# Connect Routers
+# ─────────────────── TELEGRAM HELPERS ───────────────────
+def is_user_in_chat(chat_id: str, user_telegram_id: int) -> bool:
+    """Checks if a user is still a member of a Telegram chat."""
+    bot_token = os.getenv("BOT_TOKEN")
+    if not bot_token:
+        return True # Fallback if bot not configured
+    
+    try:
+        # Safe int conversion for numeric chat_ids
+        try:
+            target_chat = int(chat_id)
+        except:
+            target_chat = str(chat_id)
+
+        resp = requests.get(f"https://api.telegram.org/bot{bot_token}/getChatMember", params={
+            "chat_id": target_chat,
+            "user_id": int(user_telegram_id)
+        }, timeout=5).json()
+        
+        if not resp.get("ok"):
+            print(f"DEBUG: is_user_in_chat API Error: {resp.get('description')}")
+            return False
+            
+        status = resp.get("result", {}).get("status")
+        # Allowed statuses
+        return status in ["member", "administrator", "creator", "restricted"]
+    except Exception as e:
+        print(f"TRACE: is_user_in_chat system error: {e}")
+        return True # Soft fail on network error
+
+# ─────────────────── ROUTERS ───────────────────
 app.include_router(google_auth_router)
 app.include_router(outlook_auth_router)
 
@@ -397,7 +427,16 @@ async def sync_group(data: dict, current_user: User = Depends(get_current_user),
         models.GroupParticipant.group_id == group.id,
         models.GroupParticipant.user_id == current_user.id
     ).first()
-    
+
+    # 1.5 Verify Telegram Membership (Security Fix)
+    if not is_user_in_chat(chat_id, current_user.telegram_id):
+        print(f"DEBUG: Denying group sync - user {current_user.telegram_id} NOT in chat {chat_id}")
+        # If user was a participant, remove them
+        if participant:
+            db.delete(participant)
+            db.commit()
+        raise HTTPException(status_code=403, detail="You are not a member of this Telegram group")
+
     if not participant:
         participant = models.GroupParticipant(
             group_id=group.id, 
@@ -461,7 +500,7 @@ async def sync_group(data: dict, current_user: User = Depends(get_current_user),
     return {"status": "success", "group_id": group.id}
 
 @app.get("/groups/{chat_id}/participants")
-async def get_group_participants(chat_id: str, db: Session = Depends(get_db)):
+async def get_group_participants(chat_id: str, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Returns all participants in a group."""
     print(f"DEBUG: Fetching participants for chat_id: {chat_id}")
     group = db.query(models.Group).filter(models.Group.telegram_chat_id == str(chat_id)).first()
@@ -469,6 +508,11 @@ async def get_group_participants(chat_id: str, db: Session = Depends(get_db)):
         print(f"DEBUG: Group not found in DB for chat_id: {chat_id}")
         return []
     
+    # Security Check: Verify requesting user is in the group
+    if not is_user_in_chat(chat_id, current_user.telegram_id):
+        print(f"DEBUG: Denying /participants fetch - user {current_user.telegram_id} NOT in chat {chat_id}")
+        return []
+
     participants = db.query(models.GroupParticipant).filter(models.GroupParticipant.group_id == group.id).all()
     print(f"DEBUG: Found {len(participants)} potential participants in DB")
     
@@ -779,6 +823,21 @@ async def get_free_slots(data: dict, current_user: User = Depends(get_current_us
             
         # 2. Find internal user IDs
         users = db.query(User).filter(User.telegram_id.in_(tg_ids)).all()
+        
+        # 2.5 Security Verification for Groups (If chat_id provided)
+        chat_id = data.get("chat_id")
+        if chat_id:
+            # 1. Check if requesting user is in chat
+            if not is_user_in_chat(chat_id, current_user.telegram_id):
+                 return {"free_slots": [], "debug": "forbidden_not_in_chat"}
+            
+            # 2. Filter users to only those still in chat
+            active_users = []
+            for u in users:
+                if is_user_in_chat(chat_id, u.telegram_id):
+                    active_users.append(u)
+            users = active_users
+            
         internal_ids = [u.id for u in users]
         
         requesting_user_index = -1

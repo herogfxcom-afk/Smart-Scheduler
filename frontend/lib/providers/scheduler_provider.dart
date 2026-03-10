@@ -12,6 +12,7 @@ class SchedulerProvider extends ChangeNotifier {
   List<TimeSlot> _suggestedSlots = [];
   bool _isLoading = false;
   String? _error;
+  String? _currentChatId;
 
   List<User> _allUsers = [];
   List<int> _selectedParticipants = [];
@@ -52,10 +53,11 @@ class SchedulerProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> findBestTime(List<int> telegramIds) async {
+  Future<void> findBestTime(List<int> telegramIds, {String? chatId}) async {
     if (telegramIds.isEmpty) return;
+    _currentChatId = chatId;
     await fetchMyMeetings();
-    await fetchCommonSlots(telegramIds);
+    await fetchCommonSlots(telegramIds, chatId: chatId);
   }
 
   Future<bool> deleteMeeting(int meetingId) async {
@@ -64,7 +66,7 @@ class SchedulerProvider extends ChangeNotifier {
       notifyListeners();
       await _apiService.deleteMeeting(meetingId);
       await fetchMyMeetings();
-      await fetchCommonSlots(_selectedParticipants);
+      await fetchCommonSlots(_selectedParticipants, chatId: _currentChatId);
       return true;
     } catch (e) {
       print("Delete Meeting Error: $e");
@@ -75,15 +77,17 @@ class SchedulerProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> fetchCommonSlots(List<int> telegramIds) async {
+  Future<void> fetchCommonSlots(List<int> telegramIds, {String? chatId}) async {
     _isLoading = true;
     _error = null;
+    _currentChatId = chatId;
     notifyListeners();
 
     try {
       final response = await _apiService.post('/calendar/free-slots', {
         'telegram_ids': telegramIds,
         'tz_offset': DateTime.now().timeZoneOffset.inHours,
+        if (chatId != null) 'chat_id': chatId,
       });
       final List<dynamic> data = response.data['free_slots'] ?? [];
       _suggestedSlots = data.map((e) => TimeSlot.fromJson(e)).toList();
@@ -135,7 +139,7 @@ class SchedulerProvider extends ChangeNotifier {
 
       print("DEBUG: Server response: ${response.data}");
       await fetchMyMeetings();
-      await fetchCommonSlots(_selectedParticipants);
+      await fetchCommonSlots(_selectedParticipants, chatId: _currentChatId);
       return true;
     } catch (e) {
       print("DEBUG: createMeeting Error: $e");
@@ -147,7 +151,7 @@ class SchedulerProvider extends ChangeNotifier {
       }
       
       // Rollback optimistic update if failed
-      await fetchCommonSlots(_selectedParticipants); 
+      await fetchCommonSlots(_selectedParticipants, chatId: _currentChatId); 
       return false;
     } finally {
       _isLoading = false;
