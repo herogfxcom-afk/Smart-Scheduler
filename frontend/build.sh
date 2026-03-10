@@ -22,7 +22,7 @@ flutter pub get
 
 echo "Building for Web..."
 if [ -n "$API_URL" ]; then
-  flutter build web --release --no-tree-shake-icons --dart-define=API_URL=$API_URL
+  flutter build web --release --no-tree-shake-icons --verbose --dart-define=API_URL=$API_URL
 else
-  flutter build web --release --no-tree-shake-icons
+  flutter build web --release --no-tree-shake-icons --verbose
 fi
