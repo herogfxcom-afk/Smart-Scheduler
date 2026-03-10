@@ -18,13 +18,11 @@ export PATH="$PATH:`pwd`/flutter/bin"
 flutter config --no-analytics > /dev/null
 
 echo "Fetching dependencies..."
-flutter pub get -v
+flutter pub get
 
 echo "Building for Web..."
 if [ -n "$API_URL" ]; then
-  echo "Using API_URL: $API_URL"
-  flutter build web --release --no-tree-shake-icons --verbose --dart-define=API_URL=$API_URL
+  flutter build web --release --no-tree-shake-icons --dart-define=API_URL=$API_URL
 else
-  echo "No API_URL provided, building with default settings"
-  flutter build web --release --no-tree-shake-icons --verbose
+  flutter build web --release --no-tree-shake-icons
 fi
