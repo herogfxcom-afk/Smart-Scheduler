@@ -101,6 +101,14 @@ def migrate_db():
         except Exception as e:
             print(f"Migration Error (connection_id): {e}")
 
+    # 4. Check meeting_invites table
+    if not inspector.has_table('meeting_invites'):
+        try:
+            models.MeetingInvite.__table__.create(engine)
+            print("Migration: Created meeting_invites table.")
+        except Exception as e:
+            print(f"Migration Error (meeting_invites): {e}")
+
     # 3. Data Migration: Move tokens from User to CalendarConnection
     from sqlalchemy.orm import Session
     from database import SessionLocal
@@ -734,21 +742,20 @@ async def update_availability(data: list[dict], current_user: User = Depends(get
 # ─────────────────── MEETING MANAGEMENT ───────────────────
 @app.get("/api/meetings/my")
 async def get_my_meetings(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Returns meetings created by the user or in groups they belong to."""
-    # 1. Meetings created by user (regardless of group)
-    created = db.query(models.GroupMeeting).filter(models.GroupMeeting.user_id == current_user.id).all()
+    """Returns meetings created by the user or where they are invited."""
+    # 1. Meetings where user has an invite
+    invites = db.query(models.MeetingInvite).filter(models.MeetingInvite.user_id == current_user.id).all()
+    meeting_ids = [i.meeting_id for i in invites]
     
-    # 2. Meetings in groups user belongs to
-    user_group_ids = [p.group_id for p in current_user.groups]
-    group_meetings = db.query(models.GroupMeeting).filter(models.GroupMeeting.group_id.in_(user_group_ids)).all()
+    # 2. Fetch those meetings
+    meetings = db.query(models.GroupMeeting).filter(models.GroupMeeting.id.in_(meeting_ids)).all()
     
-    # Combine and deduplicate
-    all_meetings = {m.id: m for m in created}
-    for m in group_meetings:
-        all_meetings[m.id] = m
-        
+    # Map invites for quick status lookup
+    invite_map = {i.meeting_id: i for i in invites}
+    
     result = []
-    for m in sorted(all_meetings.values(), key=lambda x: x.start_time):
+    for m in sorted(meetings, key=lambda x: x.start_time):
+        invite = invite_map.get(m.id)
         result.append({
             "id": m.id,
             "title": m.title,
@@ -756,10 +763,53 @@ async def get_my_meetings(current_user: User = Depends(get_current_user), db: Se
             "end": m.end_time.isoformat() + "Z",
             "location": m.location,
             "group_id": m.group_id,
+            "group_title": m.group.title if m.group else None,
             "is_creator": m.user_id == current_user.id,
-            "google_event_id": m.google_event_id
+            "status": invite.status if invite else "unknown",
+            "invite_id": invite.id if invite else None,
+            "google_event_id": invite.google_event_id if invite else None
         })
     return result
+
+@app.post("/api/invites/{invite_id}/respond")
+async def respond_to_invite(invite_id: int, data: dict, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Accepts or declines a meeting invitation."""
+    status = data.get("status")
+    if status not in ["accepted", "declined"]:
+        raise HTTPException(status_code=400, detail="Invalid status")
+        
+    invite = db.query(models.MeetingInvite).filter(models.MeetingInvite.id == invite_id, models.MeetingInvite.user_id == current_user.id).first()
+    if not invite:
+        raise HTTPException(status_code=404, detail="Invite not found")
+        
+    invite.status = status
+    
+    # If accepted, try to add to Google/Apple Calendar
+    if status == "accepted":
+        meeting = invite.meeting
+        for conn in current_user.connections:
+            if not conn.is_active: continue
+            if conn.provider == 'google':
+                try:
+                    from calendar_service import GoogleCalendarService
+                    from encryption import decrypt_token
+                    refresh_token = decrypt_token(conn.auth_data)
+                    g_service = GoogleCalendarService(refresh_token)
+                    # Use existing creator's event details
+                    g_event = await g_service.create_event(
+                        meeting.title, 
+                        meeting.start_time, 
+                        meeting.end_time,
+                        location=meeting.location
+                    )
+                    invite.google_event_id = g_event.get('id')
+                except Exception as e:
+                    print(f"DEBUG: Failed to sync accepted meeting to Google: {e}")
+            
+            # Apple logic could be added here too
+            
+    db.commit()
+    return {"status": "success"}
 
 @app.delete("/api/meetings/{meeting_id}")
 async def delete_meeting(meeting_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -914,7 +964,7 @@ async def get_all_users(db: Session = Depends(get_db)):
     } for u in users]
 
 @app.post("/meeting/create")
-async def create_meeting(data: dict, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+async def create_meeting(data: dict, background_tasks: BackgroundTasks, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Creates a meeting in both Google and Apple calendars if connected."""
     summary = data.get("title", "Smart Scheduler Meeting")
     start_str = data.get("start")
@@ -1048,96 +1098,95 @@ async def create_meeting(data: dict, current_user: User = Depends(get_current_us
         print(f"DEBUG: Failed to insert meeting or invites: {e}")
         raise HTTPException(status_code=500, detail="Database insertion failed")
 
-    # Send Telegram Notification to the Group
-    if tg_chat_id:
+    # Send Telegram Notification to the Group (ASYNCHRONOUSLY IDEALLY, but at least non-blocking for the response)
+    def send_notifications():
+        if not tg_chat_id: return
         bot_token = os.getenv("BOT_TOKEN")
-        if bot_token:
+        if not bot_token: return
+        
+        try:
+            # Group IDs must be integers for the Telegram API
+            clean_chat_id = tg_chat_id
+            if str(clean_chat_id).startswith("n"):
+                clean_chat_id = str(clean_chat_id).replace("n", "-")
             try:
-                # Group IDs must be integers for the Telegram API
-                clean_chat_id = tg_chat_id
-                if str(clean_chat_id).startswith("n"):
-                    clean_chat_id = str(clean_chat_id).replace("n", "-")
-                try:
-                    target_chat = int(clean_chat_id)
-                except ValueError:
-                    target_chat = str(clean_chat_id)
-                
-                # Fetch bot username for deep linking
-                bot_username = "smartschedulertime_bot"
-                try:
-                    bot_resp = requests.get(f"https://api.telegram.org/bot{bot_token}/getMe", timeout=3).json()
-                    if bot_resp.get("ok"):
-                        bot_username = bot_resp.get("result", {}).get("username", bot_username)
-                except Exception as e:
-                    print(f"DEBUG: Failed to get bot username: {e}")
-
-                # Mention users
-                mentions = []
-                for u in invited_users:
-                    if u.username:
-                        mentions.append(f"@{u.username}")
-                    elif u.first_name:
-                        mentions.append(f"[{u.first_name}](tg://user?id={u.telegram_id})")
-                
-                mentions_str = ", ".join(mentions)
-                if not mentions_str:
-                    mentions_str = "коллеги"
-                
-                time_str = start_time.strftime("%d.%m %H:%M")
-                
-                # IMPORTANT: StartApp parameter CANNOT contain the minus (-) sign.
-                app_chat_id = str(target_chat).replace("-", "n")
-                web_app_url = f"https://t.me/{bot_username}/app?startapp=group_{app_chat_id}"
-
-                group_text = (
-                    f"📅 **Новое приглашение на встречу от {current_user.first_name or current_user.username}!**\n\n"
-                    f"📍 Тема: {summary}\n"
-                    f"⏰ Время: **{time_str}**\n\n"
-                    f"🔔 Участники: {mentions_str}\n\n"
-                    f"Пожалуйста, зайдите в приложение и подтвердите или отклоните встречу."
-                )
-                
-                reply_markup = {
-                    "inline_keyboard": [[{
-                        "text": "📬 Открыть приглашения",
-                        "url": web_app_url
-                    }]]
-                }
-                
-                import json
-                # Send to Group
-                send_resp = requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={
-                    "chat_id": target_chat,
-                    "text": group_text,
-                    "parse_mode": "Markdown",
-                    "reply_markup": json.dumps(reply_markup)
-                }, timeout=5).json()
-                
-                if not send_resp.get("ok"):
-                     print(f"DEBUG: Failed to send group invite notification: {send_resp}")
-
-                # Send individual DMs to each invited participant
-                for u in invited_users:
-                    if u.telegram_id:
-                        dm_text = (
-                            f"🔔 У вас новое приглашение на встречу!\n\n"
-                            f"👤 От: {current_user.first_name or current_user.username}\n"
-                            f"📍 Тема: {summary}\n"
-                            f"⏰ Время: {time_str}\n\n"
-                            f"Откройте приложение, чтобы подтвердить."
-                        )
-                        dm_resp = requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={
-                            "chat_id": u.telegram_id,
-                            "text": dm_text,
-                            "parse_mode": "Markdown",
-                            "reply_markup": json.dumps(reply_markup)
-                        }, timeout=3).json()
-                        if not dm_resp.get("ok"):
-                            print(f"DEBUG: Failed to send DM to {u.telegram_id}: {dm_resp}")
-                     
+                target_chat = int(clean_chat_id)
+            except ValueError:
+                target_chat = str(clean_chat_id)
+            
+            # Fetch bot username for deep linking
+            bot_username = "smartschedulertime_bot"
+            try:
+                bot_resp = requests.get(f"https://api.telegram.org/bot{bot_token}/getMe", timeout=2).json()
+                if bot_resp.get("ok"):
+                    bot_username = bot_resp.get("result", {}).get("username", bot_username)
             except Exception as e:
-                print(f"DEBUG: Error during Telegram notification: {e}")
-                
+                print(f"DEBUG: Failed to get bot username: {e}")
+
+            # Mention users
+            mentions = []
+            for u in invited_users:
+                if u.username:
+                    mentions.append(f"@{u.username}")
+                elif u.first_name:
+                    mentions.append(f"[{u.first_name}](tg://user?id={u.telegram_id})")
+            
+            mentions_str = ", ".join(mentions)
+            if not mentions_str:
+                mentions_str = "коллеги"
+            
+            time_str = start_time.strftime("%d.%m %H:%M")
+            
+            # IMPORTANT: StartApp parameter CANNOT contain the minus (-) sign.
+            app_chat_id = str(target_chat).replace("-", "n")
+            web_app_url = f"https://t.me/{bot_username}/app?startapp=group_{app_chat_id}"
+
+            group_text = (
+                f"📅 **Новое приглашение на встречу от {current_user.first_name or current_user.username}!**\n\n"
+                f"📍 Тема: {summary}\n"
+                f"⏰ Время: **{time_str}**\n\n"
+                f"🔔 Участники: {mentions_str}\n\n"
+                f"Пожалуйста, зайдите в приложение и подтвердите или отклоните встречу."
+            )
+            
+            reply_markup = {
+                "inline_keyboard": [[{
+                    "text": "📬 Открыть приглашения",
+                    "url": web_app_url
+                }]]
+            }
+            
+            # Send to Group
+            requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={
+                "chat_id": target_chat,
+                "text": group_text,
+                "parse_mode": "Markdown",
+                "reply_markup": reply_markup
+            }, timeout=3)
+            
+            # Send individual DMs to each invited participant
+            for u in invited_users:
+                if u.telegram_id:
+                    dm_text = (
+                        f"🔔 У вас новое приглашение на встречу!\n\n"
+                        f"👤 От: {current_user.first_name or current_user.username}\n"
+                        f"📍 Тема: {summary}\n"
+                        f"⏰ Время: {time_str}\n\n"
+                        f"Откройте приложение, чтобы подтвердить."
+                    )
+                    requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={
+                        "chat_id": u.telegram_id,
+                        "text": dm_text,
+                        "parse_mode": "Markdown",
+                        "reply_markup": reply_markup
+                    }, timeout=2)
+                 
+        except Exception as e:
+            print(f"DEBUG: Error during Telegram notification: {e}")
+
+    # Use FastAPI BackgroundTasks to make it non-blocking
+    background_tasks.add_task(send_notifications)
+    
     return {"status": "success", "results": results, "id": new_meeting.id}
 
 @app.post("/meeting/finalize")

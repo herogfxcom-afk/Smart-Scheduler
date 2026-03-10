@@ -50,4 +50,18 @@ class MeetingProvider with ChangeNotifier {
       notifyListeners();
     }
   }
+
+  Future<void> respondToInvite(int inviteId, String status) async {
+    try {
+      _isLoading = true;
+      notifyListeners();
+      await _apiService.respondToInvite(inviteId, status);
+      await fetchMyMeetings(); // Refresh list
+    } catch (e) {
+      _error = e.toString();
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
 }

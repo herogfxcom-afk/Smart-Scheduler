@@ -5,6 +5,10 @@ class Meeting {
   final DateTime end;
   final String? location;
   final int? groupId;
+  final String? groupTitle;
+  final String status; // 'pending', 'accepted', 'declined'
+  final int? inviteId;
+  final bool isCreator;
 
   Meeting({
     required this.id,
@@ -13,6 +17,10 @@ class Meeting {
     required this.end,
     this.location,
     this.groupId,
+    this.groupTitle,
+    required this.status,
+    this.inviteId,
+    required this.isCreator,
   });
 
   factory Meeting.fromJson(Map<String, dynamic> json) {
@@ -23,6 +31,10 @@ class Meeting {
       end: DateTime.parse(json['end'] as String).toLocal(),
       location: json['location'] as String?,
       groupId: json['group_id'] as int?,
+      groupTitle: json['group_title'] as String?,
+      status: json['status'] as String? ?? 'accepted',
+      inviteId: json['invite_id'] as int?,
+      isCreator: json['is_creator'] as bool? ?? false,
     );
   }
 
@@ -30,10 +42,14 @@ class Meeting {
     return {
       'id': id,
       'title': title,
-      'start': start.toUtc().toIsoformat(),
-      'end': end.toUtc().toIsoformat(),
+      'start': start.toUtc().toIso8601String(),
+      'end': end.toUtc().toIso8601String(),
       'location': location,
       'group_id': groupId,
+      'group_title': groupTitle,
+      'status': status,
+      'invite_id': inviteId,
+      'is_creator': isCreator,
     };
   }
 }

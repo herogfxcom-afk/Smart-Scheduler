@@ -103,12 +103,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(height: 24),
 
-              // Upcoming Meetings Section
-              const Text(
-                "Ближайшие встречи",
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 12),
+              // Meetings & Invites Section
               _buildMeetingsSection(meetingProvider),
               
               const SizedBox(height: 32),
@@ -210,35 +205,115 @@ class _HomeScreenState extends State<HomeScreen> {
     if (provider.isLoading) {
       return const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator()));
     }
-    if (provider.meetings.isEmpty) {
-      return Card(
-        color: Colors.grey.withOpacity(0.05),
-        child: const Padding(
-          padding: EdgeInsets.all(24.0),
-          child: Center(
-            child: Text("Запланированных встреч нет", style: TextStyle(color: Colors.grey)),
-          ),
-        ),
-      );
-    }
 
-    return ListView.separated(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: provider.meetings.take(3).length, // Show top 3
-      separatorBuilder: (context, index) => const SizedBox(height: 8),
-      itemBuilder: (context, index) {
-        final m = provider.meetings[index];
-        return Card(
-          child: ListTile(
-            leading: const CircleAvatar(backgroundColor: Colors.blue, child: Icon(Icons.event, color: Colors.white)),
-            title: Text(m.title, style: const TextStyle(fontWeight: FontWeight.bold)),
-            subtitle: Text("${_formatDate(m.start)} • ${_formatTime(m.start)}"),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => _showMeetingDetails(context, m),
+    final pending = provider.meetings.where((m) => m.status == 'pending').toList();
+    final confirmed = provider.meetings.where((m) => m.status == 'accepted').toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (pending.isNotEmpty) ...[
+          const Text(
+            "Приглашения",
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blueAccent),
           ),
-        );
-      },
+          const SizedBox(height: 12),
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: pending.length,
+            itemBuilder: (context, index) {
+              final m = pending[index];
+              return Card(
+                color: Colors.blue.withOpacity(0.05),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: BorderSide(color: Colors.blue.withOpacity(0.2)),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(12.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.mail_outline, color: Colors.blue),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(m.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                                if (m.groupTitle != null) 
+                                  Text("В группе: ${m.groupTitle}", style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          const Icon(Icons.access_time, size: 14, color: Colors.grey),
+                          const SizedBox(width: 4),
+                          Text("${_formatDate(m.start)} ${_formatTime(m.start)}", style: const TextStyle(fontSize: 13)),
+                          const Spacer(),
+                          TextButton(
+                            onPressed: () => provider.respondToInvite(m.inviteId!, 'declined'),
+                            child: const Text("Отклонить", style: TextStyle(color: Colors.redAccent)),
+                          ),
+                          const SizedBox(width: 8),
+                          ElevatedButton(
+                            onPressed: () => provider.respondToInvite(m.inviteId!, 'accepted'),
+                            style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
+                            child: const Text("Принять"),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 24),
+        ],
+
+        const Text(
+          "Ближайшие встречи",
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 12),
+        if (confirmed.isEmpty)
+          Card(
+            color: Colors.grey.withOpacity(0.05),
+            child: const Padding(
+              padding: EdgeInsets.all(24.0),
+              child: Center(
+                child: Text("Запланированных встреч нет", style: TextStyle(color: Colors.grey)),
+              ),
+            ),
+          )
+        else
+          ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: confirmed.take(5).length,
+            separatorBuilder: (context, index) => const SizedBox(height: 8),
+            itemBuilder: (context, index) {
+              final m = confirmed[index];
+              return Card(
+                child: ListTile(
+                  leading: const CircleAvatar(backgroundColor: Colors.blue, child: Icon(Icons.event, color: Colors.white)),
+                  title: Text(m.title, style: const TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: Text("${_formatDate(m.start)} • ${_formatTime(m.start)}"),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => _showMeetingDetails(context, m),
+                ),
+              );
+            },
+          ),
+      ],
     );
   }
 

@@ -66,6 +66,10 @@ class ApiService {
     await _dio.patch('/api/meetings/$id', data: data);
   }
 
+  Future<void> respondToInvite(int inviteId, String status) async {
+    await _dio.post('/api/invites/$inviteId/respond', data: {'status': status});
+  }
+
   // Availability
   Future<List<dynamic>> getAvailability() async {
     final response = await _dio.get('/api/availability');

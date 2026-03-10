@@ -127,3 +127,15 @@ class UserAvailability(Base):
     __table_args__ = (
         UniqueConstraint('user_id', 'day_of_week', name='_user_day_uc'),
     )
+
+class MeetingInvite(Base):
+    __tablename__ = "meeting_invites"
+    id = Column(Integer, primary_key=True)
+    meeting_id = Column(Integer, ForeignKey("group_meetings.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    status = Column(String(50), default="pending")  # 'pending', 'accepted', 'declined'
+    google_event_id = Column(String(255), nullable=True) # Each participant might have their own event
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    meeting = relationship("GroupMeeting")
+    user = relationship("User")
