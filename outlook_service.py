@@ -72,6 +72,49 @@ class OutlookCalendarService:
                 )
                 if resp.status_code != 200:
                      print(f"DEBUG OUTLOOK ERROR: {resp.status_code} - {resp.text}")
+                     return []
+                data = resp.json()
+                return data.get('value', [])
+        except Exception as e:
+            print(f"DEBUG: Outlook get_calendar_events failed: {e}")
+            return []
+
+    async def create_event(self, summary: str, start_time: datetime, end_time: datetime, location: str = ""):
+        """Creates a calendar event in Outlook via Microsoft Graph."""
+        if not self.client_id or not self.client_secret:
+            print("DEBUG: Outlook credentials missing. Skipping create.")
+            return {}
+        try:
+            access_token = await self._get_access_token()
+            headers = {
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json"
+            }
+            body = {
+                "subject": summary,
+                "start": {
+                    "dateTime": start_time.strftime("%Y-%m-%dT%H:%M:%S"),
+                    "timeZone": "UTC"
+                },
+                "end": {
+                    "dateTime": end_time.strftime("%Y-%m-%dT%H:%M:%S"),
+                    "timeZone": "UTC"
+                },
+                "location": {"displayName": location or ""}
+            }
+            async with httpx.AsyncClient(timeout=15) as client:
+                resp = await client.post(
+                    f"{self.base_url}/me/events",
+                    headers=headers,
+                    json=body
+                )
+                resp.raise_for_status()
+                result = resp.json()
+                print(f"DEBUG OUTLOOK: Created event '{summary}' id={result.get('id')}")
+                return result
+        except Exception as e:
+            print(f"DEBUG OUTLOOK: create_event failed: {e}")
+            raise
                 resp.raise_for_status()
                 data = resp.json()
 

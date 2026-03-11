@@ -779,6 +779,17 @@ async def get_solo_scheduler(
     # Get busy slots from database (Internal + Synced from Google/etc.)
     db_slots = db.query(models.BusySlot).filter(models.BusySlot.user_id == current_user.id).all()
     busy_slots = [(s.start_time, s.end_time) for s in db_slots]
+    
+    # Добавляем встречи созданные в приложении как занятые слоты
+    meeting_invites = db.query(models.MeetingInvite).filter(
+        models.MeetingInvite.user_id == current_user.id,
+        models.MeetingInvite.status.in_(["accepted", "pending"])
+    ).all()
+    for mi in meeting_invites:
+        m = mi.meeting
+        if m:
+            busy_slots.append((m.start_time, m.end_time))
+    print(f"DEBUG SOLO: {len(db_slots)} synced slots + {len(meeting_invites)} meeting invites for user {current_user.id}")
     # We use find_common_free_slots for a single user
     # This will categorize slots as "match" (free) or "my_busy" (busy)
     segments = find_common_free_slots(
@@ -1202,6 +1213,17 @@ async def create_meeting(data: dict, background_tasks: BackgroundTasks, current_
                 results[f"apple_{conn.id}"] = "success"
             except Exception as e:
                 results[f"apple_{conn.id}"] = f"error: {str(e)}"
+        elif conn.provider == 'outlook':
+            try:
+                from outlook_service import OutlookCalendarService
+                refresh_token = decrypt_token(conn.auth_data)
+                o_service = OutlookCalendarService(refresh_token)
+                o_event = await o_service.create_event(
+                    summary, start_time, end_time, location
+                )
+                results[f"outlook_{conn.id}"] = "success"
+            except Exception as e:
+                results[f"outlook_{conn.id}"] = f"error: {str(e)}"
             
     # Save to our DB history
     # FIX: tg_chat_id and group_id initialized early (in scope for send_notifications)
