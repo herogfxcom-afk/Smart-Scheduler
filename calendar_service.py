@@ -199,23 +199,30 @@ def find_common_free_slots(
                     else:
                         type_label = "others_busy"
                         availability = 0.0
-                    
-                    total_c = max(active_users_in_segment, 1)
-                    
-                    if free_slots and free_slots[-1]["type"] == type_label and \
-                       free_slots[-1]["end"] == segment_start.isoformat() + "Z" and \
-                       free_slots[-1].get("availability") == availability and \
-                       free_slots[-1].get("total_count") == total_c:
-                        free_slots[-1]["end"] = segment_end.isoformat() + "Z"
-                    else:
-                        free_slots.append({
-                            "start": segment_start.isoformat() + "Z",
-                            "end": segment_end.isoformat() + "Z",
-                            "type": type_label,
-                            "free_count": max(active_users_in_segment - working_but_busy_count, 0),
-                            "total_count": total_c,
-                            "availability": availability
-                        })
+                else:
+                    # Non-working hours for everyone, and no explicit event. 
+                    # We MUST return this so the UI knows it's 0% available!
+                    type_label = "my_busy" if num_users == 1 else "others_busy"
+                    availability = 0.0
+                    active_users_in_segment = 0
+                    working_but_busy_count = 0
+                
+                total_c = max(active_users_in_segment, 1)
+                
+                if free_slots and free_slots[-1]["type"] == type_label and \
+                   free_slots[-1]["end"] == segment_start.isoformat() + "Z" and \
+                   free_slots[-1].get("availability") == availability and \
+                   free_slots[-1].get("total_count") == total_c:
+                    free_slots[-1]["end"] = segment_end.isoformat() + "Z"
+                else:
+                    free_slots.append({
+                        "start": segment_start.isoformat() + "Z",
+                        "end": segment_end.isoformat() + "Z",
+                        "type": type_label,
+                        "free_count": max(active_users_in_segment - working_but_busy_count, 0),
+                        "total_count": total_c,
+                        "availability": availability
+                    })
             
         current += timedelta(days=1)
         

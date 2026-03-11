@@ -17,11 +17,14 @@ class OutlookCalendarService:
             "client_secret": self.client_secret,
             "grant_type": "refresh_token",
             "refresh_token": self.refresh_token,
-            "scope": "offline_access openid profile https://graph.microsoft.com/Calendars.Read",
+            # Scope is intentionally omitted. Microsoft usually issues the new 
+            # token with all previously granted scopes if omitted.
         }
         async with httpx.AsyncClient(timeout=15) as client:
             resp = await client.post(self.token_url, data=data)
-            resp.raise_for_status()
+            if resp.status_code != 200:
+                print(f"DEBUG: Token refresh failed: {resp.status_code} - {resp.text}")
+                resp.raise_for_status()
             return resp.json().get("access_token")
 
     async def get_busy_slots(self, start_time: datetime, end_time: datetime):
@@ -95,4 +98,4 @@ class OutlookCalendarService:
 
         except Exception as e:
             print(f"DEBUG: Outlook sync failed: {e}")
-            return []
+            raise Exception(f"Outlook sync failed: {str(e)}")
