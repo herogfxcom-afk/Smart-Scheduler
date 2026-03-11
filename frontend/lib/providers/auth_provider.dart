@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import 'dart:js_interop';
-import 'dart:js_interop_unsafe';
+import 'package:url_launcher/url_launcher.dart';
 import '../models/user.dart';
 import '../core/api/api_service.dart';
 import '../core/telegram/telegram_service.dart';
@@ -76,7 +75,7 @@ class AuthProvider extends ChangeNotifier {
       if (_telegramService.isReady) {
         _telegramService.openLink(url);
       } else {
-        globalContext.callMethod('open'.toJS, url.toJS);
+        await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
       }
     } catch (e) {
       _error = e.toString();
