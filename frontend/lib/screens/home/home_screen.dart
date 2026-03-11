@@ -8,6 +8,7 @@ import '../../providers/sync_provider.dart';
 import '../../providers/group_provider.dart';
 import '../../providers/meeting_provider.dart';
 import '../../providers/availability_provider.dart';
+import '../../providers/language_provider.dart';
 import '../../models/meeting.dart';
 
 class HomeScreen extends StatefulWidget {
