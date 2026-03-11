@@ -29,4 +29,34 @@ class SoloProvider with ChangeNotifier {
       notifyListeners();
     }
   }
+
+  Future<void> reserveSlot(DateTime start, DateTime end) async {
+    try {
+      _isLoading = true;
+      _error = null;
+      notifyListeners();
+      await _apiService.addBusySlot(start, end);
+      await fetchSoloSlots(); 
+    } catch (e) {
+      _error = e.toString();
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> freeSlot(DateTime start, DateTime end) async {
+    try {
+      _isLoading = true;
+      _error = null;
+      notifyListeners();
+      await _apiService.deleteBusySlot(start, end);
+      await fetchSoloSlots(); 
+    } catch (e) {
+      _error = e.toString();
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
 }

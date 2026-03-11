@@ -4,6 +4,7 @@ import 'package:smart_scheduler_frontend/providers/solo_provider.dart';
 import 'package:smart_scheduler_frontend/providers/meeting_provider.dart';
 import 'package:smart_scheduler_frontend/providers/language_provider.dart';
 import 'package:smart_scheduler_frontend/screens/scheduler/widgets/heatmap_grid.dart';
+import 'package:smart_scheduler_frontend/models/time_slot.dart';
 
 class SoloDashboard extends StatefulWidget {
   const SoloDashboard({super.key});
@@ -57,8 +58,9 @@ class _SoloDashboardState extends State<SoloDashboard> {
               slots: soloProvider.slots,
               selectedDay: _selectedDay,
               onSlotSelected: (slot) {
-                // For solo view, clicking a slot could show details or allow "blocking" time
-                _showSlotDetails(context, slot);
+                if (slot is TimeSlot) {
+                  _showSlotDetails(context, slot);
+                }
               },
               myMeetings: meetingProvider.meetings,
             ),
@@ -68,8 +70,7 @@ class _SoloDashboardState extends State<SoloDashboard> {
     );
   }
 
-  void _showSlotDetails(BuildContext context, dynamic slot) {
-    if (slot == null) return;
+  void _showSlotDetails(BuildContext context, TimeSlot slot) {
     final soloProvider = context.read<SoloProvider>();
     final isBusy = slot.type == 'my_busy' || slot.type == 'busy';
     
@@ -135,7 +136,11 @@ class _SoloDashboardState extends State<SoloDashboard> {
                       side: BorderSide(color: isBusy ? Colors.redAccent : Colors.greenAccent, width: 1),
                     ),
                     child: isProcessing 
-                      ? const CircularProgressIndicator(strokeWidth: 2)
+                      ? const SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
                       : Text(isBusy ? "Освободить время" : "Занять это время", 
                           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                   ),
