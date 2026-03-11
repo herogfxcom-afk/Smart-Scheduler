@@ -66,12 +66,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         title: Text(langProvider.translate('app_title')),
         actions: [
           IconButton(
-            icon: const Icon(Icons.language),
-            onPressed: () => _showLanguagePicker(context, langProvider),
+            icon: const Icon(Icons.refresh),
+            onPressed: () {
+              authProvider.init();
+              groupProvider.syncWithGroup();
+              meetingProvider.fetchMyMeetings();
+            },
           ),
           IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: () => context.push('/availability'),
+            icon: const Icon(Icons.language),
+            onPressed: () => _showLanguagePicker(context, langProvider),
           ),
           IconButton(
             icon: const Icon(Icons.logout),
