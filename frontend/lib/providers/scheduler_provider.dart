@@ -17,6 +17,7 @@ class SchedulerProvider extends ChangeNotifier {
   List<User> _allUsers = [];
   List<int> _selectedParticipants = [];
   List<dynamic> _myMeetings = [];
+  List<int> _lastTelegramIds = []; // remembers the last participant list used for fetching slots
 
   List<User> get allUsers => _allUsers;
   List<int> get selectedParticipants => _selectedParticipants;
@@ -66,7 +67,7 @@ class SchedulerProvider extends ChangeNotifier {
       notifyListeners();
       await _apiService.deleteMeeting(meetingId);
       await fetchMyMeetings();
-      await fetchCommonSlots(_selectedParticipants, chatId: _currentChatId);
+      await fetchCommonSlots(_lastTelegramIds, chatId: _currentChatId);
       return true;
     } catch (e) {
       print("Delete Meeting Error: $e");
@@ -81,6 +82,10 @@ class SchedulerProvider extends ChangeNotifier {
     _isLoading = true;
     _error = null;
     _currentChatId = chatId;
+    // Remember these IDs so createMeeting/deleteMeeting can refresh correctly
+    if (telegramIds.isNotEmpty) {
+      _lastTelegramIds = List<int>.from(telegramIds);
+    }
     notifyListeners();
 
     try {
@@ -142,7 +147,7 @@ class SchedulerProvider extends ChangeNotifier {
 
       print("DEBUG: Server response: ${response.data}");
       await fetchMyMeetings();
-      await fetchCommonSlots(_selectedParticipants, chatId: _currentChatId);
+      await fetchCommonSlots(_lastTelegramIds, chatId: _currentChatId);
       return true;
     } catch (e) {
       print("DEBUG: createMeeting Error: $e");
@@ -154,7 +159,7 @@ class SchedulerProvider extends ChangeNotifier {
       }
       
       // Rollback optimistic update if failed
-      await fetchCommonSlots(_selectedParticipants, chatId: _currentChatId); 
+      await fetchCommonSlots(_lastTelegramIds, chatId: _currentChatId); 
       return false;
     } finally {
       _isLoading = false;

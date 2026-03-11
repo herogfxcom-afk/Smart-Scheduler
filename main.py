@@ -1114,13 +1114,15 @@ async def create_meeting(data: dict, background_tasks: BackgroundTasks, current_
         print(f"DEBUG: Failed to insert meeting or invites: {e}")
         raise HTTPException(status_code=500, detail="Database insertion failed")
 
-    # Send Telegram Notification to the Group (ASYNCHRONOUSLY IDEALLY, but at least non-blocking for the response)
-    def send_notifications():
+    # Send Telegram Notification to the Group (fully async, concurrent dispatch)
+    async def send_notifications():
         if not tg_chat_id: return
         bot_token = os.getenv("BOT_TOKEN")
         if not bot_token: return
         
         try:
+            import httpx
+
             # Group IDs must be integers for the Telegram API
             clean_chat_id = tg_chat_id
             if str(clean_chat_id).startswith("n"):
@@ -1133,7 +1135,8 @@ async def create_meeting(data: dict, background_tasks: BackgroundTasks, current_
             # Fetch bot username for deep linking
             bot_username = "smartschedulertime_bot"
             try:
-                bot_resp = requests.get(f"https://api.telegram.org/bot{bot_token}/getMe", timeout=2).json()
+                async with httpx.AsyncClient(timeout=5) as client:
+                    bot_resp = (await client.get(f"https://api.telegram.org/bot{bot_token}/getMe")).json()
                 if bot_resp.get("ok"):
                     bot_username = bot_resp.get("result", {}).get("username", bot_username)
             except Exception as e:
@@ -1172,30 +1175,46 @@ async def create_meeting(data: dict, background_tasks: BackgroundTasks, current_
                 }]]
             }
             
-            # Send to Group
-            requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={
-                "chat_id": target_chat,
-                "text": group_text,
-                "parse_mode": "Markdown",
-                "reply_markup": reply_markup
-            }, timeout=3)
-            
-            # Send individual DMs to each invited participant
-            for u in invited_users:
-                if u.telegram_id:
-                    dm_text = (
-                        f"🔔 У вас новое приглашение на встречу!\n\n"
-                        f"👤 От: {current_user.first_name or current_user.username}\n"
-                        f"📍 Тема: {summary}\n"
-                        f"⏰ Время: {time_str}\n\n"
-                        f"Откройте приложение, чтобы подтвердить."
-                    )
-                    requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={
-                        "chat_id": u.telegram_id,
-                        "text": dm_text,
+            async with httpx.AsyncClient(timeout=8) as client:
+                # Build list of coroutines: group message + one DM per participant
+                tg_url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+                
+                tasks = [
+                    client.post(tg_url, json={
+                        "chat_id": target_chat,
+                        "text": group_text,
                         "parse_mode": "Markdown",
                         "reply_markup": reply_markup
-                    }, timeout=2)
+                    })
+                ]
+                
+                dm_text_template = (
+                    f"🔔 У вас новое приглашение на встречу!\n\n"
+                    f"👤 От: {current_user.first_name or current_user.username}\n"
+                    f"📍 Тема: {summary}\n"
+                    f"⏰ Время: {time_str}\n\n"
+                    f"Откройте приложение, чтобы подтвердить."
+                )
+                
+                for u in invited_users:
+                    if u.telegram_id:
+                        tasks.append(
+                            client.post(tg_url, json={
+                                "chat_id": u.telegram_id,
+                                "text": dm_text_template,
+                                "parse_mode": "Markdown",
+                                "reply_markup": reply_markup
+                            })
+                        )
+                
+                # Fire all messages concurrently — group + all DMs at once
+                results_tg = await asyncio.gather(*tasks, return_exceptions=True)
+                
+                for i, r in enumerate(results_tg):
+                    if isinstance(r, Exception):
+                        print(f"DEBUG: Notification task {i} failed: {r}")
+                    else:
+                        print(f"DEBUG: Notification task {i} → HTTP {r.status_code}")
                  
         except Exception as e:
             print(f"DEBUG: Error during Telegram notification: {e}")
