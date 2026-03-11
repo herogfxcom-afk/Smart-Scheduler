@@ -58,19 +58,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final syncProvider = context.watch<SyncProvider>();
     final groupProvider = context.watch<GroupProvider>();
     final meetingProvider = context.watch<MeetingProvider>();
+    final langProvider = context.watch<LanguageProvider>();
     final user = authProvider.user;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Magic Sync Dashboard"),
+        title: Text(langProvider.translate('app_title')),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: () {
-              authProvider.init();
-              groupProvider.syncWithGroup();
-              meetingProvider.fetchMyMeetings();
-            },
+            icon: const Icon(Icons.language),
+            onPressed: () => _showLanguagePicker(context, langProvider),
           ),
           IconButton(
             icon: const Icon(Icons.settings),
@@ -109,11 +106,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                      crossAxisAlignment: CrossAxisAlignment.start,
                      children: [
                        Text(
-                         "Привет, ${user?.firstName ?? 'Пользователь'}!",
+                         "${langProvider.translate('welcome')}, ${user?.firstName ?? 'Пользователь'}!",
                          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
                        ),
                        Text(
-                         user?.username != null ? "@${user!.username}" : "Настройте ваш профиль",
+                         user?.username != null ? "@${user!.username}" : langProvider.translate('setup_profile'),
                          style: const TextStyle(color: Colors.grey),
                        ),
                      ],
@@ -123,24 +120,24 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               const SizedBox(height: 24),
 
               // Meetings & Invites Section
-              _buildMeetingsSection(meetingProvider),
+              _buildMeetingsSection(meetingProvider, langProvider),
               
               const SizedBox(height: 32),
 
               // Active Sync Section
-              const Text(
-                "Групповая синхронизация",
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              Text(
+                langProvider.translate('group_sync'),
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 12),
-              _buildGroupSyncSection(groupProvider, authProvider),
+              _buildGroupSyncSection(groupProvider, authProvider, langProvider),
 
               const SizedBox(height: 32),
 
               // My Calendars Section
-              const Text(
-                "Подключенные календари",
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              Text(
+                langProvider.translate('connected_calendars'),
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 12),
               _buildCalendarsSection(authProvider),
@@ -148,16 +145,53 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               const SizedBox(height: 32),
 
               // Quick Actions / Services
-              const Text(
-                "Сервисы и настройки",
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              Text(
+                langProvider.translate('services_settings'),
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 12),
-              _buildQuickActions(context, authProvider, syncProvider, groupProvider),
+              _buildQuickActions(context, authProvider, syncProvider, groupProvider, langProvider),
               
               const SizedBox(height: 24),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  void _showLanguagePicker(BuildContext context, LanguageProvider lang) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Text("🇷🇺", style: TextStyle(fontSize: 24)),
+              title: const Text("Русский"),
+              onTap: () {
+                lang.setLocale('ru');
+                Navigator.pop(context);
+              },
+            ),
+            ListTile(
+              leading: const Text("🇺🇸", style: TextStyle(fontSize: 24)),
+              title: const Text("English"),
+              onTap: () {
+                lang.setLocale('en');
+                Navigator.pop(context);
+              },
+            ),
+            ListTile(
+              leading: const Text("🇺🇦", style: TextStyle(fontSize: 24)),
+              title: const Text("Українська"),
+              onTap: () {
+                lang.setLocale('uk');
+                Navigator.pop(context);
+              },
+            ),
+          ],
         ),
       ),
     );
@@ -220,7 +254,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 
-  Widget _buildMeetingsSection(MeetingProvider provider) {
+  Widget _buildMeetingsSection(MeetingProvider provider, LanguageProvider lang) {
     if (provider.isLoading) {
       return const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator()));
     }
@@ -232,9 +266,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (pending.isNotEmpty) ...[
-          const Text(
-            "Приглашения",
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blueAccent),
+          Text(
+            lang.translate('invites'),
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blueAccent),
           ),
           const SizedBox(height: 12),
           ListView.builder(
@@ -279,13 +313,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                           const Spacer(),
                           TextButton(
                             onPressed: () => provider.respondToInvite(m.inviteId!, 'declined'),
-                            child: const Text("Отклонить", style: TextStyle(color: Colors.redAccent)),
+                            child: Text(lang.translate('decline'), style: const TextStyle(color: Colors.redAccent)),
                           ),
                           const SizedBox(width: 8),
                           ElevatedButton(
                             onPressed: () => provider.respondToInvite(m.inviteId!, 'accepted'),
                             style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
-                            child: const Text("Принять"),
+                            child: Text(lang.translate('accept')),
                           ),
                         ],
                       ),
@@ -298,18 +332,18 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           const SizedBox(height: 24),
         ],
 
-        const Text(
-          "Ближайшие встречи",
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        Text(
+          lang.translate('upcoming_meetings'),
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 12),
         if (confirmed.isEmpty)
           Card(
             color: Colors.grey.withOpacity(0.05),
-            child: const Padding(
-              padding: EdgeInsets.all(24.0),
+            child: Padding(
+              padding: const EdgeInsets.all(24.0),
               child: Center(
-                child: Text("Запланированных встреч нет", style: TextStyle(color: Colors.grey)),
+                child: Text(lang.translate('no_meetings'), style: const TextStyle(color: Colors.grey)),
               ),
             ),
           )
@@ -327,7 +361,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   title: Text(m.title, style: const TextStyle(fontWeight: FontWeight.bold)),
                   subtitle: Text("${_formatDate(m.start)} • ${_formatTime(m.start)}"),
                   trailing: const Icon(Icons.chevron_right),
-                  onTap: () => _showMeetingDetails(context, m),
+                  onTap: () => _showMeetingDetails(context, m, lang),
                 ),
               );
             },
@@ -336,12 +370,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 
-  Widget _buildGroupSyncSection(GroupProvider groupProvider, AuthProvider authProvider) {
+  Widget _buildGroupSyncSection(GroupProvider groupProvider, AuthProvider authProvider, LanguageProvider lang) {
     if (groupProvider.chatId == null) {
       return Card(
         child: ExpansionTile(
-          title: const Text("Подключить группу", style: TextStyle(color: Colors.blue)),
-          subtitle: const Text("Для командного планирования"),
+          title: Text(lang.translate('connect_group'), style: const TextStyle(color: Colors.blue)),
+          subtitle: Text(lang.translate('team_planning')),
           children: [
             Padding(
               padding: const EdgeInsets.all(16.0),
@@ -349,9 +383,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 children: [
                   TextField(
                     controller: _groupController,
-                    decoration: const InputDecoration(
-                      hintText: "ID группы или ссылка",
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      hintText: lang.translate('group_id_hint'),
+                      border: const OutlineInputBorder(),
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -361,7 +395,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       onPressed: () {
                         if (_groupController.text.isNotEmpty) groupProvider.setChatId(_groupController.text);
                       },
-                      child: const Text("Подключить"),
+                      child: Text(lang.translate('connect_btn')),
                     ),
                   ),
                   if (groupProvider.error != null)
@@ -385,8 +419,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       child: Column(
         children: [
           ListTile(
-            title: Text("Группа: ${groupProvider.chatId}"),
-            subtitle: Text("Участников онлайн: ${groupProvider.participants.length}"),
+            title: Text("ID: ${groupProvider.chatId}"),
+            subtitle: Text("${lang.translate('participants_online')}: ${groupProvider.participants.length}"),
             trailing: IconButton(
               icon: const Icon(Icons.search, color: Colors.blue),
               onPressed: () => context.push('/scheduler'),
@@ -397,16 +431,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               padding: const EdgeInsets.all(12.0),
               child: Column(
                 children: [
-                  const Text(
-                    "Бот не видит участников. Убедитесь, что @smartschedulertime_bot добавлен в группу и имеет права администратора (для супергрупп).",
-                    style: TextStyle(color: Colors.orange, fontSize: 12),
+                  Text(
+                    lang.translate('bot_not_seeing_participants'),
+                    style: const TextStyle(color: Colors.orange, fontSize: 12),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 8),
                   ElevatedButton.icon(
                     onPressed: () => _launchURL("https://t.me/smartschedulertime_bot?startgroup=true"),
                     icon: const Icon(Icons.add_moderator),
-                    label: const Text("Добавить бота в группу"),
+                    label: Text(lang.translate('add_bot')),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.blue.withOpacity(0.1),
                       foregroundColor: Colors.blue,
@@ -453,7 +487,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 
-  Widget _buildQuickActions(BuildContext context, AuthProvider auth, SyncProvider sync, GroupProvider group) {
+  Widget _buildQuickActions(BuildContext context, AuthProvider auth, SyncProvider sync, GroupProvider group, LanguageProvider lang) {
     return Column(
       children: [
         Row(
@@ -461,8 +495,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             Expanded(
               child: _ActionCard(
                 icon: Icons.access_time,
-                title: "Рабочие часы",
-                description: "Настройте доступность",
+                title: lang.translate('work_hours'),
+                description: lang.translate('setup_availability'),
                 color: Colors.orange,
                 onTap: () => context.push('/availability'),
               ),
@@ -471,8 +505,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             Expanded(
               child: _ActionCard(
                 icon: Icons.sync,
-                title: "Синхронизация",
-                description: sync.isSyncing ? "В процессе..." : "Обновить календарь",
+                title: lang.translate('sync'),
+                description: sync.isSyncing ? lang.translate('syncing') : lang.translate('update_calendar'),
                 color: Colors.blue,
                 isLoading: sync.isSyncing,
                 onTap: () => sync.sync(),
@@ -496,7 +530,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     return "${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}";
   }
 
-  void _showMeetingDetails(BuildContext context, Meeting meeting) {
+  void _showMeetingDetails(BuildContext context, Meeting meeting, LanguageProvider lang) {
     showModalBottomSheet(
       context: context,
       builder: (context) => Padding(
@@ -543,7 +577,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               width: double.infinity,
               child: OutlinedButton(
                 onPressed: () => Navigator.pop(context),
-                child: const Text("Закрыть"),
+                child: Text(lang.translate('close')),
               ),
             ),
           ],

@@ -14,6 +14,7 @@ import 'screens/scheduler/scheduler_screen.dart';
 import 'providers/group_provider.dart';
 import 'providers/meeting_provider.dart';
 import 'providers/availability_provider.dart';
+import 'providers/language_provider.dart';
 import 'screens/settings/availability_settings_screen.dart';
 
 void main() {
@@ -29,6 +30,9 @@ void main() {
         Provider.value(value: telegramService),
         Provider.value(value: apiService),
         Provider.value(value: databaseService),
+        ChangeNotifierProvider(
+          create: (_) => LanguageProvider(),
+        ),
         ChangeNotifierProvider(
           create: (_) => AuthProvider(apiService, telegramService)..init(),
         ),
