@@ -1,7 +1,6 @@
 import os
 import httpx
 from datetime import datetime
-import pytz
 
 class OutlookCalendarService:
     def __init__(self, refresh_token: str):
@@ -18,17 +17,18 @@ class OutlookCalendarService:
             "client_secret": self.client_secret,
             "grant_type": "refresh_token",
             "refresh_token": self.refresh_token,
-            "scope": "https://graph.microsoft.com/Calendars.Read offline_access"
+            "scope": "offline_access openid profile https://graph.microsoft.com/Calendars.Read",
         }
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=15) as client:
             resp = await client.post(self.token_url, data=data)
             resp.raise_for_status()
             return resp.json().get("access_token")
 
     async def get_busy_slots(self, start_time: datetime, end_time: datetime):
         """
-        Fetches busy slots from Outlook using the 'getSchedule' API.
-        This is a placeholder that will work once credentials are provided.
+        Fetches busy calendar events from Outlook using the calendarView API.
+        This is the correct approach — getSchedule requires an email address
+        and doesn't work with 'me' as a schedule identifier.
         """
         if not self.client_id or not self.client_secret:
             print("DEBUG: Outlook credentials missing. Skipping sync.")
@@ -36,30 +36,63 @@ class OutlookCalendarService:
 
         try:
             access_token = await self._get_access_token()
-            headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
-            
-            # getSchedule endpoint returns availability for a specific period
-            payload = {
-                "Schedules": ["me"],
-                "StartTime": {"dateTime": start_time.isoformat(), "timeZone": "UTC"},
-                "EndTime": {"dateTime": end_time.isoformat(), "timeZone": "UTC"},
-                "AvailabilityViewInterval": 30 # minutes
+            if not access_token:
+                print("DEBUG: Outlook — failed to get access token.")
+                return []
+
+            headers = {
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json",
+                "Prefer": 'outlook.timezone="UTC"',
             }
-            
-            async with httpx.AsyncClient() as client:
-                resp = await client.post(f"{self.base_url}/me/calendar/getSchedule", headers=headers, json=payload)
+
+            # Format datetimes as ISO 8601 strings required by Microsoft Graph
+            start_str = start_time.strftime("%Y-%m-%dT%H:%M:%S")
+            end_str = end_time.strftime("%Y-%m-%dT%H:%M:%S")
+
+            # /me/calendarView returns all calendar events in the given range.
+            # This is simpler and more reliable than getSchedule.
+            params = {
+                "startDateTime": start_str,
+                "endDateTime": end_str,
+                "$select": "subject,start,end,showAs,isAllDay",
+                "$top": 100,
+            }
+
+            async with httpx.AsyncClient(timeout=15) as client:
+                resp = await client.get(
+                    f"{self.base_url}/me/calendarView",
+                    headers=headers,
+                    params=params,
+                )
                 resp.raise_for_status()
                 data = resp.json()
-                
-                busy_slots = []
-                for schedule in data.get("value", []):
-                    for item in schedule.get("scheduleItems", []):
-                        if item.get("status") != "free":
-                            busy_slots.append({
-                                "start": item["start"]["dateTime"],
-                                "end": item["end"]["dateTime"]
-                            })
-                return busy_slots
+
+            busy_slots = []
+            for event in data.get("value", []):
+                # Skip events marked as free (e.g. tentative/OOF/busy)
+                show_as = event.get("showAs", "busy")
+                if show_as == "free":
+                    continue
+
+                # Skip all-day events to avoid blocking the entire day
+                if event.get("isAllDay", False):
+                    continue
+
+                start_dt = event.get("start", {}).get("dateTime")
+                end_dt = event.get("end", {}).get("dateTime")
+
+                if start_dt and end_dt:
+                    # Ensure UTC 'Z' suffix so the caller can parse correctly
+                    if not start_dt.endswith("Z"):
+                        start_dt += "Z"
+                    if not end_dt.endswith("Z"):
+                        end_dt += "Z"
+                    busy_slots.append({"start": start_dt, "end": end_dt})
+
+            print(f"DEBUG: Outlook sync returned {len(busy_slots)} busy slots.")
+            return busy_slots
+
         except Exception as e:
             print(f"DEBUG: Outlook sync failed: {e}")
             return []

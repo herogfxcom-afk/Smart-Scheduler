@@ -194,11 +194,15 @@ async def is_user_in_chat(chat_id: str, user_telegram_id: int) -> bool:
         return "ok" # Fallback if bot not configured
     
     try:
-        # Safe int conversion for numeric chat_ids
+        # Handle "n" prefix for negative chat IDs (e.g. n5773826244 -> -5773826244)
+        clean_chat_id = chat_id
+        if isinstance(clean_chat_id, str) and clean_chat_id.startswith('n'):
+            clean_chat_id = '-' + clean_chat_id[1:]
+            
         try:
-            target_chat = int(chat_id)
+            target_chat = int(clean_chat_id)
         except:
-            target_chat = str(chat_id)
+            target_chat = str(clean_chat_id)
 
         async with httpx.AsyncClient(timeout=5) as client:
             resp = (await client.get(f"https://api.telegram.org/bot{bot_token}/getChatMember", params={
