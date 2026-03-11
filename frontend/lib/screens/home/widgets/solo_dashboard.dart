@@ -5,6 +5,7 @@ import 'package:smart_scheduler_frontend/providers/meeting_provider.dart';
 import 'package:smart_scheduler_frontend/providers/language_provider.dart';
 import 'package:smart_scheduler_frontend/screens/scheduler/widgets/heatmap_grid.dart';
 import 'package:smart_scheduler_frontend/models/time_slot.dart';
+import 'package:smart_scheduler_frontend/utils/timezone_utils.dart';
 
 class SoloDashboard extends StatefulWidget {
   const SoloDashboard({super.key});
@@ -14,7 +15,7 @@ class SoloDashboard extends StatefulWidget {
 }
 
 class _SoloDashboardState extends State<SoloDashboard> {
-  DateTime _selectedDay = DateTime.now();
+  DateTime _selectedDay = userNow();
 
   @override
   void initState() {
@@ -112,7 +113,7 @@ class _SoloDashboardState extends State<SoloDashboard> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  "${slot.start.hour}:${slot.start.minute.toString().padLeft(2, '0')} - ${slot.end.hour}:${slot.end.minute.toString().padLeft(2, '0')}",
+                  "${toUserLocal(slot.start).hour}:${toUserLocal(slot.start).minute.toString().padLeft(2, '0')} - ${toUserLocal(slot.end).hour}:${toUserLocal(slot.end).minute.toString().padLeft(2, '0')}",
                   style: const TextStyle(color: Colors.white70, fontSize: 16),
                 ),
                 const SizedBox(height: 32),

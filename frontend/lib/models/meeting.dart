@@ -1,3 +1,5 @@
+import '../utils/timezone_utils.dart';
+
 class Meeting {
   final int id;
   final String title;
@@ -27,8 +29,8 @@ class Meeting {
     return Meeting(
       id: json['id'] as int,
       title: json['title'] as String,
-      start: DateTime.parse(json['start'] as String).toLocal(),
-      end: DateTime.parse(json['end'] as String).toLocal(),
+      start: toUserLocal(DateTime.parse(json['start'] as String)),
+      end: toUserLocal(DateTime.parse(json['end'] as String)),
       location: json['location'] as String?,
       groupId: json['group_id'] as int?,
       groupTitle: json['group_title'] as String?,

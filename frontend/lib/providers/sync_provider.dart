@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/timezone_utils.dart';
 import '../core/api/api_service.dart';
 
 import '../models/busy_slot.dart';
@@ -28,7 +29,7 @@ class SyncProvider extends ChangeNotifier {
       _syncedCount = syncRes.data['synced_count'] ?? 0;
       
       // 4. Update UI
-      _lastSyncTime = DateTime.now();
+      _lastSyncTime = userNow();
       _isSyncing = false;
       _error = null;
       notifyListeners();

@@ -118,7 +118,7 @@ class SchedulerProvider extends ChangeNotifier {
       notifyListeners();
 
       // 3. Enhanced Idempotency key (includes end time and current timestamp for uniqueness)
-      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final timestamp = userNow().millisecondsSinceEpoch;
       final idempotencyKey = chatId != null
           ? "group_${chatId}_${slot.start.millisecondsSinceEpoch}_${slot.end.millisecondsSinceEpoch}"
           : "user_${slot.start.millisecondsSinceEpoch}_${timestamp}";

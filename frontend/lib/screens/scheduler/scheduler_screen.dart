@@ -10,7 +10,7 @@ import '../../providers/meeting_provider.dart';
 import '../../core/telegram/telegram_service.dart';
 import '../../models/time_slot.dart';
 import '../../models/meeting.dart';
-import 'widgets/heatmap_grid.dart';
+import '../../utils/timezone_utils.dart';
 import 'widgets/heatmap_grid.dart';
 
 class SchedulerScreen extends StatefulWidget {
@@ -21,7 +21,7 @@ class SchedulerScreen extends StatefulWidget {
 }
 
 class _SchedulerScreenState extends State<SchedulerScreen> {
-  DateTime _selectedDay = DateTime.now();
+  DateTime _selectedDay = userNow();
   bool _isHeatmapView = true;
   final List<String> _ignoredParticipantIds = [];
 
@@ -264,7 +264,7 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 16),
               itemCount: 14, // 2 weeks
               itemBuilder: (context, index) {
-                final day = DateTime.now().add(Duration(days: index));
+                final day = userNow().add(Duration(days: index));
                 final isSelected = DateUtils.isSameDay(day, _selectedDay);
                 
                 return GestureDetector(
@@ -354,8 +354,8 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
     final date = await showDatePicker(
       context: context,
       initialDate: _selectedDay,
-      firstDate: DateTime.now(),
-      lastDate: DateTime.now().add(const Duration(days: 90)),
+      firstDate: userNow(),
+      lastDate: userNow().add(const Duration(days: 90)),
       builder: (ctx, child) => Theme(
         data: ThemeData.dark().copyWith(
           colorScheme: const ColorScheme.dark(primary: Colors.blue),
@@ -405,8 +405,8 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
   }
 
   Widget _buildSlotCard(TimeSlot slot, SchedulerProvider scheduler) {
-    final localStart = slot.start.toLocal();
-    final localEnd = slot.end.toLocal();
+    final localStart = toUserLocal(slot.start);
+    final localEnd = toUserLocal(slot.end);
     final start = "${localStart.hour}:${localStart.minute.toString().padLeft(2, '0')}";
     final end = "${localEnd.hour}:${localEnd.minute.toString().padLeft(2, '0')}";
     
@@ -498,9 +498,9 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
       // Look for a matching meeting in myMeetings
       final matchedMeeting = context.read<MeetingProvider>().meetings.firstWhereOrNull(
         (m) {
-          final mStart = m.start.toLocal();
-          final mEnd = m.end.toLocal();
-          final sStart = slot.start.toLocal();
+          final mStart = toUserLocal(m.start);
+          final mEnd = toUserLocal(m.end);
+          final sStart = toUserLocal(slot.start);
           
           // slot starts exactly at or after meeting start AND slot starts strictly before meeting end
           return (sStart.isAtSameMomentAs(mStart) || sStart.isAfter(mStart)) && sStart.isBefore(mEnd);
@@ -608,8 +608,8 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
   void _showBookingOptions(BuildContext context, 
       SchedulerProvider scheduler, TimeSlot slot) {
     
-    DateTime startTime = slot.start.toLocal();
-    DateTime endTime = slot.end.toLocal();
+    DateTime startTime = toUserLocal(slot.start);
+    DateTime endTime = toUserLocal(slot.end);
     final titleController = TextEditingController();
     final locationController = TextEditingController();
     bool hasPickedTime = false;
@@ -691,9 +691,9 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
                         onTap: () async {
                           final picked = await showDatePicker(
                             context: context,
-                            initialDate: startTime,
-                            firstDate: DateTime.now(),
-                            lastDate: DateTime.now()
+                            initialDate: startTime.isBefore(userNow()) ? userNow() : startTime,
+                            firstDate: userNow(),
+                            lastDate: userNow()
                                 .add(Duration(days: 365)),
                             builder: (ctx, child) => Theme(
                               data: Theme.of(ctx).copyWith(

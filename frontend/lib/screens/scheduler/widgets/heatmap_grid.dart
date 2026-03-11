@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import '../../../models/time_slot.dart';
 import '../../../models/meeting.dart';
 import '../../../providers/scheduler_provider.dart';
+import '../../../utils/timezone_utils.dart';
 
 class HeatmapGrid extends StatelessWidget {
   final List<TimeSlot> slots;
@@ -25,7 +26,7 @@ class HeatmapGrid extends StatelessWidget {
     // 1. Calculate the start date for the grid. 
     // We want it to be "Today" normalized if the selected day is in the current timeframe,
     // to match the top bar's behavior.
-    final now = DateTime.now();
+    final now = userNow();
     final today = DateTime(now.year, now.month, now.day);
     
     // If selectedDay is more than 6 days ahead, we show a second week window
@@ -41,8 +42,8 @@ class HeatmapGrid extends StatelessWidget {
     }
 
     for (final slot in slots) {
-      final localStart = slot.start.toLocal();
-      final localEnd = slot.end.toLocal();
+      final localStart = toUserLocal(slot.start);
+      final localEnd = toUserLocal(slot.end);
       
       final int diff = localStart.difference(gridStart).inDays;
       if (diff >= 0 && diff < 7) {
@@ -75,7 +76,7 @@ class HeatmapGrid extends StatelessWidget {
               const SizedBox(width: 50),
               ...List.generate(7, (index) {
                 final day = gridStart.add(Duration(days: index));
-                final isToday = DateUtils.isSameDay(day, DateTime.now());
+                final isToday = DateUtils.isSameDay(day, userNow());
                 final isSelected = DateUtils.isSameDay(day, selectedDay);
                 
                 return Expanded(
@@ -184,13 +185,13 @@ class HeatmapGrid extends StatelessWidget {
       return const Color(0xFF2E7D32).withOpacity(0.8); // Green: Everyone is free
     } else if (slot.isMyBusy) {
       // Подсчет: если это слот моей встречи из приложения, красим в фиолетовый
-      final sStart = slot.start.toLocal();
-      final sEnd = slot.end.toLocal();
+      final sStart = toUserLocal(slot.start);
+      final sEnd = toUserLocal(slot.end);
       bool isAppMeeting = false;
       
       for (final m in myMeetings) {
-        final mStart = m.start.toLocal();
-        final mEnd = m.end.toLocal();
+        final mStart = toUserLocal(m.start);
+        final mEnd = toUserLocal(m.end);
         
         // Calculate max of starts and min of ends
         final latestStart = sStart.isAfter(mStart) ? sStart : mStart;

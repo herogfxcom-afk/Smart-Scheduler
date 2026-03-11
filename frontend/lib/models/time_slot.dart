@@ -1,4 +1,5 @@
 import 'package:json_annotation/json_annotation.dart';
+import '../utils/timezone_utils.dart';
 
 part 'time_slot.g.dart';
 
@@ -22,7 +23,14 @@ class TimeSlot {
     this.totalCount,
   });
 
-  factory TimeSlot.fromJson(Map<String, dynamic> json) => _$TimeSlotFromJson(json);
+  factory TimeSlot.fromJson(Map<String, dynamic> json) => TimeSlot(
+    start: toUserLocal(DateTime.parse(json['start'] as String)),
+    end: toUserLocal(DateTime.parse(json['end'] as String)),
+    type: json['type'] as String? ?? 'match',
+    availability: (json['availability'] as num?)?.toDouble() ?? 1.0,
+    freeCount: json['free_count'] as int?,
+    totalCount: json['total_count'] as int?,
+  );
   Map<String, dynamic> toJson() => _$TimeSlotToJson(this);
   
   bool get isFullMatch => type == 'match';
