@@ -96,6 +96,7 @@ class SchedulerProvider extends ChangeNotifier {
 
   Future<bool> createMeeting({
     required String title,
+    String? description,
     required TimeSlot slot,
     List<String>? attendeeEmails,
     List<int>? invitedTelegramIds,
@@ -125,6 +126,7 @@ class SchedulerProvider extends ChangeNotifier {
 
       final response = await _apiService.post('/meeting/create', {
         'title': title,
+        if (description != null && description.isNotEmpty) 'description': description,
         'start': slot.start.toUtc().toIso8601String(),
         'end': slot.end.toUtc().toIso8601String(),
         'attendee_emails': attendeeEmails ?? [],

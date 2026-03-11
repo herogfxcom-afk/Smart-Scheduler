@@ -94,6 +94,17 @@ def migrate_db():
         except Exception as e:
             print(f"Migration Error (user_id): {e}")
 
+    # Add description column to group_meetings if missing
+    meeting_cols2 = [col['name'] for col in inspector.get_columns('group_meetings')]
+    if 'description' not in meeting_cols2:
+        try:
+            with engine.connect() as conn:
+                conn.execute(text("ALTER TABLE group_meetings ADD COLUMN description TEXT"))
+                conn.commit()
+                print("Migration: Added description column to group_meetings table.")
+        except Exception as e:
+            print(f"Migration Error (description): {e}")
+
     # --- PHASE 0: MULTI-CALENDAR MIGRATION ---
     
     # 1. Create calendar_connections table if it doesn't exist
@@ -757,8 +768,13 @@ async def get_solo_scheduler(
     """Returns 7-day busy/free segments for the current user's personal heatmap."""
     from calendar_service import find_common_free_slots
     
-    # Range: from today 00:00 to 7 days later
-    start_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    # Range: from user's local midnight (today 00:00 in user TZ) to 7 days later.
+    # We subtract tz_offset from UTC now to find the UTC moment that corresponds
+    # to the user's local midnight, keeping all further math in UTC.
+    utc_now = datetime.utcnow()
+    user_local_now = utc_now + timedelta(hours=tz_offset)
+    user_local_midnight = user_local_now.replace(hour=0, minute=0, second=0, microsecond=0)
+    start_date = user_local_midnight - timedelta(hours=tz_offset)  # back to UTC
     end_date = start_date + timedelta(days=7)
     
     # Get user's working hours in the format expected by find_common_free_slots
@@ -1140,6 +1156,7 @@ async def create_meeting(data: dict, background_tasks: BackgroundTasks, current_
     start_str = data.get("start")
     end_str = data.get("end")
     location = data.get("location", "")
+    description = data.get("description", "")
     idempotency_key = data.get("idempotency_key")
     attendee_emails = data.get("attendee_emails", [])
     meeting_type = data.get("meeting_type", "online")  # 'online' or 'offline'
@@ -1197,7 +1214,7 @@ async def create_meeting(data: dict, background_tasks: BackgroundTasks, current_
             try:
                 refresh_token = decrypt_token(conn.auth_data)
                 g_service = GoogleCalendarService(refresh_token)
-                g_event = await g_service.create_event(summary, start_time, end_time, attendees=attendee_emails, location=location, meeting_type=meeting_type)
+                g_event = await g_service.create_event(summary, start_time, end_time, attendees=attendee_emails, location=location, meeting_type=meeting_type, description=description)
                 # Store the last successful google event ID (or we might need to store multiple in the future)
                 google_event_id = g_event.get('id')
                 results[f"google_{conn.id}"] = "success"
@@ -1219,7 +1236,7 @@ async def create_meeting(data: dict, background_tasks: BackgroundTasks, current_
                 refresh_token = decrypt_token(conn.auth_data)
                 o_service = OutlookCalendarService(refresh_token)
                 o_event = await o_service.create_event(
-                    summary, start_time, end_time, location
+                    summary, start_time, end_time, location, description=description
                 )
                 results[f"outlook_{conn.id}"] = "success"
             except Exception as e:
@@ -1252,6 +1269,7 @@ async def create_meeting(data: dict, background_tasks: BackgroundTasks, current_
             group_id=group_id,
             user_id=current_user.id, # Now tracked
             title=summary,
+            description=description,
             start_time=start_time,
             end_time=end_time,
             location=location,

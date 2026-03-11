@@ -608,9 +608,12 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
   void _showBookingOptions(BuildContext context, 
       SchedulerProvider scheduler, TimeSlot slot) {
     
-    DateTime startTime = toUserLocal(slot.start);
-    DateTime endTime = toUserLocal(slot.end);
+    // slot.start is already in user local time (toUserLocal applied in TimeSlot.fromJson).
+    // Calling toUserLocal() again would cause a double-offset (+2h for UTC+2 users).
+    DateTime startTime = slot.start;
+    DateTime endTime = slot.end;
     final titleController = TextEditingController();
+    final descriptionController = TextEditingController();
     final locationController = TextEditingController();
     bool hasPickedTime = false;
     bool isLoading = false;
@@ -683,6 +686,19 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
                           hintStyle: TextStyle(color: Color(0xFF505050), 
                               fontSize: 20),
                           border: InputBorder.none,
+                        ),
+                      ),
+                      SizedBox(height: 4),
+                      // Поле описания
+                      TextField(
+                        controller: descriptionController,
+                        maxLines: 2,
+                        style: TextStyle(color: Color(0xFFB0B0B0), fontSize: 14),
+                        decoration: InputDecoration(
+                          hintText: 'Описание (необязательно)',
+                          hintStyle: TextStyle(color: Color(0xFF454545), fontSize: 14),
+                          border: InputBorder.none,
+                          contentPadding: EdgeInsets.zero,
                         ),
                       ),
                       SizedBox(height: 8),
@@ -963,6 +979,7 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
 
                         final success = await scheduler.createMeeting(
                           title: titleController.text.trim(),
+                          description: descriptionController.text.trim(),
                           slot: updatedSlot,
                           invitedTelegramIds: invitedIds,
                           chatId: groupProvider.chatId,
@@ -971,8 +988,10 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
                         );
                         setState(() => isLoading = false);
                         if (success && context.mounted) {
-                          // Refresh meeting list to show the new meeting (purple highlights etc)
+                          // Refresh meeting list AND heatmap to show purple highlights
+                          final ids = groupProvider.participants.map((p) => p.telegramId).toList();
                           context.read<MeetingProvider>().fetchMyMeetings();
+                          scheduler.fetchCommonSlots(ids, chatId: groupProvider.chatId);
                           Navigator.pop(context);
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(

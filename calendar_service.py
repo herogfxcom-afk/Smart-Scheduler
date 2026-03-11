@@ -53,10 +53,11 @@ class GoogleCalendarService:
             print(f"DEBUG: Error in get_busy_slots: {str(e)}")
             return []
 
-    async def create_event(self, summary: str, start_time: datetime, end_time: datetime, attendees: list[str] = None, location: str = "", meeting_type: str = "online"):
+    async def create_event(self, summary: str, start_time: datetime, end_time: datetime, attendees: list[str] = None, location: str = "", meeting_type: str = "online", description: str = ""):
         """Creates a calendar event with attendees and optionally a Google Meet link."""
         event = {
             'summary': summary,
+            'description': description,
             'location': location,
             'start': {
                 'dateTime': start_time.isoformat(),

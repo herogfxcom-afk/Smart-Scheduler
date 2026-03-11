@@ -100,7 +100,7 @@ class OutlookCalendarService:
             print(f"DEBUG: Outlook get_busy_slots failed: {e}")
             raise
 
-    async def create_event(self, summary: str, start_time: datetime, end_time: datetime, location: str = ""):
+    async def create_event(self, summary: str, start_time: datetime, end_time: datetime, location: str = "", description: str = ""):
         """Creates a calendar event in Outlook via Microsoft Graph."""
         if not self.client_id or not self.client_secret:
             print("DEBUG: Outlook credentials missing. Skipping create.")
@@ -113,6 +113,10 @@ class OutlookCalendarService:
             }
             body = {
                 "subject": summary,
+                "body": {
+                    "contentType": "Text",
+                    "content": description or ""
+                },
                 "start": {
                     "dateTime": start_time.strftime("%Y-%m-%dT%H:%M:%S"),
                     "timeZone": "UTC"

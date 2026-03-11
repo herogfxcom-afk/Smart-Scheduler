@@ -77,6 +77,7 @@ class GroupMeeting(Base):
     end_time = Column(DateTime, nullable=False)
     title = Column(String(255))
     location = Column(Text, nullable=True)
+    description = Column(Text, nullable=True)
     idempotency_key = Column(String(255), unique=True)
     google_event_id = Column(String(255), nullable=True)
     
