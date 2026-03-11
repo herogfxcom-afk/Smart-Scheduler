@@ -730,7 +730,7 @@ async def get_busy_slots(current_user: User = Depends(get_current_user), db: Ses
 @app.get("/api/scheduler/solo")
 async def get_solo_scheduler(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Returns 7-day busy/free segments for the current user's personal heatmap."""
-    from calendar_service import get_user_busy_slots, find_common_free_slots
+    from calendar_service import find_common_free_slots
     
     # Range: from today 00:00 to 7 days later
     start_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
@@ -751,8 +751,9 @@ async def get_solo_scheduler(current_user: User = Depends(get_current_user), db:
                 "enabled": a.is_enabled
             }
             
-    # Get busy slots from all sources (Google, CalDAV, Internal)
-    busy_slots = get_user_busy_slots(db, current_user.id)
+    # Get busy slots from database (Internal + Synced from Google/etc.)
+    db_slots = db.query(models.BusySlot).filter(models.BusySlot.user_id == current_user.id).all()
+    busy_slots = [(s.start_time, s.end_time) for s in db_slots]
     # We use find_common_free_slots for a single user
     # This will categorize slots as "match" (free) or "my_busy" (busy)
     segments = find_common_free_slots(
