@@ -127,6 +127,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               ),
               const SizedBox(height: 24),
 
+              // Solo Dashboard (My Schedule)
+              const SoloDashboard(),
+
+              const SizedBox(height: 32),
+
               // Meetings & Invites Section
               _buildMeetingsSection(meetingProvider, langProvider),
               
@@ -158,11 +163,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   style: const TextStyle(color: Colors.grey),
                 ),
 
-              const SizedBox(height: 32),
-              
-              // Solo Dashboard
-              const SoloDashboard(),
-              
               const SizedBox(height: 32),
               _buildQuickActions(context, authProvider, syncProvider, groupProvider, langProvider),
               
