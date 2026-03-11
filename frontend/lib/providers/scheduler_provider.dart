@@ -16,13 +16,11 @@ class SchedulerProvider extends ChangeNotifier {
 
   List<User> _allUsers = [];
   List<int> _selectedParticipants = [];
-  List<dynamic> _myMeetings = [];
   List<int> _lastTelegramIds = []; // remembers the last participant list used for fetching slots
 
   List<User> get allUsers => _allUsers;
   List<int> get selectedParticipants => _selectedParticipants;
   List<TimeSlot> get suggestedSlots => _suggestedSlots;
-  List<dynamic> get myMeetings => _myMeetings;
   bool get isLoading => _isLoading;
 
   Future<void> fetchUsers() async {
@@ -45,19 +43,10 @@ class SchedulerProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> fetchMyMeetings() async {
-    try {
-      _myMeetings = await _apiService.getMyMeetings();
-      notifyListeners();
-    } catch (e) {
-      print("Fetch My Meetings Error: $e");
-    }
-  }
 
   Future<void> findBestTime(List<int> telegramIds, {String? chatId}) async {
     if (telegramIds.isEmpty) return;
     _currentChatId = chatId;
-    await fetchMyMeetings();
     await fetchCommonSlots(telegramIds, chatId: chatId);
   }
 

@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:collection/collection.dart';
 import 'package:intl/intl.dart';
 import 'package:go_router/go_router.dart';
 import '../../providers/scheduler_provider.dart';
 import '../../providers/group_provider.dart';
 import '../../providers/sync_provider.dart';
+import '../../providers/meeting_provider.dart';
 import '../../core/telegram/telegram_service.dart';
 import '../../models/time_slot.dart';
+import '../../models/meeting.dart';
 import 'widgets/heatmap_grid.dart';
+import 'widgets/meeting_card.dart';
 
 class SchedulerScreen extends StatefulWidget {
   const SchedulerScreen({super.key});
@@ -50,7 +54,10 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
       final ids = groupProvider.participants.map((p) => p.telegramId).toList();
       print("DEBUG: Participants updated, fetching slots for: $ids in group: ${groupProvider.chatId}");
       // Always fetch myMeetings first so purple coloring is correct after reload
-      scheduler.fetchMyMeetings().then((_) => scheduler.fetchCommonSlots(ids, chatId: groupProvider.chatId));
+      context.read<MeetingProvider>().fetchMyMeetings().then((_) {
+        // avoid running if unmounted
+        if (mounted) scheduler.fetchCommonSlots(ids, chatId: groupProvider.chatId);
+      });
     }
   }
 
@@ -305,7 +312,7 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
                       slots: scheduler.suggestedSlots,
                       selectedDay: _selectedDay,
                       ignoredParticipantIds: _ignoredParticipantIds,
-                      myMeetings: scheduler.myMeetings,
+                      myMeetings: context.watch<MeetingProvider>().meetings,
                       onSlotSelected: (slot) => _handleSlotSelected(context, scheduler, slot),
                     )
                   : _buildListSlots(slotsForDay, scheduler),
@@ -489,20 +496,19 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
       final utcStart = slot.start.toUtc().toIso8601String().replaceAll('.000', '');
       
       // Look for a matching meeting in myMeetings
-      final matchedMeeting = scheduler.myMeetings.firstWhere(
+      final matchedMeeting = context.read<MeetingProvider>().meetings.firstWhereOrNull(
         (m) {
-          final mStart = DateTime.parse(m['start']).toLocal();
-          final mEnd = DateTime.parse(m['end']).toLocal();
+          final mStart = m.start.toLocal();
+          final mEnd = m.end.toLocal();
           final sStart = slot.start.toLocal();
           
           // slot starts exactly at or after meeting start AND slot starts strictly before meeting end
           return (sStart.isAtSameMomentAs(mStart) || sStart.isAfter(mStart)) && sStart.isBefore(mEnd);
         },
-        orElse: () => null,
       );
 
-      if (matchedMeeting != null && matchedMeeting['is_creator'] == true) {
-        _showMeetingDetailsOptions(context, scheduler, matchedMeeting);
+      if (matchedMeeting != null && matchedMeeting.isCreator) {
+        _showMeetingDetailsOptions(context, scheduler, matchedMeeting.toJson());
         return;
       }
 

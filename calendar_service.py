@@ -154,6 +154,16 @@ def find_common_free_slots(
                 requesting_user_busy = False
                 
                 for i in range(num_users):
+                    # Check if user is busy with a calendar event
+                    is_busy_with_event = False
+                    for b_start, b_end in busy_slots_per_user[i]:
+                        if max(segment_start, b_start) < min(segment_end, b_end):
+                            is_busy_with_event = True
+                            break
+                    
+                    if is_busy_with_event and i == requesting_user_index:
+                        requesting_user_busy = True
+
                     u_avail = user_availabilities[i].get(local_weekday, {"start": 7, "end": 23, "enabled": True})
                     
                     # Is this user "at work" during this segment?
@@ -166,21 +176,11 @@ def find_common_free_slots(
                          elif local_segment_end.hour > u_avail["end"]: is_working = False
                          elif local_segment_end.hour == u_avail["end"] and local_segment_end.minute > 0: is_working = False
                     
-                    # Check if user is busy with a calendar event
-                    is_busy = False
-                    for b_start, b_end in busy_slots_per_user[i]:
-                        if max(segment_start, b_start) < min(segment_end, b_end):
-                            is_busy = True
-                            break
-                    
-                    if is_busy and i == requesting_user_index:
-                        requesting_user_busy = True
-
                     if not is_working:
                         continue # User not available for meetings now
                     
                     active_users_in_segment += 1
-                    if is_busy:
+                    if is_busy_with_event:
                         working_but_busy_count += 1
                 
                 # Render logic: Only include slots if someone is working OR if I am busy (to paint it blue).

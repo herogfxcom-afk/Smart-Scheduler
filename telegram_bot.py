@@ -14,8 +14,13 @@ from database import SessionLocal
 import models
 from sqlalchemy.orm import Session
 
-bot = Bot(token=BOT_TOKEN)
-dp = Dispatcher()
+if not BOT_TOKEN:
+    print("WARNING: BOT_TOKEN not set, telegram_bot disabled")
+    bot = None
+    dp = None
+else:
+    bot = Bot(token=BOT_TOKEN)
+    dp = Dispatcher()
 
 @dp.message(CommandStart())
 async def cmd_start(message: types.Message):
@@ -103,6 +108,9 @@ async def inline_handler(inline_query: types.InlineQuery):
     await inline_query.answer([result], is_personal=True, cache_time=0)
 
 async def main():
+    if not bot or not dp:
+        print("Bot is disabled. Exiting.")
+        return
     print("Bot is starting...")
     await dp.start_polling(bot)
 

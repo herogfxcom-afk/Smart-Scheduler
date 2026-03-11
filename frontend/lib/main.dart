@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 
 import 'core/api/api_service.dart';
 import 'core/telegram/telegram_service.dart';
-import 'core/database/database_service.dart';
+
 import 'providers/auth_provider.dart';
 import 'providers/sync_provider.dart';
 import 'providers/scheduler_provider.dart';
@@ -22,14 +22,14 @@ void main() {
   
   telegramService.init();
   final apiService = ApiService(telegramService);
-  final databaseService = DatabaseService();
+
 
   runApp(
     MultiProvider(
       providers: [
         Provider.value(value: telegramService),
         Provider.value(value: apiService),
-        Provider.value(value: databaseService),
+
         ChangeNotifierProvider(
           create: (_) => LanguageProvider(),
         ),
@@ -37,10 +37,13 @@ void main() {
           create: (_) => AuthProvider(apiService, telegramService)..init(),
         ),
         ChangeNotifierProvider(
-          create: (_) => SyncProvider(apiService, databaseService),
+          create: (_) => SyncProvider(apiService),
         ),
         ChangeNotifierProvider(
-          create: (context) => GroupProvider(context.read<ApiService>()),
+          create: (context) => GroupProvider(
+            context.read<ApiService>(),
+            context.read<TelegramService>(),
+          ),
         ),
         ChangeNotifierProvider(
           create: (_) => SchedulerProvider(apiService),

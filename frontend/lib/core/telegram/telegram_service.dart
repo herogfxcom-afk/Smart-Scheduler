@@ -38,16 +38,33 @@ class TelegramService {
             'id': (user.getProperty('id'.toJS) as JSNumber).toDartInt,
             'first_name': (user.getProperty('first_name'.toJS) as JSString).toDart,
             'last_name': user.getProperty('last_name'.toJS).isA<JSString>() 
-                ? (user.getProperty('last_name'.toJS) as JSString).toDart : '',
-            'username': user.getProperty('username'.toJS).isA<JSString>()
-                ? (user.getProperty('username'.toJS) as JSString).toDart : '',
+                ? (user.getProperty('last_name'.toJS) as JSString).toDart : null,
+            'username': user.getProperty('username'.toJS).isA<JSString>() 
+                ? (user.getProperty('username'.toJS) as JSString).toDart : null,
+            'photo_url': user.getProperty('photo_url'.toJS).isA<JSString>() 
+                ? (user.getProperty('photo_url'.toJS) as JSString).toDart : null,
           };
         }
       }
-    } catch (e) {
-      print("Error parsing user: $e");
-    }
-    return {'id': 0, 'first_name': 'User'};
+    } catch (_) {}
+    return {'id': 0, 'first_name': 'Unknown'};
+  }
+
+  String? getChatTitle() {
+    if (!isReady) return null;
+    try {
+      final initDataUnsafe = _webApp!.getProperty('initDataUnsafe'.toJS) as JSObject?;
+      if (initDataUnsafe != null) {
+        final chat = initDataUnsafe.getProperty('chat'.toJS) as JSObject?;
+        if (chat != null) {
+          final titleObj = chat.getProperty('title'.toJS);
+          if (titleObj != null && titleObj.isA<JSString>()) {
+            return (titleObj as JSString).toDart;
+          }
+        }
+      }
+    } catch (_) {}
+    return null;
   }
 
   String get initData {

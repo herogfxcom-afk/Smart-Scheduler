@@ -36,13 +36,14 @@ class GroupParticipant {
 
 class GroupProvider with ChangeNotifier {
   final ApiService _apiService;
+  final TelegramService _telegramService;
   
   String? _chatId;
   List<GroupParticipant> _participants = [];
   bool _isLoading = false;
   String? _error;
 
-  GroupProvider(this._apiService);
+  GroupProvider(this._apiService, this._telegramService);
 
   String? get chatId => _chatId;
   List<GroupParticipant> get participants => _participants;
@@ -91,7 +92,7 @@ class GroupProvider with ChangeNotifier {
       // 1. Tell backend we are in this group (allowing both numeric and alphanumeric tokens)
       await _apiService.post('/groups/sync', {
         'chat_id': _chatId!,
-        'title': 'Telegram Group',
+        'title': _telegramService.getChatTitle(),
       });
       
       // 2. Fetch all participants

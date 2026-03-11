@@ -11,14 +11,13 @@ import pytz
 from auth import get_current_user
 from google_oauth import router as google_auth_router
 from outlook_oauth import router as outlook_auth_router
-from models import User, BusySlot, Meeting
+from models import User, BusySlot
 from database import get_db
 from encryption import decrypt_token, encrypt_token
 from calendar_service import GoogleCalendarService
 from caldav_service import AppleCalendarService
-import json
 import os
-import requests
+import httpx
 import asyncio
 
 app = FastAPI(title="Smart Scheduler API")
@@ -168,23 +167,35 @@ def migrate_db():
     finally:
         db.close()
 
+FRONTEND_URL = os.getenv("FRONTEND_URL", "https://frontend-five-gules-5u3aqd6fzp.vercel.app")
+BOT_USERNAME_FALLBACK = os.getenv("BOT_USERNAME", "smartschedulertime_bot")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        FRONTEND_URL,
+        "https://t.me",
+        "http://localhost:8080",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # ─────────────────── TELEGRAM HELPERS ───────────────────
-from functools import lru_cache
+from cachetools import TTLCache
 
-@lru_cache(maxsize=128)
-def is_user_in_chat(chat_id: str, user_telegram_id: int) -> bool:
-    """Checks if a user is still a member of a Telegram chat."""
+_membership_cache = TTLCache(maxsize=512, ttl=60)
+
+async def is_user_in_chat(chat_id: str, user_telegram_id: int) -> bool:
+    """Checks if a user is still a member of a Telegram chat with 60s caching."""
+    cache_key = f"{chat_id}:{user_telegram_id}"
+    if cache_key in _membership_cache:
+        return _membership_cache[cache_key]
+        
     bot_token = os.getenv("BOT_TOKEN")
     if not bot_token:
-        return True # Fallback if bot not configured
+        return "ok" # Fallback if bot not configured
     
     try:
         # Safe int conversion for numeric chat_ids
@@ -193,26 +204,33 @@ def is_user_in_chat(chat_id: str, user_telegram_id: int) -> bool:
         except:
             target_chat = str(chat_id)
 
-        resp = requests.get(f"https://api.telegram.org/bot{bot_token}/getChatMember", params={
-            "chat_id": target_chat,
-            "user_id": int(user_telegram_id)
-        }, timeout=5).json()
+        async with httpx.AsyncClient(timeout=5) as client:
+            resp = (await client.get(f"https://api.telegram.org/bot{bot_token}/getChatMember", params={
+                "chat_id": target_chat,
+                "user_id": int(user_telegram_id)
+            })).json()
         
         if not resp.get("ok"):
             desc = resp.get('description', '')
             if 'chat not found' in desc.lower():
-                return "bot_not_in_chat"
-            print(f"DEBUG: is_user_in_chat API Error: {desc}")
-            return "error"
-            
-        status = resp.get("result", {}).get("status")
-        # Allowed statuses
-        if status in ["member", "administrator", "creator", "restricted"]:
-            return "ok"
-        return "not_member"
+                result = "bot_not_in_chat"
+            else:
+                print(f"DEBUG: is_user_in_chat API Error: {desc}")
+                result = "error"
+        else:
+            status = resp.get("result", {}).get("status")
+            # Allowed statuses
+            if status in ["member", "administrator", "creator", "restricted"]:
+                result = "ok"
+            else:
+                result = "not_member"
+                
     except Exception as e:
         print(f"TRACE: is_user_in_chat system error: {e}")
-        return True # Soft fail on network error
+        result = "ok" # Soft fail on network error
+        
+    _membership_cache[cache_key] = result
+    return result
 
 # ─────────────────── ROUTERS ───────────────────
 app.include_router(google_auth_router)
@@ -229,22 +247,26 @@ async def _setup_bot_ui():
         print("BOT UI SETUP: Skipping - BOT_TOKEN or API_URL not set")
         return
         
-    # 1. Webhook
     webhook_url = f"{api_url.rstrip('/')}/webhook/bot"
-    resp = requests.post(f"https://api.telegram.org/bot{bot_token}/setWebhook", json={"url": webhook_url, "drop_pending_updates": True}).json()
-    print(f"BOT WEBHOOK: setWebhook → {resp}")
-    
-    # 2. Menu Button (Global)
-    # This button appears next to the bot's input field in all chats.
-    # Note: In groups, it might just open the command list, but in private it opens the app.
-    menu_resp = requests.post(f"https://api.telegram.org/bot{bot_token}/setChatMenuButton", json={
-        "menu_button": {
-            "type": "web_app",
-            "text": "📊 Magic Sync",
-            "web_app": {"url": api_url}
-        }
-    }).json()
-    print(f"BOT MENU: setChatMenuButton → {menu_resp}")
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            # 1. Webhook
+            resp = (await client.post(f"https://api.telegram.org/bot{bot_token}/setWebhook", json={"url": webhook_url, "drop_pending_updates": True})).json()
+            print(f"WEBHOOK SETUP: {resp}")
+            
+            # 2. Main Menu Button Setup
+            menu_resp = (await client.post(f"https://api.telegram.org/bot{bot_token}/setChatMenuButton", json={
+                "menu_button": {
+                    "type": "web_app",
+                    "text": "📅 Open Scheduler",
+                    "web_app": {
+                        "url": f"{FRONTEND_URL}/?startapp=menu_button"
+                    }
+                }
+            })).json()
+            print(f"MENU BUTTON SETUP: {menu_resp}")
+    except Exception as e:
+        print(f"BOT UI SETUP Error: {e}")
 
 @app.on_event("startup")
 async def on_startup_webhook():
@@ -279,33 +301,35 @@ async def telegram_webhook(req: FastAPIRequest, db: Session = Depends(get_db)):
     inline_query = update.get("inline_query")
     if inline_query:
         query_id = inline_query.get("id")
-        # Get bot's username  
-        bot_info_resp = requests.get(f"https://api.telegram.org/bot{bot_token}/getMe").json()
-        bot_username = bot_info_resp.get("result", {}).get("username", "smartschedulertime_bot")
         
-        # We offer a button to launch the app (generic since we don't know the chat_id here)
-        # But we can say "Share Magic Sync in this chat"
-        results = [{
-            "type": "article",
-            "id": "magic_sync",
-            "title": "📊 Поделиться Magic Sync",
-            "description": "Позволяет всем участникам синхронизировать календари.",
-            "input_message_content": {
-                "message_text": "📊 *Magic Sync: Синхронизация календарей*\n\nНажмите кнопку ниже, чтобы начать!",
-                "parse_mode": "Markdown"
-            },
-            "reply_markup": {
-                "inline_keyboard": [[{
-                    "text": "📊 Magic Sync",
-                    "url": f"https://t.me/{bot_username}/app" # Generic launch
-                }]]
-            }
-        }]
-        requests.post(f"https://api.telegram.org/bot{bot_token}/answerInlineQuery", json={
-            "inline_query_id": query_id,
-            "results": results,
-            "cache_time": 300
-        })
+        # Get bot's username  
+        async with httpx.AsyncClient(timeout=5) as client:
+            bot_info_resp = (await client.get(f"https://api.telegram.org/bot{bot_token}/getMe")).json()
+            bot_username = bot_info_resp.get("result", {}).get("username", BOT_USERNAME_FALLBACK)
+            
+            # We offer a button to launch the app (generic since we don't know the chat_id here)
+            results = [{
+                "type": "article",
+                "id": "magic_sync",
+                "title": "📊 Поделиться Magic Sync",
+                "description": "Позволяет всем участникам синхронизировать календари.",
+                "input_message_content": {
+                    "message_text": "📊 *Magic Sync: Синхронизация календарей*\n\nНажмите кнопку ниже, чтобы начать!",
+                    "parse_mode": "Markdown"
+                },
+                "reply_markup": {
+                    "inline_keyboard": [[{
+                        "text": "📊 Magic Sync",
+                        "url": f"https://t.me/{bot_username}/app" # Generic launch
+                    }]]
+                }
+            }]
+            
+            await client.post(f"https://api.telegram.org/bot{bot_token}/answerInlineQuery", json={
+                "inline_query_id": query_id,
+                "results": results,
+                "cache_time": 300
+            })
         return {"ok": True}
 
     if not message:
@@ -325,8 +349,9 @@ async def telegram_webhook(req: FastAPIRequest, db: Session = Depends(get_db)):
 
 async def _send_sync_invite(bot_token: str, chat_id: int, chat_title: str, db: Session):
     """Internal helper to send the Magic Sync button to a chat."""
-    bot_info_resp = requests.get(f"https://api.telegram.org/bot{bot_token}/getMe").json()
-    bot_username = bot_info_resp.get("result", {}).get("username", "smartschedulertime_bot")
+    async with httpx.AsyncClient(timeout=5) as client:
+        bot_info_resp = (await client.get(f"https://api.telegram.org/bot{bot_token}/getMe")).json()
+        bot_username = bot_info_resp.get("result", {}).get("username", BOT_USERNAME_FALLBACK)
     
     # IMPORTANT: StartApp parameter CANNOT contain the minus (-) sign.
     # Replace negative ID prefix with 'n'
@@ -337,7 +362,7 @@ async def _send_sync_invite(bot_token: str, chat_id: int, chat_title: str, db: S
     # The frontend reads window.location.search or Telegram's startParam for group context
     frontend_url = os.getenv("API_URL", "https://smart-scheduler-production-2006.up.railway.app")
     # Use the Vercel frontend URL (separate from Railway backend)
-    web_app_url = f"https://frontend-five-gules-5u3aqd6fzp.vercel.app/?startapp=group_{clean_chat_id}"
+    web_app_url = f"{FRONTEND_URL}/?startapp=group_{clean_chat_id}"
 
     payload = {
         "chat_id": chat_id,
@@ -352,10 +377,12 @@ async def _send_sync_invite(bot_token: str, chat_id: int, chat_title: str, db: S
         })
     }
     
-    result = requests.post(
-        f"https://api.telegram.org/bot{bot_token}/sendMessage",
-        json=payload
-    ).json()
+    async with httpx.AsyncClient(timeout=5) as client:
+        result = (await client.post(
+            f"https://api.telegram.org/bot{bot_token}/sendMessage",
+            json=payload
+        )).json()
+    print(f"INVITE SEND: {result}")
     
     # Save group to DB
     import models as _models
@@ -437,10 +464,9 @@ async def sync_group(data: dict, current_user: User = Depends(get_current_user),
     ).first()
 
     # 1.5 Verify Telegram Membership (Security Fix)
-    membership_status = is_user_in_chat(chat_id, current_user.telegram_id)
-    if membership_status == "bot_not_in_chat":
-        raise HTTPException(status_code=400, detail="Bot is not a member of this group. Please add @smartschedulertime_bot to the chat.")
-    elif membership_status != "ok":
+    membership_status = await is_user_in_chat(chat_id, current_user.telegram_id)
+    if membership_status != "ok":
+        raise HTTPException(status_code=400, detail=f"Inaccessible: user is not in the chat or bot is missing. Status: {membership_status}")
         print(f"DEBUG: Denying group sync - user {current_user.telegram_id} status {membership_status} in chat {chat_id}")
         # If user was a participant, remove them
         if participant:
@@ -478,8 +504,9 @@ async def sync_group(data: dict, current_user: User = Depends(get_current_user),
 
             bot_token = os.getenv("BOT_TOKEN")
             # Fetch bot username for deep linking
-            bot_resp = requests.get(f"https://api.telegram.org/bot{bot_token}/getMe").json()
-            bot_username = bot_resp.get("result", {}).get("username", "smartschedulertime_bot")
+            async with httpx.AsyncClient(timeout=5) as client:
+                bot_resp = (await client.get(f"https://api.telegram.org/bot{bot_token}/getMe")).json()
+                bot_username = bot_resp.get("result", {}).get("username", BOT_USERNAME_FALLBACK)
 
             new_text = (
                 f"📊 **Ищу общее время для встречи: {group.title or 'Group'}**\n\n"
@@ -497,13 +524,14 @@ async def sync_group(data: dict, current_user: User = Depends(get_current_user),
                 }]]
             }
             
-            resp = requests.post(f"https://api.telegram.org/bot{bot_token}/editMessageText", json={
-                "chat_id": target_chat,
-                "message_id": int(group.last_invite_message_id),
-                "text": new_text,
-                "parse_mode": "Markdown",
-                "reply_markup": json.dumps(reply_markup)
-            }, timeout=3).json()
+            async with httpx.AsyncClient(timeout=3) as client:
+                resp = (await client.post(f"https://api.telegram.org/bot{bot_token}/editMessageText", json={
+                    "chat_id": target_chat,
+                    "message_id": int(group.last_invite_message_id),
+                    "text": new_text,
+                    "parse_mode": "Markdown",
+                    "reply_markup": json.dumps(reply_markup)
+                })).json()
             print(f"DEBUG: Message update result: {resp}")
         except Exception as e:
             print(f"TRACE: Failed to update TG message for chat {chat_id}: {e}")
@@ -519,12 +547,10 @@ async def get_group_participants(chat_id: str, current_user: models.User = Depen
         print(f"DEBUG: Group not found in DB for chat_id: {chat_id}")
         return []
     
-    # Security Check: Verify requesting user is in the group
-    membership_status = is_user_in_chat(chat_id, current_user.telegram_id)
-    if membership_status == "bot_not_in_chat":
-        print(f"DEBUG: Bot missing from chat {chat_id}")
-        return [] # Return empty for now, but frontend can infer from sync_group failures
-    elif membership_status != "ok":
+    # 1.5 Verify Membership
+    membership_status = await is_user_in_chat(chat_id, current_user.telegram_id)
+    if membership_status != "ok":
+        raise HTTPException(status_code=403, detail=f"Forbidden: membership status is {membership_status}")
         print(f"DEBUG: Denying /participants fetch - user {current_user.telegram_id} NOT in chat {chat_id}")
         return []
 
@@ -545,7 +571,7 @@ async def get_group_participants(chat_id: str, current_user: models.User = Depen
                 target_chat = str(chat_id)
 
             # Check if user is still in chat
-            status = is_user_in_chat(chat_id, u.telegram_id)
+            status = await is_user_in_chat(chat_id, u.telegram_id)
             
             if status == "ok":
                 active_participants.append({
@@ -598,7 +624,22 @@ async def connect_apple(data: dict, current_user: User = Depends(get_current_use
         raise HTTPException(status_code=400, detail="Email and App-Specific Password required")
         
     auth_payload = json.dumps({"email": apple_email, "password": app_password})
-    current_user.apple_auth_data = encrypt_token(auth_payload)
+    encrypted = encrypt_token(auth_payload)
+    
+    # Check if a connection already exists
+    conn = db.query(models.CalendarConnection).filter_by(
+        user_id=current_user.id, provider='apple'
+    ).first()
+    if conn:
+        conn.auth_data = encrypted
+        conn.email = apple_email
+        conn.is_active = True
+    else:
+        conn = models.CalendarConnection(
+            user_id=current_user.id, provider='apple',
+            email=apple_email, auth_data=encrypted, is_active=True
+        )
+        db.add(conn)
     db.commit()
     
     return {"status": "success"}
@@ -866,13 +907,13 @@ async def get_free_slots(data: dict, current_user: User = Depends(get_current_us
         chat_id = data.get("chat_id")
         if chat_id:
             # 1. Check if requesting user is in chat
-            if not is_user_in_chat(chat_id, current_user.telegram_id):
+            if (await is_user_in_chat(chat_id, current_user.telegram_id)) != "ok":
                  return {"free_slots": [], "debug": "forbidden_not_in_chat"}
             
             # 2. Filter users to only those still in chat
             active_users = []
             for u in users:
-                if is_user_in_chat(chat_id, u.telegram_id):
+                if (await is_user_in_chat(chat_id, u.telegram_id)) == "ok":
                     active_users.append(u)
             users = active_users
             
@@ -957,7 +998,7 @@ async def get_free_slots(data: dict, current_user: User = Depends(get_current_us
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/users")
-async def get_all_users(db: Session = Depends(get_db)):
+async def get_all_users(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Returns a list of all registered users (for group selection)."""
     users = db.query(User).all()
     return [{
@@ -1121,9 +1162,8 @@ async def create_meeting(data: dict, background_tasks: BackgroundTasks, current_
         if not bot_token: return
         
         try:
-            import httpx
-
             # Group IDs must be integers for the Telegram API
+
             clean_chat_id = tg_chat_id
             if str(clean_chat_id).startswith("n"):
                 clean_chat_id = str(clean_chat_id).replace("n", "-")
@@ -1133,7 +1173,7 @@ async def create_meeting(data: dict, background_tasks: BackgroundTasks, current_
                 target_chat = str(clean_chat_id)
             
             # Fetch bot username for deep linking
-            bot_username = "smartschedulertime_bot"
+            bot_username = BOT_USERNAME_FALLBACK
             try:
                 async with httpx.AsyncClient(timeout=5) as client:
                     bot_resp = (await client.get(f"https://api.telegram.org/bot{bot_token}/getMe")).json()
@@ -1225,7 +1265,7 @@ async def create_meeting(data: dict, background_tasks: BackgroundTasks, current_
     return {"status": "success", "results": results, "id": new_meeting.id}
 
 @app.post("/meeting/finalize")
-async def finalize_meeting(data: dict, db: Session = Depends(get_db)):
+async def finalize_meeting(data: dict, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Finalizes meeting by updating/sending Telegram message with the final date/time."""
     chat_id = data.get("chat_id")
     time_str = data.get("time_str")
@@ -1246,7 +1286,7 @@ async def finalize_meeting(data: dict, db: Session = Depends(get_db)):
     reply_markup = {
         "inline_keyboard": [[{
             "text": "📅 Посмотреть детали",
-            "url": f"https://t.me/smartschedulertime_bot/app?startapp=group_{clean_param}&v={timestamp}"
+            "url": f"https://t.me/{BOT_USERNAME_FALLBACK}/app?startapp=group_{clean_param}&v={timestamp}"
         }]]
     }
 
@@ -1267,13 +1307,14 @@ async def finalize_meeting(data: dict, db: Session = Depends(get_db)):
         # 1. Try to EDIT existing message if possible
         if group and group.last_invite_message_id:
             print(f"DEBUG: Attempting to EDIT message {group.last_invite_message_id} in {target_chat}")
-            edit_resp = requests.post(f"https://api.telegram.org/bot{bot_token}/editMessageText", json={
-                "chat_id": target_chat,
-                "message_id": int(group.last_invite_message_id),
-                "text": new_text,
-                "parse_mode": "Markdown",
-                "reply_markup": json.dumps(reply_markup)
-            }, timeout=3).json()
+            async with httpx.AsyncClient(timeout=3) as client:
+                edit_resp = (await client.post(f"https://api.telegram.org/bot{bot_token}/editMessageText", json={
+                    "chat_id": target_chat,
+                    "message_id": int(group.last_invite_message_id),
+                    "text": new_text,
+                    "parse_mode": "Markdown",
+                    "reply_markup": json.dumps(reply_markup)
+                })).json()
             
             if edit_resp.get("ok"):
                 print("DEBUG: Successfully edited existing invitation message.")
@@ -1282,12 +1323,13 @@ async def finalize_meeting(data: dict, db: Session = Depends(get_db)):
                 print(f"DEBUG: Edit failed ({edit_resp.get('description')}), falling back to SENDING NEW message.")
 
         # 2. Fallback: Send a NEW message to the group
-        send_resp = requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={
-            "chat_id": target_chat,
-            "text": new_text,
-            "parse_mode": "Markdown",
-            "reply_markup": json.dumps(reply_markup)
-        }, timeout=3).json()
+        async with httpx.AsyncClient(timeout=3) as client:
+            send_resp = (await client.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={
+                "chat_id": target_chat,
+                "text": new_text,
+                "parse_mode": "Markdown",
+                "reply_markup": json.dumps(reply_markup)
+            })).json()
         
         return {"status": "success", "action": "sent_new", "tg_response": send_resp}
 

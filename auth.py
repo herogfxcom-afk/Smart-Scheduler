@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-def validate_init_data(init_data: str) -> dict:
+def validate_telegram_init_data(init_data: str) -> dict:
     """Verifies Telegram Web App initData using HMAC-SHA256."""
     current_bot_token = os.getenv("BOT_TOKEN")
     if not current_bot_token:
@@ -21,7 +21,7 @@ def validate_init_data(init_data: str) -> dict:
     try:
         vals = {k: v[0] for k, v in parse_qs(init_data).items()}
         if "hash" not in vals:
-            raise HTTPException(status_code=401, detail="Missing hash")
+            raise HTTPException(status_code=403, detail="Missing hash")
         
         auth_hash = vals.pop("hash")
         # Data-check-string: alphabetical order
@@ -34,14 +34,14 @@ def validate_init_data(init_data: str) -> dict:
         
         if h != auth_hash:
             print(f"AUTH ERROR: Hash mismatch. Expected {auth_hash}, got {h}")
-            raise HTTPException(status_code=401, detail="Invalid hash")
+            raise HTTPException(status_code=403, detail="Invalid hash")
             
         # Prevent replay attacks: check auth_date (timestamp)
         import time
         auth_date = int(vals.get("auth_date", 0))
         if time.time() - auth_date > 86400: # 24 hours
             print("AUTH ERROR: InitData expired")
-            raise HTTPException(status_code=401, detail="InitData expired")
+            raise HTTPException(status_code=403, detail="InitData expired")
         
         user_data = json.loads(vals.get("user", "{}"))
         return user_data
@@ -49,19 +49,19 @@ def validate_init_data(init_data: str) -> dict:
         raise
     except Exception as e:
         print(f"AUTH ERROR EXCEPTION: {str(e)}")
-        raise HTTPException(status_code=401, detail=f"Auth error: {str(e)}")
+        raise HTTPException(status_code=403, detail=f"Auth error: {str(e)}")
 
 from typing import Optional
 
 def get_current_user(init_data: Optional[str] = Header(None), db: Session = Depends(get_db)):
     """Dependency to get or create user based on Telegram initData."""
-    print(f"===> DEBUG AUTH: Received init_data header: {init_data}")
+    print(f"AUTH: Request received, init_data present: {bool(init_data)}")
     
     if not init_data:
         print("===> DEBUG AUTH: Fail! init-data header is entirely missing.")
-        raise HTTPException(status_code=401, detail="init-data header missing")
+        raise HTTPException(status_code=403, detail="init-data header missing")
         
-    user_info = validate_init_data(init_data)
+    user_info = validate_telegram_init_data(init_data)
     telegram_id = user_info.get("id")
     
     if not telegram_id:

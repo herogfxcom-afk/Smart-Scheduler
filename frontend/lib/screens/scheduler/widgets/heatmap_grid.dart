@@ -8,7 +8,7 @@ class HeatmapGrid extends StatelessWidget {
   final DateTime selectedDay;
   final Function(TimeSlot) onSlotSelected;
   final List<String> ignoredParticipantIds;
-  final List<dynamic> myMeetings;
+  final List<Meeting> myMeetings;
 
   const HeatmapGrid({
     super.key,
@@ -177,12 +177,18 @@ class HeatmapGrid extends StatelessWidget {
     } else if (slot.isMyBusy) {
       // Подсчет: если это слот моей встречи из приложения, красим в фиолетовый
       final sStart = slot.start.toLocal();
+      final sEnd = slot.end.toLocal();
       bool isAppMeeting = false;
       
       for (final m in myMeetings) {
-        final mStart = DateTime.parse(m['start']).toLocal();
-        final mEnd = DateTime.parse(m['end']).toLocal();
-        if ((sStart.isAtSameMomentAs(mStart) || sStart.isAfter(mStart)) && sStart.isBefore(mEnd)) {
+        final mStart = m.start.toLocal();
+        final mEnd = m.end.toLocal();
+        
+        // Calculate max of starts and min of ends
+        final latestStart = sStart.isAfter(mStart) ? sStart : mStart;
+        final earliestEnd = sEnd.isBefore(mEnd) ? sEnd : mEnd;
+
+        if (latestStart.isBefore(earliestEnd)) {
           isAppMeeting = true;
           break;
         }

@@ -17,7 +17,7 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     busy_slots = relationship("BusySlot", back_populates="user")
-    created_meetings = relationship("Meeting", back_populates="creator")
+    created_meetings = relationship("GroupMeeting", back_populates="creator")
     groups = relationship("GroupParticipant", back_populates="user")
     availability = relationship("UserAvailability", back_populates="user")
     connections = relationship("CalendarConnection", back_populates="user", cascade="all, delete-orphan")
@@ -81,20 +81,9 @@ class GroupMeeting(Base):
     google_event_id = Column(String(255), nullable=True)
     
     group = relationship("Group", back_populates="meetings")
-    creator = relationship("User")
-
-class Meeting(Base):
-    __tablename__ = "meetings"
-
-    id = Column(Integer, primary_key=True, index=True)
-    group_id = Column(BigInteger, index=True)
-    title = Column(String(255))
-    start_time = Column(DateTime, nullable=False)
-    end_time = Column(DateTime, nullable=False)
-    location = Column(Text, nullable=True)
-    created_by = Column(Integer, ForeignKey("users.id"))
-
     creator = relationship("User", back_populates="created_meetings")
+    invites = relationship("MeetingInvite", back_populates="meeting", cascade="all, delete-orphan")
+
 
 class BusySlot(Base):
     __tablename__ = "busy_slots"
@@ -137,5 +126,5 @@ class MeetingInvite(Base):
     google_event_id = Column(String(255), nullable=True) # Each participant might have their own event
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
-    meeting = relationship("GroupMeeting")
+    meeting = relationship("GroupMeeting", back_populates="invites")
     user = relationship("User")

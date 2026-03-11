@@ -22,3 +22,8 @@ ntuser.dat*
 .packages
 .pub-cache/
 .pub/
+
+# Databases
+*.db
+*.sqlite
+*.sqlite3

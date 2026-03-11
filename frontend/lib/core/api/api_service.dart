@@ -7,10 +7,15 @@ class ApiService {
 
   ApiService(this._telegramService)
       : _dio = Dio(BaseOptions(
-          baseUrl: const String.fromEnvironment('API_URL', defaultValue: 'https://smart-scheduler-production-2006.up.railway.app'),
+          baseUrl: const String.fromEnvironment('API_URL', defaultValue: ''),
           connectTimeout: const Duration(seconds: 30),
           receiveTimeout: const Duration(seconds: 30),
         )) {
+    if (_dio.options.baseUrl.isEmpty) {
+      assert(false, 'API_URL is missing. Remember to build with --dart-define=API_URL=...');
+      _dio.options.baseUrl = 'http://10.0.2.2:8000'; // Default Android emulator backend
+    }
+
     _dio.interceptors.add(InterceptorsWrapper(
       onRequest: (options, handler) {
         final initData = _telegramService.initData;
