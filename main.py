@@ -1003,6 +1003,25 @@ async def delete_meeting(meeting_id: int, current_user: User = Depends(get_curre
         except Exception as e:
             print(f"DEBUG: Failed to delete Google Event {meeting.google_event_id}: {e}")
             
+    # Delete from Outlook Calendar if event exists
+    if meeting.outlook_event_id:
+        try:
+            # Find the user's outlook connection
+            outlook_conn = None
+            for conn in current_user.connections:
+                if conn.provider == 'outlook' and conn.is_active:
+                    outlook_conn = conn
+                    break
+            
+            if outlook_conn:
+                from outlook_service import OutlookCalendarService
+                from encryption import decrypt_token
+                refresh_token = decrypt_token(outlook_conn.auth_data)
+                o_service = OutlookCalendarService(refresh_token)
+                await o_service.delete_event(meeting.outlook_event_id)
+        except Exception as e:
+            print(f"DEBUG: Failed to delete Outlook Event {meeting.outlook_event_id}: {e}")
+
     db.delete(meeting)
     db.commit()
     return {"status": "success"}
@@ -1206,6 +1225,7 @@ async def create_meeting(data: dict, background_tasks: BackgroundTasks, current_
 
     results = {}
     google_event_id = None
+    outlook_event_id = None
     
     for conn in current_user.connections:
         if not conn.is_active: continue
@@ -1239,6 +1259,7 @@ async def create_meeting(data: dict, background_tasks: BackgroundTasks, current_
                 o_event = await o_service.create_event(
                     summary, start_time, end_time, location, description=description
                 )
+                outlook_event_id = o_event.get('id')
                 results[f"outlook_{conn.id}"] = "success"
             except Exception as e:
                 results[f"outlook_{conn.id}"] = f"error: {str(e)}"
@@ -1275,7 +1296,8 @@ async def create_meeting(data: dict, background_tasks: BackgroundTasks, current_
             end_time=end_time,
             location=location,
             idempotency_key=idempotency_key,
-            google_event_id=google_event_id
+            google_event_id=google_event_id,
+            outlook_event_id=outlook_event_id
         )
         db.add(new_meeting)
         db.flush() # Get new_meeting.id without full commit

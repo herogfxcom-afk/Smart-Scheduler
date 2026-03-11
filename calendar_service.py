@@ -168,14 +168,22 @@ def find_common_free_slots(
                     u_avail = user_availabilities[i].get(local_weekday, {"start": 9, "end": 18, "enabled": True})
                     
                     # Is this user "at work" during this segment?
-                    is_working = u_avail["enabled"] and \
-                                 local_segment_start.hour >= u_avail["start"] and \
-                                 local_segment_end.hour <= u_avail["end"]
-                    
-                    if u_avail["enabled"]:
-                         if local_segment_start.hour < u_avail["start"]: is_working = False
-                         elif local_segment_end.hour > u_avail["end"]: is_working = False
-                         elif local_segment_end.hour == u_avail["end"] and local_segment_end.minute > 0: is_working = False
+                    is_working = u_avail["enabled"]
+                    if is_working:
+                        h_start = local_segment_start.hour
+                        h_end = local_segment_end.hour
+                        m_end = local_segment_end.minute
+                        
+                        # Correctly handle 00:00 next day as 24:00 today
+                        if h_end == 0 and m_end == 0 and local_segment_start.date() != local_segment_end.date():
+                            h_end = 24
+
+                        if h_start < u_avail["start"]:
+                            is_working = False
+                        elif h_end > u_avail["end"]:
+                            is_working = False
+                        elif h_end == u_avail["end"] and m_end > 0:
+                            is_working = False
                     
                     if not is_working:
                         continue # User not available for meetings now

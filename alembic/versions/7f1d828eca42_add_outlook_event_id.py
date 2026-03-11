@@ -1,0 +1,30 @@
+"""add_outlook_event_id
+
+Revision ID: 7f1d828eca42
+Revises: db7ffc2db40e
+Create Date: 2026-03-12 01:15:06.382970
+
+"""
+from typing import Sequence, Union
+
+from alembic import op
+import sqlalchemy as sa
+
+
+# revision identifiers, used by Alembic.
+revision: str = '7f1d828eca42'
+down_revision: Union[str, Sequence[str], None] = 'db7ffc2db40e'
+branch_labels: Union[str, Sequence[str], None] = None
+def upgrade() -> None:
+    """Upgrade schema."""
+    import sqlalchemy.exc
+    try:
+        with op.batch_alter_table('group_meetings', schema=None) as batch_op:
+            batch_op.add_column(sa.Column('outlook_event_id', sa.String(length=255), nullable=True))
+    except sqlalchemy.exc.OperationalError as e:
+        print(f"Ignoring OperationalError (likely duplicate column): {e}")
+
+def downgrade() -> None:
+    """Downgrade schema."""
+    with op.batch_alter_table('group_meetings', schema=None) as batch_op:
+        batch_op.drop_column('outlook_event_id')

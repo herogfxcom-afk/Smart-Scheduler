@@ -80,6 +80,7 @@ class GroupMeeting(Base):
     description = Column(Text, nullable=True)
     idempotency_key = Column(String(255), unique=True)
     google_event_id = Column(String(255), nullable=True)
+    outlook_event_id = Column(String(255), nullable=True)
     
     group = relationship("Group", back_populates="meetings")
     creator = relationship("User", back_populates="created_meetings")

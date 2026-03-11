@@ -143,3 +143,29 @@ class OutlookCalendarService:
         except Exception as e:
             print(f"DEBUG OUTLOOK: create_event failed: {e}")
             raise
+
+    async def delete_event(self, event_id: str):
+        """Deletes a calendar event in Outlook via Microsoft Graph."""
+        if not self.client_id or not self.client_secret:
+            print("DEBUG: Outlook credentials missing. Skipping delete.")
+            return False
+            
+        try:
+            access_token = await self._get_access_token()
+            headers = {
+                "Authorization": f"Bearer {access_token}"
+            }
+            async with httpx.AsyncClient(timeout=15) as client:
+                resp = await client.delete(
+                    f"{self.base_url}/me/events/{event_id}",
+                    headers=headers
+                )
+                if resp.status_code != 204:
+                    print(f"DEBUG OUTLOOK ERROR: {resp.status_code} - {resp.text}")
+                    raise Exception(f"Outlook delete event error: {resp.text}")
+                
+                print(f"DEBUG OUTLOOK: Deleted event id={event_id}")
+                return True
+        except Exception as e:
+            print(f"DEBUG OUTLOOK: delete_event failed: {e}")
+            raise
