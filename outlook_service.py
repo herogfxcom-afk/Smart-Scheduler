@@ -62,40 +62,53 @@ class OutlookCalendarService:
                 "$top": 100,
             }
 
+            print(f"DEBUG OUTLOOK: Fetching {start_str} to {end_str}")
+
             async with httpx.AsyncClient(timeout=15) as client:
                 resp = await client.get(
                     f"{self.base_url}/me/calendarView",
                     headers=headers,
                     params=params,
                 )
+                if resp.status_code != 200:
+                     print(f"DEBUG OUTLOOK ERROR: {resp.status_code} - {resp.text}")
                 resp.raise_for_status()
                 data = resp.json()
 
             busy_slots = []
-            for event in data.get("value", []):
+            events = data.get("value", [])
+            print(f"DEBUG OUTLOOK: Got {len(events)} events from API")
+            
+            for event in events:
+                subject = event.get("subject", "No Subject")
                 # Skip events marked as free (e.g. tentative/OOF/busy)
                 show_as = event.get("showAs", "busy")
                 if show_as == "free":
+                    print(f"DEBUG OUTLOOK: Skipping {subject} because showAs=free")
                     continue
 
                 # Skip all-day events to avoid blocking the entire day
                 if event.get("isAllDay", False):
+                    print(f"DEBUG OUTLOOK: Skipping {subject} because isAllDay=True")
                     continue
 
                 start_dt = event.get("start", {}).get("dateTime")
                 end_dt = event.get("end", {}).get("dateTime")
 
                 if start_dt and end_dt:
+                    print(f"DEBUG OUTLOOK: Keeping {subject} | {start_dt} -> {end_dt}")
                     # Ensure UTC 'Z' suffix so the caller can parse correctly
                     if not start_dt.endswith("Z"):
                         start_dt += "Z"
                     if not end_dt.endswith("Z"):
                         end_dt += "Z"
                     busy_slots.append({"start": start_dt, "end": end_dt})
+                else:
+                    print(f"DEBUG OUTLOOK: Missing dateTime for {subject}")
 
-            print(f"DEBUG: Outlook sync returned {len(busy_slots)} busy slots.")
+            print(f"DEBUG OUTLOOK: Sync returned {len(busy_slots)} busy slots after filtering.")
             return busy_slots
 
         except Exception as e:
-            print(f"DEBUG: Outlook sync failed: {e}")
+            print(f"DEBUG OUTLOOK: Exception -> {e}")
             raise Exception(f"Outlook sync failed: {str(e)}")
