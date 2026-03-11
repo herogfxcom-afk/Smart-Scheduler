@@ -767,6 +767,58 @@ async def get_solo_scheduler(current_user: User = Depends(get_current_user), db:
     
     return segments
 
+@app.post("/api/busy-slots")
+async def add_busy_slot(data: dict, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Creates a personal busy slot manualy from the app."""
+    try:
+        start_time = datetime.fromisoformat(data["start"].replace("Z", "+00:00")).replace(tzinfo=None)
+        end_time = datetime.fromisoformat(data["end"].replace("Z", "+00:00")).replace(tzinfo=None)
+        
+        # Check if identical slot already exists
+        exists = db.query(models.BusySlot).filter_by(
+            user_id=current_user.id,
+            start_time=start_time,
+            end_time=end_time
+        ).first()
+        
+        if not exists:
+            new_slot = models.BusySlot(
+                user_id=current_user.id,
+                connection_id=None, # Manual entry
+                start_time=start_time,
+                end_time=end_time
+            )
+            db.add(new_slot)
+            db.commit()
+            print(f"DEBUG: Created manual busy slot for user {current_user.id}")
+            
+        return {"status": "success"}
+    except Exception as e:
+        print(f"ERROR adding busy slot: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to add slot: {str(e)}")
+
+@app.delete("/api/busy-slots")
+async def delete_busy_slot(start: str, end: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Deletes personal busy slots within a time range."""
+    try:
+        start_time = datetime.fromisoformat(start.replace("Z", "+00:00")).replace(tzinfo=None)
+        end_time = datetime.fromisoformat(end.replace("Z", "+00:00")).replace(tzinfo=None)
+        
+        # Delete only manual slots (connection_id is NULL) or any slot in this range?
+        # User wants to "free" time, so we delete slots that START precisely here
+        deleted = db.query(models.BusySlot).filter(
+            models.BusySlot.user_id == current_user.id,
+            models.BusySlot.start_time == start_time,
+            models.BusySlot.end_time == end_time
+        ).delete()
+        
+        db.commit()
+        print(f"DEBUG: Deleted {deleted} busy slots for user {current_user.id}")
+        return {"status": "success", "count": deleted}
+    except Exception as e:
+        print(f"ERROR deleting busy slot: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete slot: {str(e)}")
+
 # ─────────────────── AVAILABILITY ENDPOINTS ───────────────────
 @app.get("/api/availability")
 async def get_availability(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):

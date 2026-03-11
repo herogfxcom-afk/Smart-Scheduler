@@ -12,7 +12,6 @@ class ApiService {
           receiveTimeout: const Duration(seconds: 30),
         )) {
     if (_dio.options.baseUrl.isEmpty) {
-      assert(false, 'API_URL is missing. Remember to build with --dart-define=API_URL=...');
       _dio.options.baseUrl = 'https://smart-scheduler-production-2006.up.railway.app'; // Default to production
     }
 
@@ -37,6 +36,14 @@ class ApiService {
 
   Future<Response> post(String path, dynamic data) async {
     return await _dio.post(path, data: data);
+  }
+
+  Future<Response> patch(String path, dynamic data) async {
+    return await _dio.patch(path, data: data);
+  }
+
+  Future<Response> delete(String path, {Map<String, dynamic>? queryParameters}) async {
+    return await _dio.delete(path, queryParameters: queryParameters);
   }
 
   Future<String> getGoogleAuthUrl() async {
@@ -90,4 +97,22 @@ class ApiService {
     final response = await _dio.get('/api/scheduler/solo');
     return response.data as List<dynamic>;
   }
+
+  Future<void> addBusySlot(DateTime start, DateTime end) async {
+    await _dio.post('/api/busy-slots', data: {
+      'start': start.toUtc().toIsoformat(),
+      'end': end.toUtc().toIsoformat(),
+    });
+  }
+
+  Future<void> deleteBusySlot(DateTime start, DateTime end) async {
+    await _dio.delete('/api/busy-slots', queryParameters: {
+      'start': start.toUtc().toIsoformat(),
+      'end': end.toUtc().toIsoformat(),
+    });
+  }
+}
+
+extension DateTimeExtension on DateTime {
+  String toIsoformat() => toIso8601String().split('.')[0] + 'Z';
 }
