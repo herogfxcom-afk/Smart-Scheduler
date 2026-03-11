@@ -22,11 +22,17 @@ class HeatmapGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 1. Calculate the start of the current week (Monday) relative to selectedDay
-    final int daysToMinus = selectedDay.weekday - 1;
-    // Normalize to Monday 00:00:00 to prevent diff calculation errors
-    final DateTime weekStart = DateTime(selectedDay.year, selectedDay.month, selectedDay.day)
-        .subtract(Duration(days: daysToMinus));
+    // 1. Calculate the start date for the grid. 
+    // We want it to be "Today" normalized if the selected day is in the current timeframe,
+    // to match the top bar's behavior.
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    
+    // If selectedDay is more than 6 days ahead, we show a second week window
+    final int dayOffset = selectedDay.difference(today).inDays;
+    final DateTime gridStart = dayOffset >= 7 
+        ? today.add(const Duration(days: 7)) 
+        : today;
 
     // 2. Group slots by hour and offset date
     final Map<int, Map<int, TimeSlot?>> gridData = {};
@@ -38,7 +44,7 @@ class HeatmapGrid extends StatelessWidget {
       final localStart = slot.start.toLocal();
       final localEnd = slot.end.toLocal();
       
-      final int diff = localStart.difference(weekStart).inDays;
+      final int diff = localStart.difference(gridStart).inDays;
       if (diff >= 0 && diff < 7) {
         // Fill all hours this slot covers
         int startHour = localStart.hour;
@@ -68,7 +74,7 @@ class HeatmapGrid extends StatelessWidget {
             children: [
               const SizedBox(width: 50),
               ...List.generate(7, (index) {
-                final day = weekStart.add(Duration(days: index));
+                final day = gridStart.add(Duration(days: index));
                 final isToday = DateUtils.isSameDay(day, DateTime.now());
                 final isSelected = DateUtils.isSameDay(day, selectedDay);
                 
@@ -126,7 +132,8 @@ class HeatmapGrid extends StatelessWidget {
                     // Days Grid
                     ...List.generate(7, (dayIndex) {
                       final slot = gridData[hour]?[dayIndex];
-                      final isSelectedColumn = dayIndex == selectedDay.weekday - 1;
+                      final day = gridStart.add(Duration(days: dayIndex));
+                      final isSelectedColumn = DateUtils.isSameDay(day, selectedDay);
                       
                       return Expanded(
                         child: GestureDetector(
