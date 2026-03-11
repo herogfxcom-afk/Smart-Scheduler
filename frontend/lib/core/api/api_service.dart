@@ -84,4 +84,10 @@ class ApiService {
   Future<void> updateAvailability(List<Map<String, dynamic>> data) async {
     await _dio.post('/api/availability', data: data);
   }
+
+  // Solo Scheduler
+  Future<List<dynamic>> getSoloSlots() async {
+    final response = await _dio.get('/api/scheduler/solo');
+    return response.data as List<dynamic>;
+  }
 }

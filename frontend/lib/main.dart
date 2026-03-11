@@ -15,6 +15,7 @@ import 'providers/group_provider.dart';
 import 'providers/meeting_provider.dart';
 import 'providers/availability_provider.dart';
 import 'providers/language_provider.dart';
+import 'providers/solo_provider.dart'; // Added
 import 'screens/settings/availability_settings_screen.dart';
 
 void main() {
@@ -53,6 +54,9 @@ void main() {
         ),
         ChangeNotifierProvider(
           create: (_) => AvailabilityProvider(apiService),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => SoloProvider(apiService), // Added
         ),
       ],
       child: const SmartSchedulerApp(),

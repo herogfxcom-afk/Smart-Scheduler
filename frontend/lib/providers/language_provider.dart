@@ -42,6 +42,7 @@ class LanguageProvider with ChangeNotifier {
       'decline': 'Decline',
       'close': 'Close',
       'setup_availability': 'Setup availability',
+      'my_smart_schedule': 'My Smart Schedule',
     },
     'ru': {
       'app_title': 'Magic Sync Dashboard',
@@ -67,6 +68,7 @@ class LanguageProvider with ChangeNotifier {
       'decline': 'Отклонить',
       'close': 'Закрыть',
       'setup_availability': 'Настроить график',
+      'my_smart_schedule': 'Мой умный график',
     },
     'uk': {
       'app_title': 'Magic Sync Dashboard',
@@ -92,6 +94,7 @@ class LanguageProvider with ChangeNotifier {
       'decline': 'Відхилити',
       'close': 'Закрити',
       'setup_availability': 'Налаштувати графік',
+      'my_smart_schedule': 'Мій розумний графік',
     },
   };
 

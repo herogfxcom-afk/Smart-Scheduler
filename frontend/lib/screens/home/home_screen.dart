@@ -9,7 +9,9 @@ import '../../providers/group_provider.dart';
 import '../../providers/meeting_provider.dart';
 import '../../providers/availability_provider.dart';
 import '../../providers/language_provider.dart';
+import '../../providers/solo_provider.dart'; // Added
 import '../../models/meeting.dart';
+import 'widgets/solo_dashboard.dart'; // Added
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -89,6 +91,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           await authProvider.init();
           await groupProvider.syncWithGroup();
           await meetingProvider.fetchMyMeetings();
+          await context.read<SoloProvider>().fetchSoloSlots(); // Added
         },
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
@@ -149,12 +152,18 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               
               const SizedBox(height: 32),
 
-              // Quick Actions / Services
-              Text(
-                langProvider.translate('services_settings'),
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 12),
+              if (meetingProvider.meetings.isEmpty && !meetingProvider.isLoading)
+                Text(
+                  langProvider.translate('no_meetings'),
+                  style: const TextStyle(color: Colors.grey),
+                ),
+
+              const SizedBox(height: 32),
+              
+              // Solo Dashboard
+              const SoloDashboard(),
+              
+              const SizedBox(height: 32),
               _buildQuickActions(context, authProvider, syncProvider, groupProvider, langProvider),
               
               const SizedBox(height: 24),
