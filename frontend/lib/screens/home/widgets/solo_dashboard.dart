@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../../providers/solo_provider.dart';
-import '../../../providers/meeting_provider.dart';
-import '../../../providers/language_provider.dart';
-import '../../scheduler/widgets/heatmap_grid.dart';
+import 'package:smart_scheduler_frontend/providers/solo_provider.dart';
+import 'package:smart_scheduler_frontend/providers/meeting_provider.dart';
+import 'package:smart_scheduler_frontend/providers/language_provider.dart';
+import 'package:smart_scheduler_frontend/screens/scheduler/widgets/heatmap_grid.dart';
 
 class SoloDashboard extends StatefulWidget {
   const SoloDashboard({super.key});

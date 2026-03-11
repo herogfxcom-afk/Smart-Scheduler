@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../core/api/api_service.dart';
-import '../../models/time_slot.dart';
+import 'package:smart_scheduler_frontend/core/api/api_service.dart';
+import 'package:smart_scheduler_frontend/models/time_slot.dart';
 
 class SoloProvider with ChangeNotifier {
   final ApiService _apiService;
