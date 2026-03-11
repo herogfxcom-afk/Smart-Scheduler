@@ -58,4 +58,4 @@ Smart Scheduler is a group availability tracking application integrated deeply w
 ## ⚠️ Important Pitfalls to Avoid
 1. **Timezones:** The backend stores and expects all meeting times in **UTC** (`Z` suffix). The Flutter frontend parses this UTC string and converts it to `.toLocal()` for display. When modifying slots, always ensure you use `.toUtc().toIso8601String()`.
 2. **Encryption:** OAuth refresh tokens are encrypted in the database. When debugging `calendar_service.py`, remember that tokens must be decrypted using `encryption.py` before being sent to the Google API.
-3. **Telegram Caching:** Telegram UI caches Mini Apps aggressively. Whenever you change the frontend and deploy, you must add `?v=timestamp` to the URL or instruct the user to physically clear their Telegram Local Database Cache...
+3. **Telegram Caching:** Telegram UI caches Mini Apps aggressively. Whenever you change the frontend and deploy, you must add `?v=timestamp` to the URL or instruct the user to physically clear their Telegram Local Database Cache.
