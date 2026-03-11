@@ -12,7 +12,7 @@ CalendarConnection _$CalendarConnectionFromJson(Map<String, dynamic> json) =>
       provider: json['provider'] as String,
       email: json['email'] as String?,
       status: json['status'] as String,
-      isActive: (json['is_active'] as bool?) ?? true,
+      isActive: json['is_active'] as bool? ?? true,
       lastSync: json['last_sync'] == null
           ? null
           : DateTime.parse(json['last_sync'] as String),
@@ -25,9 +25,5 @@ Map<String, dynamic> _$CalendarConnectionToJson(CalendarConnection instance) =>
       'email': instance.email,
       'status': instance.status,
       'is_active': instance.isActive,
-      'last_sync': instance.lastSync?.toIsoformatString(),
+      'last_sync': instance.lastSync?.toIso8601String(),
     };
-
-extension on DateTime {
-  String toIsoformatString() => toUtc().toIso8601String();
-}

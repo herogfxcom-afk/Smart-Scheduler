@@ -15,7 +15,8 @@ User _$UserFromJson(Map<String, dynamic> json) => User(
       isConnected: json['is_connected'] as bool? ?? false,
       isAppleConnected: json['is_apple_connected'] as bool? ?? false,
       connections: (json['connections'] as List<dynamic>?)
-              ?.map((e) => CalendarConnection.fromJson(e as Map<String, dynamic>))
+              ?.map(
+                  (e) => CalendarConnection.fromJson(e as Map<String, dynamic>))
               .toList() ??
           const [],
     );
@@ -28,4 +29,5 @@ Map<String, dynamic> _$UserToJson(User instance) => <String, dynamic>{
       'photo_url': instance.photoUrl,
       'is_connected': instance.isConnected,
       'is_apple_connected': instance.isAppleConnected,
+      'connections': instance.connections,
     };

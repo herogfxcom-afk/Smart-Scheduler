@@ -12,7 +12,7 @@ class SoloProvider with ChangeNotifier {
 
   List<TimeSlot> get slots => _slots;
   bool get isLoading => _isLoading;
-  String? _errorText => _error;
+  String? get errorText => _error;
 
   Future<void> fetchSoloSlots() async {
     try {
