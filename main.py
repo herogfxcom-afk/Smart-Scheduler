@@ -19,6 +19,14 @@ from caldav_service import AppleCalendarService
 import os
 import httpx
 import asyncio
+import re
+
+def parse_ms_datetime(dt_str: str) -> datetime:
+    # Microsoft returns 7 decimal places for microseconds: 2026-03-12T07:00:00.0000000Z
+    # Python fromisoformat supports max 6 -> ValueError -> slot is lost
+    dt_str = re.sub(r'(\.\d{6})\d+', r'\1', dt_str)
+    dt_str = dt_str.replace('Z', '+00:00')
+    return datetime.fromisoformat(dt_str)
 
 app = FastAPI(title="Smart Scheduler API")
 
@@ -466,7 +474,6 @@ async def sync_group(data: dict, current_user: User = Depends(get_current_user),
     # 1.5 Verify Telegram Membership (Security Fix)
     membership_status = await is_user_in_chat(chat_id, current_user.telegram_id)
     if membership_status != "ok":
-        raise HTTPException(status_code=400, detail=f"Inaccessible: user is not in the chat or bot is missing. Status: {membership_status}")
         print(f"DEBUG: Denying group sync - user {current_user.telegram_id} status {membership_status} in chat {chat_id}")
         # If user was a participant, remove them
         if participant:
@@ -475,12 +482,22 @@ async def sync_group(data: dict, current_user: User = Depends(get_current_user),
         raise HTTPException(status_code=403, detail="You are not a member of this Telegram group")
 
     if not participant:
-        participant = models.GroupParticipant(
-            group_id=group.id, 
-            user_id=current_user.id,
-            is_synced=1 if any(c.is_active for c in current_user.connections) else 0
-        )
-        db.add(participant)
+        try:
+            participant = models.GroupParticipant(
+                group_id=group.id,
+                user_id=current_user.id,
+                is_synced=1 if any(c.is_active for c in current_user.connections) else 0
+            )
+            db.add(participant)
+            db.flush() # Catches UniqueConstraint before commit
+        except Exception as e:
+            db.rollback()
+            print(f"DEBUG: GroupParticipant already exists, recovering: {e}")
+            participant = db.query(models.GroupParticipant).filter_by(
+                group_id=group.id, user_id=current_user.id
+            ).first()
+            if participant:
+                participant.is_synced = 1 if any(c.is_active for c in current_user.connections) else 0
     else:
         # Update sync status
         participant.is_synced = 1 if any(c.is_active for c in current_user.connections) else 0
@@ -699,8 +716,8 @@ async def sync_calendar(current_user: User = Depends(get_current_user), db: Sess
                         new_slot = BusySlot(
                             user_id=current_user.id,
                             connection_id=conn.id,
-                            start_time=datetime.fromisoformat(s_out).astimezone(pytz.utc).replace(tzinfo=None),
-                            end_time=datetime.fromisoformat(e_out).astimezone(pytz.utc).replace(tzinfo=None)
+                            start_time=parse_ms_datetime(s_out).astimezone(pytz.utc).replace(tzinfo=None),
+                            end_time=parse_ms_datetime(e_out).astimezone(pytz.utc).replace(tzinfo=None)
                         )
                         db.add(new_slot)
                         total_slots += 1
@@ -779,8 +796,8 @@ async def get_solo_scheduler(
 async def add_busy_slot(data: dict, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Creates a personal busy slot manualy from the app."""
     try:
-        start_time = datetime.fromisoformat(data["start"].replace("Z", "+00:00")).replace(tzinfo=None)
-        end_time = datetime.fromisoformat(data["end"].replace("Z", "+00:00")).replace(tzinfo=None)
+        start_time = parse_ms_datetime(data["start"]).replace(tzinfo=None)
+        end_time = parse_ms_datetime(data["end"]).replace(tzinfo=None)
         
         # Check if identical slot already exists
         exists = db.query(models.BusySlot).filter_by(
@@ -809,8 +826,8 @@ async def add_busy_slot(data: dict, current_user: User = Depends(get_current_use
 async def delete_busy_slot(start: str, end: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Deletes personal busy slots within a time range."""
     try:
-        start_time = datetime.fromisoformat(start.replace("Z", "+00:00")).replace(tzinfo=None)
-        end_time = datetime.fromisoformat(end.replace("Z", "+00:00")).replace(tzinfo=None)
+        start_time = parse_ms_datetime(start).replace(tzinfo=None)
+        end_time = parse_ms_datetime(end).replace(tzinfo=None)
         
         # Delete only manual slots (connection_id is NULL) or any slot in this range?
         # User wants to "free" time, so we delete slots that START precisely here
