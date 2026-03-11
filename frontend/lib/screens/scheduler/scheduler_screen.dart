@@ -11,7 +11,7 @@ import '../../core/telegram/telegram_service.dart';
 import '../../models/time_slot.dart';
 import '../../models/meeting.dart';
 import 'widgets/heatmap_grid.dart';
-import 'widgets/meeting_card.dart';
+import 'widgets/heatmap_grid.dart';
 
 class SchedulerScreen extends StatefulWidget {
   const SchedulerScreen({super.key});

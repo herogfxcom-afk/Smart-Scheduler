@@ -1,5 +1,7 @@
 import 'dart:async';
-import 'dart:js' as js;
+import 'dart:js_interop';
+@JS('window.open')
+external void _open(String url, String target);
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
@@ -524,7 +526,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   void _launchURL(String url) {
-    js.context.callMethod('open', [url, '_blank']);
+    _open(url, '_blank');
   }
 
   String _formatDate(DateTime dt) {

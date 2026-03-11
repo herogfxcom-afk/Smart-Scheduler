@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 import '../core/api/api_service.dart';
+import '../core/telegram/telegram_service.dart';
 
 class GroupParticipant {
   final int id;
