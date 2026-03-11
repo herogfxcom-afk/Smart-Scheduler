@@ -753,18 +753,18 @@ async def get_solo_scheduler(current_user: User = Depends(get_current_user), db:
             
     # Get busy slots from all sources (Google, CalDAV, Internal)
     busy_slots = get_user_busy_slots(db, current_user.id)
+    # We use find_common_free_slots for a single user
+    # This will categorize slots as "match" (free) or "my_busy" (busy)
+    segments = find_common_free_slots(
+        [busy_slots], 
+        start_date, 
+        end_date, 
+        [user_avail],
+        tz_offset_hours=3.0, # Adjusted for user's local time (Kyiv/Moscow is +3)
+        requesting_user_index=0
+    )
     
-    
-    return [
-        {
-            "start": s.start.isoformat() + "Z",
-            "end": s.end.isoformat() + "Z",
-            "availability": s.availability,
-            "is_full_match": s.is_full_match,
-            "is_my_busy": s.is_my_busy,
-            "is_others_busy": s.is_others_busy
-        } for s in best_slots
-    ]
+    return segments
 
 # ─────────────────── AVAILABILITY ENDPOINTS ───────────────────
 @app.get("/api/availability")
