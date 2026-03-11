@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../../models/time_slot.dart';
+import '../../../models/meeting.dart';
 import '../../../providers/scheduler_provider.dart';
 
 class HeatmapGrid extends StatelessWidget {

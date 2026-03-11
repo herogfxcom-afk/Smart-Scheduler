@@ -55,7 +55,6 @@ class SchedulerProvider extends ChangeNotifier {
       _isLoading = true;
       notifyListeners();
       await _apiService.deleteMeeting(meetingId);
-      await fetchMyMeetings();
       await fetchCommonSlots(_lastTelegramIds, chatId: _currentChatId);
       return true;
     } catch (e) {
@@ -135,7 +134,6 @@ class SchedulerProvider extends ChangeNotifier {
       });
 
       print("DEBUG: Server response: ${response.data}");
-      await fetchMyMeetings();
       await fetchCommonSlots(_lastTelegramIds, chatId: _currentChatId);
       return true;
     } catch (e) {

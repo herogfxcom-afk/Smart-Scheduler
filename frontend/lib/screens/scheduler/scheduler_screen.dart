@@ -566,6 +566,7 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
                       if (context.mounted) {
                         Navigator.pop(context);
                         if (success) {
+                          context.read<MeetingProvider>().fetchMyMeetings();
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(content: Text('Встреча успешно удалена'), backgroundColor: Colors.green),
                           );
@@ -970,6 +971,8 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
                         );
                         setState(() => isLoading = false);
                         if (success && context.mounted) {
+                          // Refresh meeting list to show the new meeting (purple highlights etc)
+                          context.read<MeetingProvider>().fetchMyMeetings();
                           Navigator.pop(context);
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
