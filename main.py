@@ -172,11 +172,7 @@ BOT_USERNAME_FALLBACK = os.getenv("BOT_USERNAME", "smartschedulertime_bot")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        FRONTEND_URL,
-        "https://t.me",
-        "http://localhost:8080",
-    ],
+    allow_origin_regex=r"https://.*frontend.*\.vercel\.app|https://t\.me|http://localhost:8080",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

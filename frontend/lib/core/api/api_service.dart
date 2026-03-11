@@ -13,7 +13,7 @@ class ApiService {
         )) {
     if (_dio.options.baseUrl.isEmpty) {
       assert(false, 'API_URL is missing. Remember to build with --dart-define=API_URL=...');
-      _dio.options.baseUrl = 'http://10.0.2.2:8000'; // Default Android emulator backend
+      _dio.options.baseUrl = 'https://smart-scheduler-production-2006.up.railway.app'; // Default to production
     }
 
     _dio.interceptors.add(InterceptorsWrapper(
