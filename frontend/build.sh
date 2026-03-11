@@ -15,7 +15,8 @@ echo "Adding Flutter to PATH..."
 export PATH="$PATH:`pwd`/flutter/bin"
 
 # Initialize flutter without triggering root exit
-flutter config --no-analytics || true
+flutter doctor
+flutter config --enable-web
 
 echo "Fetching dependencies..."
 flutter pub get
