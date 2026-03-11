@@ -729,23 +729,31 @@ async def get_busy_slots(current_user: User = Depends(get_current_user), db: Ses
 
 @app.get("/api/scheduler/solo")
 async def get_solo_scheduler(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Returns a 7-day heatmap slots for the current user only."""
-    from calendar_service import get_user_busy_slots, calculate_best_times
+    """Returns 7-day busy/free segments for the current user's personal heatmap."""
+    from calendar_service import get_user_busy_slots, find_common_free_slots
     
-    # Get user's working hours
+    # Range: from today 00:00 to 7 days later
+    start_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    end_date = start_date + timedelta(days=7)
+    
+    # Get user's working hours in the format expected by find_common_free_slots
     avail = db.query(models.UserAvailability).filter(models.UserAvailability.user_id == current_user.id).all()
     if not avail:
-        # Default 9-18
-        working_hours = {i: ("09:00", "18:00") for i in range(7)}
+        # Default 9-21 (more generous for personal view)
+        working_hours_day = {"start": 9, "end": 21, "enabled": True}
+        user_avail = {i: working_hours_day for i in range(7)}
     else:
-        working_hours = {a.day_of_week: (a.start_time, a.end_time) for a in avail if a.is_enabled}
-
-    # Get busy slots from all sources
+        user_avail = {}
+        for a in avail:
+            user_avail[a.day_of_week] = {
+                "start": int(a.start_time.split(":")[0]),
+                "end": int(a.end_time.split(":")[0]),
+                "enabled": a.is_enabled
+            }
+            
+    # Get busy slots from all sources (Google, CalDAV, Internal)
     busy_slots = get_user_busy_slots(db, current_user.id)
     
-    # Use existing logic to find "best times" (which will just be the available slots for 1 person)
-    # We pass only the current user's ID
-    best_slots = calculate_best_times([current_user.telegram_id], {current_user.telegram_id: busy_slots}, working_hours)
     
     return [
         {
