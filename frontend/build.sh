@@ -6,6 +6,9 @@ set -e
 export FLUTTER_NO_ANALYTICS=1
 export PUB_CACHE=$HOME/.pub-cache
 
+# Fix for "dubious ownership" in some CI environments
+git config --global --add safe.directory "*" || true
+
 if [ ! -d "flutter" ]; then
   echo "Cloning Flutter SDK..."
   git clone https://github.com/flutter/flutter.git -b stable --depth 1
@@ -15,14 +18,16 @@ echo "Adding Flutter to PATH..."
 export PATH="$PATH:`pwd`/flutter/bin"
 
 # Initialize flutter without triggering root exit
-flutter doctor
+# Use || true to prevent non-zero exit codes from doctor in CI
+flutter doctor || true
+flutter config --no-analytics
 flutter config --enable-web
 
 echo "Fetching dependencies..."
 flutter pub get
 
 # Clean before build to avoid cache issues
-flutter clean
+flutter clean || true
 flutter pub get
 
 echo "Building for Web..."
