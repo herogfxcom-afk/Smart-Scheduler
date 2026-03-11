@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:smart_scheduler_frontend/core/api/api_service.dart';
 import 'package:smart_scheduler_frontend/models/time_slot.dart';
 
+import 'package:smart_scheduler_frontend/utils/timezone_utils.dart';
+
 class SoloProvider with ChangeNotifier {
   final ApiService _apiService;
   List<TimeSlot> _slots = [];
@@ -20,7 +22,8 @@ class SoloProvider with ChangeNotifier {
       _error = null;
       notifyListeners();
 
-      final data = await _apiService.getSoloSlots();
+      final tzOffset = getUserTzOffset();
+      final data = await _apiService.getSoloSlots(tzOffset);
       _slots = data.map((s) => TimeSlot.fromJson(s)).toList();
     } catch (e) {
       _error = e.toString();

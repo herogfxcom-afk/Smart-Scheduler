@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import '../core/api/api_service.dart';
 import '../models/time_slot.dart';
 import '../models/user.dart';
+import '../utils/timezone_utils.dart';
 
 class SchedulerProvider extends ChangeNotifier {
   final ApiService _apiService;
@@ -77,9 +78,10 @@ class SchedulerProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
+      final tzOffset = getUserTzOffset();
       final response = await _apiService.post('/calendar/free-slots', {
         'telegram_ids': telegramIds,
-        'tz_offset': DateTime.now().timeZoneOffset.inHours,
+        'tz_offset': tzOffset,
         if (chatId != null) 'chat_id': chatId,
       });
       final List<dynamic> data = response.data['free_slots'] ?? [];

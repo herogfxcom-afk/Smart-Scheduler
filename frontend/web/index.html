@@ -2,6 +2,15 @@
 <html>
 
 <head>
+  <script>
+    try {
+      window.userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      window.userTzOffset = -(new Date().getTimezoneOffset() / 60);
+    } catch(e) {
+      window.userTimezone = 'UTC';
+      window.userTzOffset = 0;
+    }
+  </script>
   <!--
     If you are serving your web app in a path other than the root, change the
     href value below to reflect the base path you are serving from.

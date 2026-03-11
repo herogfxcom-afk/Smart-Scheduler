@@ -732,7 +732,11 @@ async def get_busy_slots(current_user: User = Depends(get_current_user), db: Ses
     ]
 
 @app.get("/api/scheduler/solo")
-async def get_solo_scheduler(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+async def get_solo_scheduler(
+    current_user: User = Depends(get_current_user), 
+    db: Session = Depends(get_db),
+    tz_offset: float = Query(default=0.0)
+):
     """Returns 7-day busy/free segments for the current user's personal heatmap."""
     from calendar_service import find_common_free_slots
     
@@ -765,7 +769,7 @@ async def get_solo_scheduler(current_user: User = Depends(get_current_user), db:
         start_date, 
         end_date, 
         [user_avail],
-        tz_offset_hours=3.0, # Adjusted for user's local time (Kyiv/Moscow is +3)
+        tz_offset_hours=tz_offset, # Use real dynamic offset from JS
         requesting_user_index=0
     )
     
