@@ -686,7 +686,8 @@ async def sync_calendar(current_user: User = Depends(get_current_user), db: Sess
         # Clear old slots for this user before re-syncing everything
         db.query(BusySlot).filter(BusySlot.user_id == current_user.id).delete()
         
-        start = datetime.utcnow()
+        # Start looking 2 days in the past so we don't miss manual events created today or yesterday
+        start = datetime.utcnow() - timedelta(days=2)
         end = start + timedelta(days=21) # Sync 3 weeks ahead
 
         for conn in active_connections:

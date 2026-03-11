@@ -36,27 +36,34 @@ class HeatmapGrid extends StatelessWidget {
         : today;
 
     // 2. Group slots by hour and offset date
-    final Map<int, Map<int, TimeSlot?>> gridData = {};
+    final Map<int, Map<int, List<TimeSlot>>> gridData = {};
     for (int hour = 7; hour < 24; hour++) {
       gridData[hour] = {};
+      for (int i = 0; i < 7; i++) {
+        gridData[hour]![i] = [];
+      }
     }
 
     for (final slot in slots) {
-      final localStart = toUserLocal(slot.start);
-      final localEnd = toUserLocal(slot.end);
+      final localStart = slot.start;
+      final localEnd = slot.end;
       
-      final int diff = localStart.difference(gridStart).inDays;
+      final int diff = DateUtils.dateOnly(localStart).difference(gridStart).inDays;
       if (diff >= 0 && diff < 7) {
-        // Fill all hours this slot covers
         int startHour = localStart.hour;
         int endHour = localEnd.hour;
         
         // If it spans midnight, cap at 24 for today
         if (localEnd.day != localStart.day) endHour = 24;
+        
+        // If it ends exactly on the hour, it doesn't spill into that hour
+        if (localEnd.minute == 0 && endHour > startHour) {
+          endHour -= 1;
+        }
 
-        for (int h = startHour; h < endHour; h++) {
+        for (int h = startHour; h <= endHour; h++) {
           if (h >= 7 && h < 24) {
-            gridData[h]![diff] = slot;
+            gridData[h]![diff]!.add(slot);
           }
         }
       }
@@ -132,37 +139,86 @@ class HeatmapGrid extends StatelessWidget {
                     ),
                     // Days Grid
                     ...List.generate(7, (dayIndex) {
-                      final slot = gridData[hour]?[dayIndex];
+                      final cellSlots = gridData[hour]?[dayIndex] ?? [];
                       final day = gridStart.add(Duration(days: dayIndex));
                       final isSelectedColumn = DateUtils.isSameDay(day, selectedDay);
                       
                       return Expanded(
                         child: GestureDetector(
-                          onTap: slot != null ? () => onSlotSelected(slot) : null,
+                          onTap: cellSlots.isNotEmpty ? () => onSlotSelected(cellSlots.first) : null,
                           child: Container(
                             margin: const EdgeInsets.all(1.5),
                             decoration: BoxDecoration(
-                              color: slot != null ? _getSlotColor(slot) : (isSelectedColumn ? Colors.white.withOpacity(0.04) : Colors.transparent),
+                              color: isSelectedColumn ? Colors.white.withOpacity(0.04) : Colors.transparent,
                               borderRadius: BorderRadius.circular(4),
                               border: Border.all(
-                                color: isSelectedColumn 
-                                  ? Colors.blue.withOpacity(0.3) 
-                                  : (slot != null && slot.availability == 1.0 ? Colors.white.withOpacity(0.2) : Colors.transparent),
+                                color: isSelectedColumn ? Colors.blue.withOpacity(0.3) : Colors.transparent,
                                 width: 0.5,
                               ),
                             ),
-                            child: slot != null && slot.availability > 0
-                              ? Center(
-                                  child: Text(
-                                    "${(slot.availability * 100).toInt()}%",
-                                    style: TextStyle(
-                                      fontSize: 8,
-                                      fontWeight: FontWeight.bold,
-                                      color: slot.availability > 0.5 ? Colors.white : Colors.white70,
-                                    ),
+                            clipBehavior: Clip.hardEdge,
+                            child: Stack(
+                              children: cellSlots.map((slot) {
+                                double topFactor = 0.0;
+                                double heightFactor = 1.0;
+
+                                if (slot.start.hour == hour) {
+                                  topFactor = slot.start.minute / 60.0;
+                                  heightFactor -= topFactor;
+                                }
+
+                                if (slot.end.hour == hour && (slot.end.day == slot.start.day || slot.end.hour != 0)) {
+                                  double bottomFactor = (60 - slot.end.minute) / 60.0;
+                                  if (slot.end.minute > 0) {
+                                    heightFactor -= bottomFactor;
+                                  } else {
+                                    heightFactor = 0.0;
+                                  }
+                                }
+
+                                if (heightFactor <= 0.0) return const SizedBox.shrink();
+
+                                int flexTop = (topFactor * 100).round();
+                                int flexHeight = (heightFactor * 100).round();
+                                int flexBottom = 100 - flexTop - flexHeight;
+
+                                return Positioned.fill(
+                                  child: Column(
+                                    children: [
+                                      if (flexTop > 0) Spacer(flex: flexTop),
+                                      if (flexHeight > 0)
+                                        Expanded(
+                                          flex: flexHeight,
+                                          child: Container(
+                                            width: double.infinity,
+                                            decoration: BoxDecoration(
+                                              color: _getSlotColor(slot),
+                                              borderRadius: BorderRadius.circular(2),
+                                              border: Border.all(
+                                                color: slot.availability == 1.0 ? Colors.white.withOpacity(0.2) : Colors.transparent,
+                                                width: 0.5,
+                                              ),
+                                            ),
+                                            child: slot.availability > 0 && flexHeight >= 25
+                                                ? Center(
+                                                    child: Text(
+                                                      "${(slot.availability * 100).toInt()}%",
+                                                      style: TextStyle(
+                                                        fontSize: 8,
+                                                        fontWeight: FontWeight.bold,
+                                                        color: slot.availability > 0.5 ? Colors.white : Colors.white70,
+                                                      ),
+                                                    ),
+                                                  )
+                                                : null,
+                                          ),
+                                        ),
+                                      if (flexBottom > 0) Spacer(flex: flexBottom),
+                                    ],
                                   ),
-                                )
-                              : null,
+                                );
+                              }).toList(),
+                            ),
                           ),
                         ),
                       );
@@ -185,13 +241,13 @@ class HeatmapGrid extends StatelessWidget {
       return const Color(0xFF2E7D32).withOpacity(0.8); // Green: Everyone is free
     } else if (slot.isMyBusy) {
       // Подсчет: если это слот моей встречи из приложения, красим в фиолетовый
-      final sStart = toUserLocal(slot.start);
-      final sEnd = toUserLocal(slot.end);
+      final sStart = slot.start;
+      final sEnd = slot.end;
       bool isAppMeeting = false;
       
       for (final m in myMeetings) {
-        final mStart = toUserLocal(m.start);
-        final mEnd = toUserLocal(m.end);
+        final mStart = m.start;
+        final mEnd = m.end;
         
         // Calculate max of starts and min of ends
         final latestStart = sStart.isAfter(mStart) ? sStart : mStart;
