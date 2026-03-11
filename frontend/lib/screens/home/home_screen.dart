@@ -225,8 +225,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           margin: const EdgeInsets.only(bottom: 8),
           child: ListTile(
             leading: Icon(
-              conn.provider == 'google' ? Icons.mail : Icons.apple,
-              color: conn.provider == 'google' ? Colors.red : Colors.grey,
+              conn.provider == 'google'
+                  ? Icons.mail
+                  : conn.provider == 'outlook'
+                      ? Icons.calendar_month
+                      : Icons.apple,
+              color: conn.provider == 'google'
+                  ? Colors.red
+                  : conn.provider == 'outlook'
+                      ? const Color(0xFF0078D4) // Microsoft blue
+                      : Colors.grey,
             ),
             title: Text(conn.email ?? "Подключено"),
             subtitle: Text(conn.status == 'active' ? "Активен" : "Ошибка: требуется вход"),
@@ -251,7 +259,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             const SizedBox(width: 8),
             Expanded(
               child: OutlinedButton.icon(
-                onPressed: () => _showComingSoon("Outlook"),
+                onPressed: () => auth.connectOutlook(),
                 icon: const Icon(Icons.add),
                 label: const Text("Outlook"),
               ),

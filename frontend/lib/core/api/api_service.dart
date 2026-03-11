@@ -55,6 +55,15 @@ class ApiService {
     }
   }
 
+  Future<String> getOutlookAuthUrl() async {
+    try {
+      final response = await _dio.get('/auth/outlook/url');
+      return response.data['url'] as String;
+    } catch (e) {
+      throw Exception('Failed to get Outlook Auth URL: $e');
+    }
+  }
+
   Future<Map<String, dynamic>> getMe() async {
     try {
       final response = await _dio.get('/auth/me');

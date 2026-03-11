@@ -84,6 +84,21 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> connectOutlook() async {
+    try {
+      final url = await _apiService.getOutlookAuthUrl();
+      if (_telegramService.isReady) {
+        _telegramService.openLink(url);
+      } else {
+        await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+      }
+    } catch (e) {
+      _error = e.toString();
+      _telegramService.showPopup(message: "Failed to connect Outlook: $e");
+      notifyListeners();
+    }
+  }
+
   void logout() {
     _user = null;
     notifyListeners();
