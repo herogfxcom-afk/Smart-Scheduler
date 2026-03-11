@@ -763,18 +763,18 @@ async def get_solo_scheduler(
     
     # Get user's working hours in the format expected by find_common_free_slots
     avail = db.query(models.UserAvailability).filter(models.UserAvailability.user_id == current_user.id).all()
-    if not avail:
-        # Default 9-21 (more generous for personal view)
-        working_hours_day = {"start": 9, "end": 21, "enabled": True}
-        user_avail = {i: working_hours_day for i in range(7)}
-    else:
-        user_avail = {}
-        for a in avail:
-            user_avail[a.day_of_week] = {
-                "start": int(a.start_time.split(":")[0]),
-                "end": int(a.end_time.split(":")[0]),
-                "enabled": a.is_enabled
-            }
+    
+    # Initialize with default 9-18 for all days
+    working_hours_day = {"start": 9, "end": 18, "enabled": True}
+    user_avail = {i: working_hours_day for i in range(7)}
+    
+    # Override with user settings where available
+    for a in avail:
+        user_avail[a.day_of_week] = {
+            "start": int(a.start_time.split(":")[0]),
+            "end": int(a.end_time.split(":")[0]),
+            "enabled": a.is_enabled
+        }
             
     # Get busy slots from database (Internal + Synced from Google/etc.)
     db_slots = db.query(models.BusySlot).filter(models.BusySlot.user_id == current_user.id).all()

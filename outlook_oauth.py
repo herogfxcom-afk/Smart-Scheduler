@@ -20,7 +20,7 @@ GRAPH_ME_URL = "https://graph.microsoft.com/v1.0/me"
 
 # Scopes: offline_access for refresh token, openid/profile for identity,
 # Calendars.Read for reading the user's calendar events.
-SCOPES = "offline_access openid profile https://graph.microsoft.com/Calendars.Read"
+SCOPES = "offline_access openid profile https://graph.microsoft.com/Calendars.ReadWrite"
 
 
 @router.get("/url")

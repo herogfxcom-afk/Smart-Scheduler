@@ -1,18 +1,20 @@
-import 'dart:js' as js;
+import 'dart:js_interop';
+import 'dart:js_interop_unsafe';
 
 double getUserTzOffset() {
   try {
-    final offset = js.context['userTzOffset'];
-    if (offset != null) return (offset as num).toDouble();
+    final jsOffset = globalContext['userTzOffset'];
+    if (jsOffset != null) {
+      return (jsOffset as JSNumber).toDartDouble;
+    }
   } catch (_) {}
-  // Fallback for mobile / if JS doesn't work
   return DateTime.now().timeZoneOffset.inMinutes / 60.0;
 }
 
 String getUserTimezone() {
   try {
-    final tz = js.context['userTimezone'];
-    if (tz != null) return tz.toString();
+    final jsTz = globalContext['userTimezone'];
+    if (jsTz != null) return (jsTz as JSString).toDart;
   } catch (_) {}
   return 'UTC';
 }

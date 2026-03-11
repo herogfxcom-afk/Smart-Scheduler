@@ -117,9 +117,9 @@ def find_common_free_slots(
     if num_users == 0:
         return []
 
-    # Default availability if not provided (7:00 - 23:00 for everyone)
+    # Default availability if not provided (9:00 - 18:00 for everyone)
     if not user_availabilities:
-        default_day = {"start": 7, "end": 23, "enabled": True}
+        default_day = {"start": 9, "end": 18, "enabled": True}
         user_availabilities = [{d: default_day for d in range(7)} for _ in range(num_users)]
 
     free_slots = []
@@ -164,7 +164,7 @@ def find_common_free_slots(
                     if is_busy_with_event and i == requesting_user_index:
                         requesting_user_busy = True
 
-                    u_avail = user_availabilities[i].get(local_weekday, {"start": 7, "end": 23, "enabled": True})
+                    u_avail = user_availabilities[i].get(local_weekday, {"start": 9, "end": 18, "enabled": True})
                     
                     # Is this user "at work" during this segment?
                     is_working = u_avail["enabled"] and \
