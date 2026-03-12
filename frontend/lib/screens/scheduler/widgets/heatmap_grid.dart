@@ -24,12 +24,9 @@ class HeatmapGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // 1. Calculate the start date for the grid. 
-    // We want it to be "Today" normalized if the selected day is in the current timeframe,
-    // to match the top bar's behavior.
     final now = userNow();
     final today = DateTime(now.year, now.month, now.day);
     
-    // If selectedDay is more than 6 days ahead, we show a second week window
     final int dayOffset = selectedDay.difference(today).inDays;
     final DateTime gridStart = dayOffset >= 7 
         ? today.add(const Duration(days: 7)) 
@@ -61,7 +58,6 @@ class HeatmapGrid extends StatelessWidget {
           }
           if (currentDiff == endDiff) {
             endHour = localEnd.hour;
-            // If it ends exactly on the hour, don't spill into that hour
             if (localEnd.minute == 0 && endHour > startHour) {
               endHour -= 1;
             }
@@ -124,8 +120,8 @@ class HeatmapGrid extends StatelessWidget {
         const SizedBox(height: 12),
         Expanded(
           child: ListView.builder(
-            padding: const EdgeInsets.only(bottom: 80), // Added padding for better scrolling
-            itemCount: 17, // 7:00 to 23:00 (up to 24:00)
+            padding: const EdgeInsets.only(bottom: 80), 
+            itemCount: 17, // 7:00 to 24:00
             itemBuilder: (context, index) {
               final hour = index + 7;
               return SizedBox(
@@ -165,66 +161,125 @@ class HeatmapGrid extends StatelessWidget {
                             ),
                             clipBehavior: Clip.hardEdge,
                             child: Stack(
-                              children: cellSlots.map((slot) {
-                                double topFactor = 0.0;
-                                double heightFactor = 1.0;
+                              children: [
+                                // Base slots layer
+                                ...cellSlots.map((slot) {
+                                  double topFactor = 0.0;
+                                  double heightFactor = 1.0;
 
-                                if (slot.start.hour == hour) {
-                                  topFactor = slot.start.minute / 60.0;
-                                  heightFactor -= topFactor;
-                                }
-
-                                if (slot.end.hour == hour && (slot.end.day == slot.start.day || slot.end.hour != 0)) {
-                                  double bottomFactor = (60 - slot.end.minute) / 60.0;
-                                  if (slot.end.minute > 0) {
-                                    heightFactor -= bottomFactor;
-                                  } else {
-                                    heightFactor = 0.0;
+                                  if (slot.start.hour == hour) {
+                                    topFactor = slot.start.minute / 60.0;
+                                    heightFactor -= topFactor;
                                   }
-                                }
 
-                                if (heightFactor <= 0.0) return const SizedBox.shrink();
+                                  if (slot.end.hour == hour && (slot.end.day == slot.start.day || slot.end.hour != 0)) {
+                                    double bottomFactor = (60 - slot.end.minute) / 60.0;
+                                    if (slot.end.minute > 0) {
+                                      heightFactor -= bottomFactor;
+                                    } else {
+                                      heightFactor = 0.0;
+                                    }
+                                  }
 
-                                int flexTop = (topFactor * 100).round();
-                                int flexHeight = (heightFactor * 100).round();
-                                int flexBottom = 100 - flexTop - flexHeight;
+                                  if (heightFactor <= 0.0) return const SizedBox.shrink();
 
-                                return Positioned.fill(
-                                  child: Column(
-                                    children: [
-                                      if (flexTop > 0) Spacer(flex: flexTop),
-                                      if (flexHeight > 0)
-                                        Expanded(
-                                          flex: flexHeight,
-                                          child: Container(
-                                            width: double.infinity,
-                                            decoration: BoxDecoration(
-                                              color: _getSlotColor(slot, hour, day),
-                                              borderRadius: BorderRadius.circular(2),
-                                              border: Border.all(
-                                                color: slot.availability == 1.0 ? Colors.white.withOpacity(0.2) : Colors.transparent,
-                                                width: 0.5,
+                                  int flexTop = (topFactor * 100).round();
+                                  int flexHeight = (heightFactor * 100).round();
+                                  int flexBottom = 100 - flexTop - flexHeight;
+
+                                  return Positioned.fill(
+                                    child: Column(
+                                      children: [
+                                        if (flexTop > 0) Spacer(flex: flexTop),
+                                        if (flexHeight > 0)
+                                          Expanded(
+                                            flex: flexHeight,
+                                            child: Container(
+                                              width: double.infinity,
+                                              decoration: BoxDecoration(
+                                                color: _getSlotColor(slot, hour, day),
+                                                borderRadius: BorderRadius.circular(2),
+                                                border: Border.all(
+                                                  color: slot.availability == 1.0 ? Colors.white.withOpacity(0.2) : Colors.transparent,
+                                                  width: 0.5,
+                                                ),
+                                              ),
+                                              child: slot.availability > 0 && flexHeight >= 25
+                                                  ? Center(
+                                                      child: Text(
+                                                        "${(slot.availability * 100).toInt()}%",
+                                                        style: const TextStyle(
+                                                          fontSize: 8,
+                                                          fontWeight: FontWeight.bold,
+                                                          color: Colors.white,
+                                                        ),
+                                                      ),
+                                                    )
+                                                  : null,
+                                            ),
+                                          ),
+                                        if (flexBottom > 0) Spacer(flex: flexBottom),
+                                      ],
+                                    ),
+                                  );
+                                }).toList(),
+
+                                // App meetings overlay layer (Purple boxes)
+                                ...myMeetings.where((m) {
+                                  final cellStart = gridStart.add(Duration(days: dayIndex, hours: hour));
+                                  final cellEnd = cellStart.add(const Duration(hours: 1));
+                                  final latestStart = m.start.isAfter(cellStart) ? m.start : cellStart;
+                                  final earliestEnd = m.end.isBefore(cellEnd) ? m.end : cellEnd;
+                                  return latestStart.isBefore(earliestEnd);
+                                }).map((meeting) {
+                                  double mTopFactor = 0.0;
+                                  double mHeightFactor = 1.0;
+
+                                  if (meeting.start.hour == hour) {
+                                    mTopFactor = meeting.start.minute / 60.0;
+                                    mHeightFactor -= mTopFactor;
+                                  }
+
+                                  if (meeting.end.hour == hour && (meeting.end.day == meeting.start.day || meeting.end.hour != 0)) {
+                                    double mBottomFactor = (60 - meeting.end.minute) / 60.0;
+                                    if (meeting.end.minute > 0) {
+                                      mHeightFactor -= mBottomFactor;
+                                    } else {
+                                      mHeightFactor = 0.0;
+                                    }
+                                  }
+
+                                  if (mHeightFactor <= 0.0) return const SizedBox.shrink();
+
+                                  int mFlexTop = (mTopFactor * 100).round();
+                                  int mFlexHeight = (mHeightFactor * 100).round();
+                                  int mFlexBottom = 100 - mFlexTop - mFlexHeight;
+
+                                  return Positioned.fill(
+                                    child: Column(
+                                      children: [
+                                        if (mFlexTop > 0) Spacer(flex: mFlexTop),
+                                        if (mFlexHeight > 0)
+                                          Expanded(
+                                            flex: mFlexHeight,
+                                            child: Container(
+                                              width: double.infinity,
+                                              decoration: BoxDecoration(
+                                                color: Colors.purple.withOpacity(0.85),
+                                                borderRadius: BorderRadius.circular(2),
+                                                border: Border.all(
+                                                  color: Colors.white.withOpacity(0.3),
+                                                  width: 1.0,
+                                                ),
                                               ),
                                             ),
-                                            child: slot.availability > 0 && flexHeight >= 25
-                                                ? Center(
-                                                    child: Text(
-                                                      "${(slot.availability * 100).toInt()}%",
-                                                      style: TextStyle(
-                                                        fontSize: 8,
-                                                        fontWeight: FontWeight.bold,
-                                                        color: slot.availability > 0.5 ? Colors.white : Colors.white70,
-                                                      ),
-                                                    ),
-                                                  )
-                                                : null,
                                           ),
-                                        ),
-                                      if (flexBottom > 0) Spacer(flex: flexBottom),
-                                    ],
-                                  ),
-                                );
-                              }).toList(),
+                                        if (mFlexBottom > 0) Spacer(flex: mFlexBottom),
+                                      ],
+                                    ),
+                                  );
+                                }).toList(),
+                              ],
                             ),
                           ),
                         ),
@@ -243,47 +298,14 @@ class HeatmapGrid extends StatelessWidget {
   Color _getSlotColor(TimeSlot? slot, int cellHour, DateTime cellDay) {
     if (slot == null) return Colors.white.withOpacity(0.02);
     
-    // 4-Color Logic
     if (slot.isFullMatch) {
-      return const Color(0xFF2E7D32).withOpacity(0.8); // Green: Everyone is free
+      return const Color(0xFF2E7D32).withOpacity(0.8); // Green
     } else if (slot.isMyBusy) {
-      // Подсчет: если это слот моей встречи из приложения, красим в фиолетовый
-      final sStart = slot.start;
-      final sEnd = slot.end;
-      
-      // Calculate intersection bounds inside THIS cell specifically
-      final cellStart = DateTime(cellDay.year, cellDay.month, cellDay.day, cellHour, 0);
-      final cellEnd = cellStart.add(const Duration(hours: 1));
-      
-      final boxStart = sStart.isAfter(cellStart) ? sStart : cellStart;
-      final boxEnd = sEnd.isBefore(cellEnd) ? sEnd : cellEnd;
-      
-      bool isAppMeeting = false;
-      
-      for (final m in myMeetings) {
-        final mStart = m.start;
-        final mEnd = m.end;
-        
-        // Calculate max of starts and min of ends
-        final latestStart = boxStart.isAfter(mStart) ? boxStart : mStart;
-        final earliestEnd = boxEnd.isBefore(mEnd) ? boxEnd : mEnd;
-
-        if (latestStart.isBefore(earliestEnd)) {
-          isAppMeeting = true;
-          break;
-        }
-      }
-      
-      if (isAppMeeting) {
-        return Colors.purple.withOpacity(0.6); // Purple: App created meeting
-      } else {
-        return Colors.blue.withOpacity(0.6); // Blue: Personal Google event
-      }
+      return Colors.blue.withOpacity(0.6); // Blue (Base busy)
     } else if (slot.isOthersBusy) {
-      return Colors.deepOrange.withOpacity(0.5); // Orange: Someone else is busy
+      return Colors.deepOrange.withOpacity(0.5); // Orange
     }
     
-    // Fallback
     return Colors.black.withOpacity(0.05);
   }
 }

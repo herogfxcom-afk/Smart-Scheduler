@@ -1220,6 +1220,10 @@ async def create_meeting(data: dict, background_tasks: BackgroundTasks, current_
         if h_start < u_avail.start or h_end > u_avail.end or (h_end == u_avail.end and m_end > 0):
             print(f"DEBUG: Booking outside working hours: {h_start}:00 to {h_end}:{m_end} (Working until {u_avail.end}:00)")
             raise HTTPException(status_code=400, detail="outside_working_hours")
+    else:
+        # If no availability defined for this day OR it is disabled, assume non-working day
+        print(f"DEBUG: Booking on non-working day/disabled availability: {start_local.weekday()}")
+        raise HTTPException(status_code=400, detail="outside_working_hours")
 
     # Check Idempotency
     if idempotency_key:
