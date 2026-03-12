@@ -420,7 +420,7 @@ async def get_me(current_user: User = Depends(get_current_user)):
                 "email": c.email,
                 "status": c.status,
                 "is_active": bool(c.is_active),
-                "last_sync": c.last_sync.isoformat() + "Z" if c.last_sync else None
+                "last_sync": c.last_sync.isoformat().replace('+00:00', '') + "Z" if c.last_sync else None
             } for c in current_user.connections
         ]
     }
@@ -720,7 +720,7 @@ async def get_busy_slots(current_user: User = Depends(get_current_user), db: Ses
         BusySlot.start_time <= now + timedelta(days=30)
     ).all()
     return [
-        {"start": s.start_time.isoformat() + "Z", "end": s.end_time.isoformat() + "Z"} 
+        {"start": s.start_time.isoformat().replace('+00:00', '') + "Z", "end": s.end_time.isoformat().replace('+00:00', '') + "Z"} 
         for s in slots
     ]
 
@@ -913,8 +913,8 @@ async def get_my_meetings(current_user: User = Depends(get_current_user), db: Se
         result.append({
             "id": m.id,
             "title": m.title,
-            "start": s_time.isoformat() + "Z",
-            "end": e_time.isoformat() + "Z",
+            "start": s_time.isoformat().replace('+00:00', '') + "Z",
+            "end": e_time.isoformat().replace('+00:00', '') + "Z",
             "location": m.location,
             "group_id": m.group_id,
             "group_title": m.group.title if m.group else None,
