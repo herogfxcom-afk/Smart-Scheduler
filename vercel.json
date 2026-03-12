@@ -8,7 +8,11 @@
     "outputDirectory": "frontend/build/web",
     "rewrites": [
         {
-            "source": "/((?!api|webhook).*)",
+            "source": "/(api|auth|webhook|calendar|groups|meeting|users|cors-debug)(.*)",
+            "destination": "/api/index"
+        },
+        {
+            "source": "/((?!api|auth|webhook|calendar|groups|meeting|users|cors-debug).*)",
             "destination": "/index.html"
         }
     ]
