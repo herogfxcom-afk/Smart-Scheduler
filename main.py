@@ -83,6 +83,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Exception Logging Middleware
+@app.middleware("http")
+async def log_exceptions_middleware(request: Request, call_next):
+    try:
+        return await call_next(request)
+    except Exception as e:
+        import traceback
+        print(f"EXCEPTION IN REQUEST {request.method} {request.url.path}:")
+        traceback.print_exc()
+        # Still raise it so FastAPI/Vercel handles the 500 response
+        raise e
+
 # ─────────────────── TELEGRAM HELPERS ───────────────────
 from cachetools import TTLCache
 
