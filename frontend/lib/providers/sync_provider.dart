@@ -25,7 +25,7 @@ class SyncProvider extends ChangeNotifier {
 
     try {
       // 1. Trigger backend sync
-      final syncRes = await _apiService.post('/calendar/sync', {});
+      final syncRes = await _apiService.get('/calendar/sync');
       _syncedCount = syncRes.data['synced_count'] ?? 0;
       
       // 4. Update UI

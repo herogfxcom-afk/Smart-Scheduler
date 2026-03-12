@@ -24,16 +24,10 @@ class HeatmapGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     final now = userNow();
 
-    // FIX 1: gridStart must be a LOCAL date (not UTC) so that
-    // DateUtils.dateOnly(localStart).difference(gridStart) is always correct.
-    final today = DateTime(now.year, now.month, now.day); // LOCAL midnight
-
+    final today = DateTime(now.year, now.month, now.day);
     final int dayOffset = selectedDay.difference(today).inDays;
-    final DateTime gridStart = dayOffset >= 7
-        ? today.add(const Duration(days: 7))
-        : today;
+    final DateTime gridStart = dayOffset >= 7 ? today.add(const Duration(days: 7)) : today;
 
-    // 2. Group slots by hour and day-column index
     final Map<int, Map<int, List<TimeSlot>>> gridData = {};
     for (int hour = 7; hour < 24; hour++) {
       gridData[hour] = {};
@@ -46,18 +40,17 @@ class HeatmapGrid extends StatelessWidget {
       final localStart = toUserLocal(slot.start);
       final localEnd = toUserLocal(slot.end);
 
-      // FIX 1 cont: Both sides of difference() are now LOCAL datetimes
       final localStartDay = DateTime(localStart.year, localStart.month, localStart.day);
-      final localEndDay   = DateTime(localEnd.year,   localEnd.month,   localEnd.day);
+      final localEndDay = DateTime(localEnd.year, localEnd.month, localEnd.day);
 
       final int startDiff = localStartDay.difference(gridStart).inDays;
-      final int endDiff   = localEndDay.difference(gridStart).inDays;
+      final int endDiff = localEndDay.difference(gridStart).inDays;
 
       for (int currentDiff = startDiff; currentDiff <= endDiff; currentDiff++) {
         if (currentDiff < 0 || currentDiff >= 7) continue;
 
         int startHour = 7;
-        int endHour   = 23;
+        int endHour = 23;
 
         if (currentDiff == startDiff) startHour = localStart.hour.clamp(7, 23);
         if (currentDiff == endDiff) {
@@ -74,19 +67,19 @@ class HeatmapGrid extends StatelessWidget {
 
     return Column(
       children: [
-        // ── Days Header ──────────────────────────────────────────────
+        // Days Header
         Container(
-          padding: const EdgeInsets.symmetric(vertical: 8),
+          padding: const EdgeInsets.symmetric(vertical: 12),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.05),
-            borderRadius: BorderRadius.circular(8),
+            color: Colors.white.withOpacity(0.02),
+            border: Border(bottom: BorderSide(color: Colors.white.withOpacity(0.05))),
           ),
           child: Row(
             children: [
               const SizedBox(width: 50),
               ...List.generate(7, (index) {
                 final day = gridStart.add(Duration(days: index));
-                final isToday    = DateUtils.isSameDay(day, now);
+                final isToday = DateUtils.isSameDay(day, now);
                 final isSelected = DateUtils.isSameDay(day, selectedDay);
 
                 return Expanded(
@@ -94,21 +87,27 @@ class HeatmapGrid extends StatelessWidget {
                     child: Column(
                       children: [
                         Text(
-                          DateFormat('E').format(day),
+                          DateFormat('E').format(day).toUpperCase(),
                           style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            color: isSelected ? Colors.blue : Colors.grey,
+                            fontSize: 9,
+                            letterSpacing: 0.5,
+                            fontWeight: FontWeight.w800,
+                            color: isSelected ? Colors.blueAccent : Colors.white24,
                           ),
                         ),
-                        Text(
-                          day.day.toString(),
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                            color: isSelected
-                                ? Colors.blue
-                                : (isToday ? Colors.green : Colors.white70),
+                        const SizedBox(height: 4),
+                        Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: isSelected
+                              ? const BoxDecoration(color: Colors.blueAccent, shape: BoxShape.circle)
+                              : (isToday ? BoxDecoration(border: Border.all(color: Colors.greenAccent.withOpacity(0.5)), shape: BoxShape.circle) : null),
+                          child: Text(
+                            day.day.toString(),
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: isSelected || isToday ? FontWeight.bold : FontWeight.normal,
+                              color: isSelected ? Colors.white : (isToday ? Colors.greenAccent : Colors.white70),
+                            ),
                           ),
                         ),
                       ],
@@ -120,62 +119,52 @@ class HeatmapGrid extends StatelessWidget {
           ),
         ),
 
-        const SizedBox(height: 12),
-
-        // ── Time Grid ────────────────────────────────────────────────
+        // Time Grid
         Expanded(
           child: ListView.builder(
-            padding: const EdgeInsets.only(bottom: 80),
+            padding: const EdgeInsets.only(bottom: 100),
             itemCount: 17, // 7:00 – 23:00
             itemBuilder: (context, index) {
               final hour = index + 7;
 
               return SizedBox(
-                height: 50,
+                height: 56,
                 child: Row(
                   children: [
-                    // Time label
+                    // Time Label
                     SizedBox(
                       width: 50,
-                      child: Text(
-                        '$hour:00',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: Colors.grey.shade600,
-                          fontWeight: FontWeight.w500,
+                      child: Center(
+                        child: Text(
+                          '${hour.toString().padLeft(2, '0')}:00',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: Colors.white30,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
                     ),
 
-                    // 7 day columns
+                    // 7 Columns
                     ...List.generate(7, (dayIndex) {
                       final day = gridStart.add(Duration(days: dayIndex));
                       final cellSlots = gridData[hour]?[dayIndex] ?? [];
                       final isSelectedColumn = DateUtils.isSameDay(day, selectedDay);
 
-                      // FIX 2: Past cell is anything that has started in the past
-                      final cellStartLocal = DateTime(
-                        day.year, day.month, day.day, hour,
-                      );
+                      final cellStartLocal = DateTime(day.year, day.month, day.day, hour);
+                      final cellEndLocal = cellStartLocal.add(const Duration(hours: 1));
                       
-                      // An hour block is past if its start time is before the current hour on the same day,
-                      // OR if the cell's date is strictly before today's date.
-                      final isPast = cellStartLocal.isBefore(
-                        DateTime(now.year, now.month, now.day, now.hour)
-                      );
+                      // Soft isPast: only block if the hour has strictly passed (minute-based)
+                      final isPast = cellEndLocal.isBefore(now);
 
                       return Expanded(
                         child: GestureDetector(
-                          // FIX 2: past cells are not tappable
                           onTap: (!isPast && cellSlots.isNotEmpty)
                               ? () {
                                   final baseSlot = cellSlots.first;
-                                  // Build a granular UTC slot for the tapped cell
-                                  final clickedStart = DateTime(
-                                    day.year, day.month, day.day, hour,
-                                  ).toUtc();
-                                  final clickedEnd =
-                                      clickedStart.add(const Duration(hours: 1));
+                                  final clickedStart = cellStartLocal.toUtc();
+                                  final clickedEnd = clickedStart.add(const Duration(hours: 1));
                                   onSlotSelected(TimeSlot(
                                     start: clickedStart,
                                     end: clickedEnd,
@@ -185,31 +174,16 @@ class HeatmapGrid extends StatelessWidget {
                                 }
                               : null,
                           child: Container(
-                            margin: const EdgeInsets.all(1.5),
                             decoration: BoxDecoration(
-                              color: isSelectedColumn
-                                  ? Colors.white.withOpacity(0.04)
-                                  : Colors.transparent,
-                              borderRadius: BorderRadius.circular(4),
+                              color: isSelectedColumn ? Colors.white.withOpacity(0.01) : Colors.transparent,
                               border: Border.all(
-                                color: isSelectedColumn
-                                    ? Colors.blue.withOpacity(0.3)
-                                    : Colors.transparent,
+                                color: Colors.white.withOpacity(0.03),
                                 width: 0.5,
                               ),
                             ),
-                            clipBehavior: Clip.hardEdge,
                             child: Stack(
                               children: [
-                                // FIX 2: Past overlay — always on top of everything
-                                if (isPast)
-                                  Positioned.fill(
-                                    child: Container(
-                                      color: Colors.black.withOpacity(0.55),
-                                    ),
-                                  ),
-
-                                // ── Base slot colour layer ──
+                                // 1. Base slots (Availability)
                                 if (!isPast)
                                   ...cellSlots.map((slot) {
                                     final cellStartDt = gridStart.add(Duration(days: dayIndex, hours: hour));
@@ -223,30 +197,11 @@ class HeatmapGrid extends StatelessWidget {
                                           Expanded(
                                             flex: frac.height,
                                             child: Container(
-                                              width: double.infinity,
+                                              margin: const EdgeInsets.symmetric(horizontal: 1),
                                               decoration: BoxDecoration(
                                                 color: _getSlotColor(slot),
-                                                borderRadius: BorderRadius.circular(2),
-                                                border: Border.all(
-                                                  color: slot.availability == 1.0
-                                                      ? Colors.white.withOpacity(0.2)
-                                                      : Colors.transparent,
-                                                  width: 0.5,
-                                                ),
+                                                borderRadius: BorderRadius.circular(3),
                                               ),
-                                              child: slot.availability > 0 &&
-                                                      frac.height >= 25
-                                                  ? Center(
-                                                      child: Text(
-                                                        '${(slot.availability * 100).toInt()}%',
-                                                        style: const TextStyle(
-                                                          fontSize: 8,
-                                                          fontWeight: FontWeight.bold,
-                                                          color: Colors.white,
-                                                        ),
-                                                      ),
-                                                    )
-                                                  : null,
                                             ),
                                           ),
                                           if (frac.bottom > 0) Spacer(flex: frac.bottom),
@@ -255,20 +210,11 @@ class HeatmapGrid extends StatelessWidget {
                                     );
                                   }),
 
-                                // ── Purple meeting overlay ──
+                                // 2. Meetings (Purple)
                                 ...myMeetings.where((m) {
-                                  final cellStart =
-                                      gridStart.add(Duration(days: dayIndex, hours: hour));
-                                  final cellEnd =
-                                      cellStart.add(const Duration(hours: 1));
                                   final mStart = toUserLocal(m.start);
-                                  final mEnd   = toUserLocal(m.end);
-                                  final latestStart =
-                                      mStart.isAfter(cellStart) ? mStart : cellStart;
-                                  final earliestEnd =
-                                      mEnd.isBefore(cellEnd) ? mEnd : cellEnd;
-                                  // Add a small buffer of 1 minute to prevent rounding edge cases on rendering
-                                  return latestStart.isBefore(earliestEnd.add(const Duration(minutes: 1)));
+                                  final mEnd = toUserLocal(m.end);
+                                  return (mStart.isBefore(cellEndLocal) && mEnd.isAfter(cellStartLocal));
                                 }).map((meeting) {
                                   final cellStartDt = gridStart.add(Duration(days: dayIndex, hours: hour));
                                   final frac = _calcMeetingFraction(meeting, cellStartDt);
@@ -281,14 +227,11 @@ class HeatmapGrid extends StatelessWidget {
                                         Expanded(
                                           flex: frac.height,
                                           child: Container(
-                                            width: double.infinity,
+                                            margin: const EdgeInsets.symmetric(horizontal: 0.5),
                                             decoration: BoxDecoration(
-                                              color: Colors.purple.withOpacity(0.85),
+                                              color: Colors.purpleAccent.withOpacity(0.8),
                                               borderRadius: BorderRadius.circular(2),
-                                              border: Border.all(
-                                                color: Colors.white.withOpacity(0.3),
-                                                width: 1.0,
-                                              ),
+                                              border: Border.all(color: Colors.white24, width: 0.5),
                                             ),
                                           ),
                                         ),
@@ -297,6 +240,14 @@ class HeatmapGrid extends StatelessWidget {
                                     ),
                                   );
                                 }),
+
+                                // 3. Past Overlay (Softer)
+                                if (isPast)
+                                  Positioned.fill(
+                                    child: Container(
+                                      color: const Color(0xFF121212).withOpacity(0.5),
+                                    ),
+                                  ),
                               ],
                             ),
                           ),
@@ -346,17 +297,17 @@ class HeatmapGrid extends StatelessWidget {
   }
 
   Color _getSlotColor(TimeSlot slot) {
-    if (slot.isFullMatch)   return const Color(0xFF2E7D32).withOpacity(0.8); // green
-    if (slot.isMyBusy)      return Colors.blue.withOpacity(0.6);             // blue
-    if (slot.isOthersBusy)  return Colors.deepOrange.withOpacity(0.5);       // orange
-    return Colors.black.withOpacity(0.05);
+    if (slot.isFullMatch)   return Colors.greenAccent.withOpacity(0.4); 
+    if (slot.isMyBusy)      return Colors.blueAccent.withOpacity(0.3);             
+    if (slot.isOthersBusy)  return Colors.orangeAccent.withOpacity(0.3);       
+    return Colors.white.withOpacity(0.02);
   }
 }
 
-/// Simple immutable struct for top/height/bottom flex values.
 class _Frac {
   final int top;
   final int height;
   final int bottom;
   const _Frac(this.top, this.height, this.bottom);
 }
+
