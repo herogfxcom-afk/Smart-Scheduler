@@ -157,7 +157,12 @@ class HeatmapGrid extends StatelessWidget {
                       final cellStartLocal = DateTime(
                         day.year, day.month, day.day, hour,
                       );
-                      final isPast = cellStartLocal.isBefore(now);
+                      
+                      // An hour block is past if its start time is before the current hour on the same day,
+                      // OR if the cell's date is strictly before today's date.
+                      final isPast = cellStartLocal.isBefore(
+                        DateTime(now.year, now.month, now.day, now.hour)
+                      );
 
                       return Expanded(
                         child: GestureDetector(
