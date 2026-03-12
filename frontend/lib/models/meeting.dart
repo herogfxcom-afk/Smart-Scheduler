@@ -1,5 +1,23 @@
 import '../utils/timezone_utils.dart';
 
+/// Sanitizes ISO date strings that may have both an offset and trailing Z.
+/// e.g. "2026-03-12T12:10:00+00:00Z" -> "2026-03-12T12:10:00+00:00"
+DateTime _parseDate(String raw) {
+  // If the string ends with Z but also has a +/- offset before Z, strip the Z
+  if (raw.endsWith('Z') && raw.length > 1) {
+    final withoutZ = raw.substring(0, raw.length - 1);
+    // Check if there's already a timezone offset (+HH:MM or -HH:MM)
+    final plusIdx = withoutZ.lastIndexOf('+');
+    final minusIdx = withoutZ.lastIndexOf('-');
+    final offsetIdx = plusIdx > minusIdx ? plusIdx : minusIdx;
+    // Offset must be after 'T' and contain ':' (like +00:00)
+    if (offsetIdx > withoutZ.indexOf('T') && withoutZ.substring(offsetIdx).contains(':')) {
+      return DateTime.parse(withoutZ);
+    }
+  }
+  return DateTime.parse(raw);
+}
+
 class Meeting {
   final int id;
   final String title;
@@ -29,8 +47,8 @@ class Meeting {
     return Meeting(
       id: json['id'] as int,
       title: json['title'] as String,
-      start: DateTime.parse(json['start'] as String),
-      end: DateTime.parse(json['end'] as String),
+      start: _parseDate(json['start'] as String),
+      end: _parseDate(json['end'] as String),
       location: json['location'] as String?,
       groupId: json['group_id'] as int?,
       groupTitle: json['group_title'] as String?,

@@ -719,61 +719,71 @@ async def get_solo_scheduler(
     tz_offset: float = Query(default=0.0)
 ):
     """Returns 7-day busy/free segments for the current user's personal heatmap."""
-    if not (-12.0 <= tz_offset <= 14.0):
-        raise HTTPException(status_code=422, detail="Invalid timezone offset")
-        
-    from calendar_service import find_common_free_slots
-    
-    # Range: from user's local midnight (today 00:00 in user TZ) to 7 days later.
-    # We subtract tz_offset from UTC now to find the UTC moment that corresponds
-    # to the user's local midnight, keeping all further math in UTC.
-    utc_now = datetime.utcnow()
-    user_local_now = utc_now + timedelta(hours=tz_offset)
-    user_local_midnight = user_local_now.replace(hour=0, minute=0, second=0, microsecond=0)
-    start_date = user_local_midnight - timedelta(hours=tz_offset)  # back to UTC
-    end_date = start_date + timedelta(days=7)
-    
-    # Get user's working hours in the format expected by find_common_free_slots
-    avail = db.query(models.UserAvailability).filter(models.UserAvailability.user_id == current_user.id).all()
-    
-    # Initialize with default 9-18 for all days
-    working_hours_day = {"start": 9, "end": 18, "enabled": True}
-    user_avail = {i: working_hours_day for i in range(7)}
-    
-    # Override with user settings where available
-    for a in avail:
-        user_avail[a.day_of_week] = {
-            "start": int(a.start_time.split(":")[0]),
-            "end": int(a.end_time.split(":")[0]),
-            "enabled": a.is_enabled
-        }
+    try:
+        if not (-12.0 <= tz_offset <= 14.0):
+            raise HTTPException(status_code=422, detail="Invalid timezone offset")
             
-    # Get busy slots from database (Internal + Synced from Google/etc.)
-    db_slots = db.query(models.BusySlot).filter(models.BusySlot.user_id == current_user.id).all()
-    busy_slots = [(s.start_time, s.end_time) for s in db_slots]
-    
-    # Добавляем встречи созданные в приложении как занятые слоты
-    meeting_invites = db.query(models.MeetingInvite).filter(
-        models.MeetingInvite.user_id == current_user.id,
-        models.MeetingInvite.status.in_(["accepted", "pending"])
-    ).all()
-    for mi in meeting_invites:
-        m = mi.meeting
-        if m:
-            busy_slots.append((m.start_time, m.end_time))
-    print(f"DEBUG SOLO: {len(db_slots)} synced slots + {len(meeting_invites)} meeting invites for user {current_user.id}")
-    # We use find_common_free_slots for a single user
-    # This will categorize slots as "match" (free) or "my_busy" (busy)
-    segments = find_common_free_slots(
-        [busy_slots], 
-        start_date, 
-        end_date, 
-        [user_avail],
-        tz_offset_hours=tz_offset, # Use real dynamic offset from JS
-        requesting_user_index=0
-    )
-    
-    return segments
+        from calendar_service import find_common_free_slots
+        
+        # Range: from user's local midnight (today 00:00 in user TZ) to 7 days later.
+        utc_now = datetime.utcnow()
+        user_local_now = utc_now + timedelta(hours=tz_offset)
+        user_local_midnight = user_local_now.replace(hour=0, minute=0, second=0, microsecond=0)
+        start_date = user_local_midnight - timedelta(hours=tz_offset)  # back to UTC
+        end_date = start_date + timedelta(days=7)
+        
+        # Get user's working hours in the format expected by find_common_free_slots
+        avail = db.query(models.UserAvailability).filter(models.UserAvailability.user_id == current_user.id).all()
+        
+        # Initialize with default 9-18 for all days (each day gets its own dict copy)
+        user_avail = {i: {"start": 9, "end": 18, "enabled": True} for i in range(7)}
+        
+        # Override with user settings where available
+        for a in avail:
+            user_avail[a.day_of_week] = {
+                "start": int(a.start_time.split(":")[0]),
+                "end": int(a.end_time.split(":")[0]),
+                "enabled": bool(a.is_enabled)
+            }
+                
+        # Get busy slots from database (Internal + Synced from Google/etc.)
+        db_slots = db.query(models.BusySlot).filter(models.BusySlot.user_id == current_user.id).all()
+        busy_slots = []
+        for s in db_slots:
+            st = s.start_time.replace(tzinfo=None) if s.start_time.tzinfo else s.start_time
+            et = s.end_time.replace(tzinfo=None) if s.end_time.tzinfo else s.end_time
+            busy_slots.append((st, et))
+        
+        # Добавляем встречи созданные в приложении как занятые слоты
+        meeting_invites = db.query(models.MeetingInvite).filter(
+            models.MeetingInvite.user_id == current_user.id,
+            models.MeetingInvite.status.in_(["accepted", "pending"])
+        ).all()
+        for mi in meeting_invites:
+            m = mi.meeting
+            if m:
+                st = m.start_time.replace(tzinfo=None) if m.start_time.tzinfo else m.start_time
+                et = m.end_time.replace(tzinfo=None) if m.end_time.tzinfo else m.end_time
+                busy_slots.append((st, et))
+        print(f"DEBUG SOLO: {len(db_slots)} synced slots + {len(meeting_invites)} meeting invites for user {current_user.id}")
+        # We use find_common_free_slots for a single user
+        segments = find_common_free_slots(
+            [busy_slots], 
+            start_date, 
+            end_date, 
+            [user_avail],
+            tz_offset_hours=tz_offset,
+            requesting_user_index=0
+        )
+        
+        return segments
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        print(f"ERROR in get_solo_scheduler: {str(e)}")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Solo scheduler error: {str(e)}")
 
 @app.post("/api/busy-slots")
 async def add_busy_slot(data: dict, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -885,11 +895,14 @@ async def get_my_meetings(current_user: User = Depends(get_current_user), db: Se
     result = []
     for m in sorted(meetings, key=lambda x: x.start_time):
         invite = invite_map.get(m.id)
+        # Ensure naive UTC datetimes (strip tzinfo if present) before adding Z
+        s_time = m.start_time.replace(tzinfo=None) if m.start_time.tzinfo else m.start_time
+        e_time = m.end_time.replace(tzinfo=None) if m.end_time.tzinfo else m.end_time
         result.append({
             "id": m.id,
             "title": m.title,
-            "start": m.start_time.isoformat() + "Z",
-            "end": m.end_time.isoformat() + "Z",
+            "start": s_time.isoformat() + "Z",
+            "end": e_time.isoformat() + "Z",
             "location": m.location,
             "group_id": m.group_id,
             "group_title": m.group.title if m.group else None,
