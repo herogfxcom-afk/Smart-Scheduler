@@ -5,6 +5,8 @@ import '../../../models/meeting.dart';
 import '../../../utils/timezone_utils.dart';
 import '../../../utils/calendar_processor.dart';
 import '../../../core/telegram/telegram_service.dart';
+import '../../../providers/availability_provider.dart';
+import 'package:provider/provider.dart';
 
 class HeatmapGrid extends StatefulWidget {
   final List<TimeSlot> slots;
@@ -27,6 +29,7 @@ class HeatmapGrid extends StatefulWidget {
 }
 
 class _HeatmapGridState extends State<HeatmapGrid> {
+  final GlobalKey<SfCalendarState> _calendarKey = GlobalKey<SfCalendarState>();
   final CalendarController _calendarController = CalendarController();
   late String? myUserId;
 
@@ -34,6 +37,17 @@ class _HeatmapGridState extends State<HeatmapGrid> {
   void initState() {
     super.initState();
     myUserId = TelegramService().getUserId();
+    
+    // Explicitly refresh SfCalendar when availability changes
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<AvailabilityProvider>().addListener(_refreshCalendar);
+    });
+  }
+
+  void _refreshCalendar() {
+    if (mounted) {
+      _calendarKey.currentState?.refresh();
+    }
   }
 
   @override
@@ -46,6 +60,7 @@ class _HeatmapGridState extends State<HeatmapGrid> {
 
   @override
   void dispose() {
+    context.read<AvailabilityProvider>().removeListener(_refreshCalendar);
     _calendarController.dispose();
     super.dispose();
   }
@@ -56,7 +71,7 @@ class _HeatmapGridState extends State<HeatmapGrid> {
       children: [
         Expanded(
           child: SfCalendar(
-            key: const ValueKey('sf_calendar_heatmap'),
+            key: _calendarKey,
             controller: _calendarController,
             view: CalendarView.week,
             initialDisplayDate: widget.selectedDay,
@@ -70,9 +85,10 @@ class _HeatmapGridState extends State<HeatmapGrid> {
               dayFormat: 'E',
               nonWorkingDays: [7], // Sunday
             ),
-            specialRegions: _getWorkingHoursRegions(),
+            specialRegions: _getWorkingHoursRegions(context),
             timeRegionBuilder: _timeRegionBuilder,
             backgroundColor: Colors.transparent,
+
             headerHeight: 0, // We hide the default header to rely on the timeline week header
             dataSource: _MeetingDataSource(_buildAppointments()),
             appointmentBuilder: _appointmentBuilder,
@@ -171,9 +187,9 @@ class _HeatmapGridState extends State<HeatmapGrid> {
   Widget _appointmentBuilder(BuildContext context, CalendarAppointmentDetails details) {
     final ProcessedAppointment appt = details.appointments.first;
     
-    // Past events are darkened
+    // Past events are darkened/grayed
     final isPast = appt.isPast;
-    final color = isPast ? Colors.grey.withOpacity(0.3) : appt.color;
+    final color = isPast ? Colors.grey.withOpacity(0.4) : appt.color;
     
     // Border for meetings or my busy slots
     final hasBorder = appt.isMeeting || (appt.originalSlot.isFromMe(myUserId));
@@ -195,6 +211,19 @@ class _HeatmapGridState extends State<HeatmapGrid> {
 
   Widget _buildAppointmentContent(ProcessedAppointment appt) {
     if (appt.isMeeting) {
+      if (appt.isPast) {
+        return Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              appt.subject,
+              style: const TextStyle(fontSize: 8, color: Colors.white60, decoration: TextDecoration.lineThrough),
+              overflow: TextOverflow.ellipsis,
+            ),
+            const Text("Past", style: TextStyle(fontSize: 7, color: Colors.white38)),
+          ],
+        );
+      }
       return Text(
         appt.subject,
         style: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold),
@@ -255,27 +284,45 @@ class _HeatmapGridState extends State<HeatmapGrid> {
     );
   }
 
-  List<TimeRegion> _getWorkingHoursRegions() {
-    return [
-      // Mon-Fri: 09:00 - 18:00
-      TimeRegion(
-        startTime: DateTime(2024, 1, 1, 9, 0, 0),
-        endTime: DateTime(2024, 1, 1, 18, 0, 0),
-        recurrenceRule: 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR',
-        color: Colors.green.withOpacity(0.05),
-        text: 'Working Hours',
-        enablePointerInteraction: true,
-      ),
-      // Saturday: 09:00 - 14:00
-      TimeRegion(
-        startTime: DateTime(2024, 1, 6, 9, 0, 0),
-        endTime: DateTime(2024, 1, 6, 14, 0, 0),
-        recurrenceRule: 'FREQ=WEEKLY;BYDAY=SA',
-        color: Colors.green.withOpacity(0.05),
-        text: 'Working Hours',
-        enablePointerInteraction: true,
-      ),
-    ];
+  List<TimeRegion> _getWorkingHoursRegions(BuildContext context) {
+    final availability = context.watch<AvailabilityProvider>().availability;
+    if (availability.isEmpty) return [];
+
+    final List<TimeRegion> regions = [];
+    
+    // Map backend day format (0=Monday) to RRule (MO)
+    final rruleDays = ['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU'];
+
+    for (var a in availability) {
+      if (!a.isEnabled) continue;
+
+      try {
+        final startParts = a.startTime.split(':');
+        final endParts = a.endTime.split(':');
+        
+        final startHour = int.parse(startParts[0]);
+        final startMin = int.parse(startParts[1]);
+        final endHour = int.parse(endParts[0]);
+        final endMin = int.parse(endParts[1]);
+
+        // We use a fixed date for the baseline of the recurring rule
+        // Sunday Jan 5, 2025 was the start of a week
+        // Monday Jan 6, 2025 starts the MO rule
+        final baseDate = DateTime(2025, 1, 6 + a.dayOfWeek);
+
+        regions.add(TimeRegion(
+          startTime: DateTime(baseDate.year, baseDate.month, baseDate.day, startHour, startMin),
+          endTime: DateTime(baseDate.year, baseDate.month, baseDate.day, endHour, endMin),
+          recurrenceRule: 'FREQ=WEEKLY;BYDAY=${rruleDays[a.dayOfWeek]}',
+          color: Colors.green.withOpacity(0.08),
+          text: 'Working Hours',
+          enablePointerInteraction: true,
+        ));
+      } catch (e) {
+        debugPrint("Error creating time region: $e");
+      }
+    }
+    return regions;
   }
 
   Widget _timeRegionBuilder(BuildContext context, TimeRegionDetails details) {
@@ -298,19 +345,24 @@ class _HeatmapGridState extends State<HeatmapGrid> {
   }
 
   bool _isWithinWorkingHours(DateTime date) {
-    final day = date.weekday;
-    final hour = date.hour;
+    final availability = context.read<AvailabilityProvider>().availability;
+    if (availability.isEmpty) return true; // Default to open if not loaded
+
+    final dayData = availability.firstWhere(
+      (a) => a.dayOfWeek == (date.weekday - 1), // DateTime weekday is 1-7, backend 0-6
+      orElse: () => availability[0], // fallback
+    );
+
+    if (!dayData.isEnabled) return false;
+
+    final parts = dayData.startTime.split(':');
+    final startVal = int.parse(parts[0]) * 60 + int.parse(parts[1]);
     
-    // Mon-Fri
-    if (day >= 1 && day <= 5) {
-      return hour >= 9 && hour < 18;
-    }
-    // Sat
-    if (day == 6) {
-      return hour >= 9 && hour < 14;
-    }
-    // Sun
-    return false;
+    final endParts = dayData.endTime.split(':');
+    final endVal = int.parse(endParts[0]) * 60 + int.parse(endParts[1]);
+
+    final currentVal = date.hour * 60 + date.minute;
+    return currentVal >= startVal && currentVal < endVal;
   }
 
   void _showNonWorkingHourWarning(BuildContext context) {

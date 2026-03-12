@@ -22,9 +22,10 @@ from calendar_service import GoogleCalendarService
 from caldav_service import AppleCalendarService
 import os
 import httpx
+import json
 import asyncio
 import re
-import json
+from zoneinfo import ZoneInfo
 
 def parse_ms_datetime(dt_str: str) -> datetime:
     # Microsoft returns 7 decimal places for microseconds: 2026-03-12T07:00:00.0000000Z
@@ -403,14 +404,19 @@ async def cors_debug():
     return {"cors": "enabled", "middleware": "CORSEverywhere"}
 
 @app.get("/auth/me")
-async def get_me(current_user: User = Depends(get_current_user)):
+async def get_me(timezone: str = Query(None), current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Returns the current user profile including all connected calendars."""
+    if timezone and current_user.timezone != timezone:
+        current_user.timezone = timezone
+        db.commit()
+
     return {
         "id": current_user.id,
         "telegram_id": current_user.telegram_id,
         "username": current_user.username,
         "first_name": current_user.first_name,
         "email": current_user.email,
+        "timezone": current_user.timezone,
         "is_connected": any(c.provider == 'google' and c.is_active for c in current_user.connections),
         "is_apple_connected": any(c.provider == 'apple' and c.is_active for c in current_user.connections),
         "connections": [
@@ -1433,7 +1439,13 @@ async def create_meeting(data: dict, background_tasks: BackgroundTasks, current_
             if not mentions_str:
                 mentions_str = "коллеги"
             
-            time_str = start_local.strftime("%d.%m %H:%M")
+            # Group notification: use creator's timezone
+            try:
+                creator_tz = current_user.timezone or "UTC"
+                creator_local_time = start_time.astimezone(ZoneInfo(creator_tz))
+                time_str = creator_local_time.strftime("%d.%m %H:%M")
+            except Exception:
+                time_str = start_local.strftime("%d.%m %H:%M") # fallback to offset-based if zoneinfo fails
             
             # IMPORTANT: StartApp parameter CANNOT contain the minus (-) sign.
             app_chat_id = str(target_chat).replace("-", "n")
@@ -1467,20 +1479,26 @@ async def create_meeting(data: dict, background_tasks: BackgroundTasks, current_
                     })
                 ]
                 
-                dm_text_template = (
-                    f"🔔 У вас новое приглашение на встречу!\n\n"
-                    f"👤 От: {current_user.first_name or current_user.username}\n"
-                    f"📍 Тема: {summary}\n"
-                    f"⏰ Время: {time_str}\n\n"
-                    f"Откройте приложение, чтобы подтвердить."
-                )
-                
                 for u in invited_users:
                     if u.telegram_id:
+                        # Convert meeting time to target user's local timezone
+                        try:
+                            user_tz = u.timezone or "UTC"
+                            local_time = start_time.astimezone(ZoneInfo(user_tz))
+                            u_time_str = local_time.strftime("%d.%m %H:%M")
+                        except Exception:
+                            u_time_str = time_str # Fallback to default
+                            
                         tasks.append(
                             client.post(tg_url, json={
                                 "chat_id": u.telegram_id,
-                                "text": dm_text_template,
+                                "text": (
+                                    f"🔔 У вас новое приглашение на встречу!\n\n"
+                                    f"👤 От: {current_user.first_name or current_user.username}\n"
+                                    f"📍 Тема: {summary}\n"
+                                    f"⏰ Время: {u_time_str}\n\n"
+                                    f"Откройте приложение, чтобы подтвердить."
+                                ),
                                 "parse_mode": "Markdown",
                                 "reply_markup": reply_markup
                             })

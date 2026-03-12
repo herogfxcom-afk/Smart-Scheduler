@@ -70,7 +70,9 @@ class ApiService {
 
   Future<Map<String, dynamic>> getMe() async {
     try {
-      final response = await _dio.get('/auth/me');
+      final response = await _dio.get('/auth/me', queryParameters: {
+        'timezone': getUserTimezone(),
+      });
       return response.data as Map<String, dynamic>;
     } catch (e) {
       throw Exception('Failed to fetch user profile: $e');

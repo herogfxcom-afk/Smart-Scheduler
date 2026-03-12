@@ -14,6 +14,7 @@ class User(Base):
     first_name = Column(String(255), nullable=True)
     photo_url = Column(Text, nullable=True)
     email = Column(String(255), nullable=True)  # Added for collective invites
+    timezone = Column(String(50), default="UTC")
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.datetime.now(datetime.timezone.utc))
 
     busy_slots = relationship("BusySlot", back_populates="user")
