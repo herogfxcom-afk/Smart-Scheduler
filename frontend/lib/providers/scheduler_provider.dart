@@ -148,17 +148,20 @@ class SchedulerProvider extends ChangeNotifier {
       if (e is DioException) {
         if (e.response?.statusCode == 409) {
           _error = "Это время уже занято в вашем календаре или другой встречей.";
-        } else if (e.response?.statusCode == 400 && e.response?.data?['detail'] == 'outside_working_hours') {
-          _error = "Невозможно назначить встречу на нерабочее время.";
+        } else if (e.response?.data != null && e.response?.data is Map) {
+          final detail = e.response!.data['detail'];
+          _error = detail == 'outside_working_hours' ? "Невозможно назначить встречу на нерабочее время." : detail?.toString() ?? e.message;
         } else {
-          _error = e.toString();
+          _error = e.message;
         }
       } else {
         _error = e.toString();
       }
       
       // Rollback optimistic update if failed
-      await fetchCommonSlots(_lastTelegramIds, chatId: _currentChatId); 
+      _suggestedSlots = originalSlots; // Use instant rollback without triggering a full HTTP fetch to prevent jitter
+      notifyListeners();
+      
       return false;
     } finally {
       _isLoading = false;

@@ -16,6 +16,16 @@ class SoloProvider with ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get errorText => _error;
 
+  String _parseError(dynamic e) {
+    if (e is DioException) {
+      if (e.response?.data != null && e.response?.data is Map) {
+         return e.response!.data['detail']?.toString() ?? e.message ?? "Ошибка сервера";
+      }
+      return e.message ?? "Сетевая ошибка";
+    }
+    return e.toString();
+  }
+
   Future<void> fetchSoloSlots() async {
     try {
       _isLoading = true;
@@ -26,7 +36,7 @@ class SoloProvider with ChangeNotifier {
       final data = await _apiService.getSoloSlots(tzOffset);
       _slots = data.map((s) => TimeSlot.fromJson(s)).toList();
     } catch (e) {
-      _error = e.toString();
+      _error = _parseError(e);
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -41,7 +51,7 @@ class SoloProvider with ChangeNotifier {
       await _apiService.addBusySlot(start, end);
       await fetchSoloSlots(); 
     } catch (e) {
-      _error = e.toString();
+      _error = _parseError(e);
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -56,7 +66,7 @@ class SoloProvider with ChangeNotifier {
       await _apiService.deleteBusySlot(start, end);
       await fetchSoloSlots(); 
     } catch (e) {
-      _error = e.toString();
+      _error = _parseError(e);
     } finally {
       _isLoading = false;
       notifyListeners();

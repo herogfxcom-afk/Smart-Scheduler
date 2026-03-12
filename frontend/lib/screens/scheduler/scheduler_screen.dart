@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../providers/scheduler_provider.dart';
 import '../../providers/group_provider.dart';
 import '../../providers/meeting_provider.dart';
+import '../../providers/solo_provider.dart';
 import '../../models/time_slot.dart';
 import '../../utils/timezone_utils.dart';
 import 'widgets/heatmap_grid.dart';
@@ -42,6 +43,9 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
     });
   }
 
+  List<int> _lastFetchedParticipantIds = [];
+  bool _isFetchingSlots = false;
+
   void _onGroupChanged() {
     if (!mounted) return;
     final groupProvider = context.read<GroupProvider>();
@@ -49,11 +53,28 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
     
     if (groupProvider.participants.isNotEmpty) {
       final ids = groupProvider.participants.map((p) => p.telegramId).toList();
+      ids.sort(); // Sort to ensure consistent comparison
+      
+      // Prevent over-fetching: check if the participants list actually changed
+      if (const ListEquality().equals(ids, _lastFetchedParticipantIds) && scheduler.suggestedSlots.isNotEmpty) {
+        return; 
+      }
+      
+      if (_isFetchingSlots) return; // Prevent concurrent identical requests
+      _isFetchingSlots = true;
+      _lastFetchedParticipantIds = ids;
+      
       print("DEBUG: Participants updated, fetching slots for: $ids in group: ${groupProvider.chatId}");
       // Always fetch myMeetings first so purple coloring is correct after reload
       context.read<MeetingProvider>().fetchMyMeetings().then((_) {
         // avoid running if unmounted
-        if (mounted) scheduler.fetchCommonSlots(ids, chatId: groupProvider.chatId);
+        if (mounted) {
+          scheduler.fetchCommonSlots(ids, chatId: groupProvider.chatId).whenComplete(() {
+            if (mounted) _isFetchingSlots = false;
+          });
+        } else {
+          _isFetchingSlots = false;
+        }
       });
     }
   }
@@ -550,6 +571,7 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
                         Navigator.pop(context);
                         if (success) {
                           context.read<MeetingProvider>().fetchMyMeetings();
+                          context.read<SoloProvider>().fetchSoloSlots(); // Keep Solo slots visually synced
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(content: Text('Встреча успешно удалена'), backgroundColor: Colors.green),
                           );
@@ -767,6 +789,7 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
                             const SnackBar(content: Text("Встреча успешно создана!"), backgroundColor: Colors.green),
                           );
                           context.read<MeetingProvider>().fetchMyMeetings();
+                          context.read<SoloProvider>().fetchSoloSlots(); // Keep Solo slots visually synced
                         } else {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(content: Text("Ошибка при создании встречи"), backgroundColor: Colors.red),
