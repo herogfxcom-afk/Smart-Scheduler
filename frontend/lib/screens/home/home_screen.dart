@@ -11,6 +11,7 @@ import '../../providers/availability_provider.dart';
 import '../../providers/language_provider.dart';
 import '../../providers/solo_provider.dart'; // Added
 import '../../models/meeting.dart';
+import '../../utils/timezone_utils.dart';
 import 'widgets/solo_dashboard.dart'; // Added
 
 class HomeScreen extends StatefulWidget {
@@ -555,11 +556,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   String _formatDate(DateTime dt) {
-    return "${dt.day}.${dt.month}.${dt.year}";
+    final localDt = toUserLocal(dt);
+    return "${localDt.day}.${localDt.month}.${localDt.year}";
   }
 
   String _formatTime(DateTime dt) {
-    return "${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}";
+    final localDt = toUserLocal(dt);
+    return "${localDt.hour.toString().padLeft(2, '0')}:${localDt.minute.toString().padLeft(2, '0')}";
   }
 
   void _showMeetingDetails(BuildContext context, Meeting meeting, LanguageProvider lang) {
