@@ -4,7 +4,7 @@ import json
 import os
 from urllib.parse import parse_qs
 from fastapi import Header, HTTPException, Depends
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from database import get_db
 from models import User
 from dotenv import load_dotenv
@@ -71,7 +71,7 @@ def get_current_user(init_data: Optional[str] = Header(None), db: Session = Depe
     print(f"AUTH: Extracted Telegram ID: {telegram_id}")
     
     try:
-        user = db.query(User).filter(User.telegram_id == telegram_id).first()
+        user = db.query(User).options(joinedload(User.connections)).filter(User.telegram_id == telegram_id).first()
         if not user:
             print(f"AUTH: Creating new user for ID: {telegram_id}")
             user = User(

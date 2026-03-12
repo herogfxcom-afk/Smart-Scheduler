@@ -397,7 +397,7 @@ async def get_me(current_user: User = Depends(get_current_user)):
         "id": current_user.id,
         "telegram_id": current_user.telegram_id,
         "username": current_user.username,
-        "first_name": current_user.firstName if hasattr(current_user, 'firstName') else current_user.first_name,
+        "first_name": current_user.first_name,
         "email": current_user.email,
         "is_connected": any(c.provider == 'google' and c.is_active for c in current_user.connections),
         "is_apple_connected": any(c.provider == 'apple' and c.is_active for c in current_user.connections),
