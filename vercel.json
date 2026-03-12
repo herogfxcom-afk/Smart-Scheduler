@@ -3,6 +3,14 @@
     "outputDirectory": "frontend/build/web",
     "rewrites": [
         {
+            "source": "/api/(.*)",
+            "destination": "/api/index.py"
+        },
+        {
+            "source": "/webhook/(.*)",
+            "destination": "/api/index.py"
+        },
+        {
             "source": "/(.*)",
             "destination": "/index.html"
         }
