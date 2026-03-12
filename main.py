@@ -1101,13 +1101,17 @@ async def get_free_slots(data: dict, current_user: User = Depends(get_current_us
         tz_offset = data.get("tz_offset", 0)
         print(f"DEBUG: Finding slots for TG IDs: {tg_ids} Offset: {tz_offset}")
         
+        # Prepare string IDs for find_common_free_slots to use as source_user_id
+        tg_id_strings = [str(uid) for uid in tg_ids] # Should match the IDs from 'users' list but we need strings
+
         free_windows = find_common_free_slots(
             busy_slots_per_user,
             start_date=start,
             end_date=end,
             user_availabilities=user_availabilities,
             tz_offset_hours=tz_offset,
-            requesting_user_index=requesting_user_index
+            requesting_user_index=requesting_user_index,
+            user_ids=[str(u.telegram_id) for u in users] # Pass the actually resolved users' TG IDs
         )
         
         print(f"DEBUG: Found {len(free_windows)} free windows")

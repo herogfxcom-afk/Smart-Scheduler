@@ -127,45 +127,38 @@ def find_common_free_slots(
     end_date: datetime,
     user_availabilities: list[dict] = None,
     tz_offset_hours: float = 0,
-    requesting_user_index: int = -1
+    requesting_user_index: int = -1,
+    user_ids: list[str] = None
 ) -> list[dict]:
     """
     Finds time slots and categorizes them as match, my_busy, or others_busy.
-    user_availabilities: list of dicts. each dict is {day_of_week (0-6): {"start": hour_int, "end": hour_int, "enabled": bool}}
-    tz_offset_hours: The timezone offset of the user (e.g. +2 for UTC+2), used to align UTC loop with local working hours.
-    requesting_user_index: Index of the current user in the busy_slots_per_user list to determine "my_busy".
+    user_ids: optional list of string IDs corresponding to the users in busy_slots_per_user.
     """
-    # Validation: Timezone offsets must be between -12 and +14
     if not (-12 <= tz_offset_hours <= 14):
         print(f"DEBUG: Invalid timezone offset: {tz_offset_hours}")
-        tz_offset_hours = 0.0 # Force fallback or we could raise an error
+        tz_offset_hours = 0.0
         
     num_users = len(busy_slots_per_user)
     if num_users == 0:
         return []
 
-    # Default availability if not provided (9:00 - 18:00 for everyone)
     if not user_availabilities:
         default_day = {"start": 9, "end": 18, "enabled": True}
         user_availabilities = [{d: default_day for d in range(7)} for _ in range(num_users)]
 
     free_slots = []
-    # Start searching from the beginning of the day of start_date
     curr_day_start = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
     last_day = end_date.replace(hour=0, minute=0, second=0, microsecond=0)
     
     current = curr_day_start
     while current <= last_day:
-        weekday = current.weekday() # 0 = Monday
+        weekday = current.weekday()
         
-        # Check every 30-minute block of the 24h day
-        # But we only care about blocks that are within AT LEAST ONE user's work hours
         for hour in range(24):
             for minute in [0, 30]:
                 segment_start = current.replace(hour=hour, minute=minute)
                 segment_end = segment_start + timedelta(minutes=30)
                 
-                # Adjust segment_start to LOCAL time for working hours check
                 local_segment_start = segment_start + timedelta(hours=tz_offset_hours)
                 local_segment_end = segment_end + timedelta(hours=tz_offset_hours)
                 local_weekday = local_segment_start.weekday()
@@ -175,79 +168,75 @@ def find_common_free_slots(
                 if segment_start >= end_date:
                     break
                 
-                # Count availability for this specific segment
                 active_users_in_segment = 0
                 working_but_busy_count = 0
                 requesting_user_busy = False
                 
+                # NEW: Track which specific user is busy
+                busy_user_id = None
+                busy_user_count = 0
+
                 for i in range(num_users):
-                    # Check if user is busy with a calendar event
                     is_busy_with_event = False
                     for b_start, b_end in busy_slots_per_user[i]:
                         if max(segment_start, b_start) < min(segment_end, b_end):
                             is_busy_with_event = True
                             break
                     
-                    if is_busy_with_event and i == requesting_user_index:
-                        requesting_user_busy = True
+                    if is_busy_with_event:
+                        busy_user_count += 1
+                        if user_ids and i < len(user_ids):
+                            busy_user_id = user_ids[i]
+                        
+                        if i == requesting_user_index:
+                            requesting_user_busy = True
 
                     u_avail = user_availabilities[i].get(local_weekday, {"start": 9, "end": 18, "enabled": True})
-                    
-                    # Is this user "at work" during this segment?
                     is_working = u_avail["enabled"]
                     if is_working:
                         h_start = local_segment_start.hour
                         h_end = local_segment_end.hour
                         m_end = local_segment_end.minute
-                        
-                        # Correctly handle 00:00 next day as 24:00 today
                         if h_end == 0 and m_end == 0 and local_segment_start.date() != local_segment_end.date():
                             h_end = 24
-
-                        if h_start < u_avail["start"]:
-                            is_working = False
-                        elif h_end > u_avail["end"]:
-                            is_working = False
-                        elif h_end == u_avail["end"] and m_end > 0:
+                        if h_start < u_avail["start"] or h_end > u_avail["end"] or (h_end == u_avail["end"] and m_end > 0):
                             is_working = False
                     
-                    if not is_working:
-                        continue # User not available for meetings now
+                    if not is_working: continue
                     
                     active_users_in_segment += 1
                     if is_busy_with_event:
                         working_but_busy_count += 1
                 
-                # Render logic: Only include slots if someone is working OR if I am busy (to paint it blue).
-                if active_users_in_segment > 0 or requesting_user_busy:
-                    if requesting_user_busy:
-                        type_label = "my_busy"
-                        availability = 0.0
-                    elif active_users_in_segment > 0:
-                        free_count = active_users_in_segment - working_but_busy_count
-                        if free_count == active_users_in_segment:
-                            type_label = "match"
-                            availability = 1.0
-                        else:
-                            type_label = "others_busy"
-                            availability = free_count / active_users_in_segment
+                # Logic for type and source identity
+                source_user_id = None
+                if requesting_user_busy:
+                    type_label = "my_busy"
+                    availability = 0.0
+                    if user_ids and requesting_user_index != -1:
+                        source_user_id = user_ids[requesting_user_index]
+                elif active_users_in_segment > 0:
+                    free_count = active_users_in_segment - working_but_busy_count
+                    if free_count == active_users_in_segment:
+                        type_label = "match"
+                        availability = 1.0
                     else:
                         type_label = "others_busy"
-                        availability = 0.0
+                        availability = free_count / active_users_in_segment
+                        # If exactly one other person is busy, we can identify them
+                        if busy_user_count == 1:
+                            source_user_id = busy_user_id
                 else:
-                    # Non-working hours for everyone, and no explicit event. 
-                    # We MUST return this so the UI knows it's 0% available!
-                    type_label = "my_busy" if num_users == 1 else "others_busy"
+                    type_label = "others_busy"
                     availability = 0.0
-                    active_users_in_segment = 0
-                    working_but_busy_count = 0
                 
                 total_c = max(active_users_in_segment, 1)
                 
+                # Combine adjacent segments with same properties
                 if free_slots and free_slots[-1]["type"] == type_label and \
                    free_slots[-1]["end"] == segment_start.isoformat() + "Z" and \
                    free_slots[-1].get("availability") == availability and \
-                   free_slots[-1].get("total_count") == total_c:
+                   free_slots[-1].get("source_user_id") == source_user_id:
                     free_slots[-1]["end"] = segment_end.isoformat() + "Z"
                 else:
                     free_slots.append({
@@ -256,8 +245,14 @@ def find_common_free_slots(
                         "type": type_label,
                         "free_count": max(active_users_in_segment - working_but_busy_count, 0),
                         "total_count": total_c,
-                        "availability": availability
+                        "availability": availability,
+                        "source_user_id": source_user_id
                     })
+            
+        current += timedelta(days=1)
+        
+    return free_slots
+
             
         current += timedelta(days=1)
         

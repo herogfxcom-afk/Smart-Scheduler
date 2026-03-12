@@ -9,6 +9,7 @@ import '../../providers/meeting_provider.dart';
 import '../../providers/solo_provider.dart';
 import '../../models/time_slot.dart';
 import '../../utils/timezone_utils.dart';
+import '../../utils/calendar_processor.dart';
 import 'widgets/heatmap_grid.dart';
 
 class SchedulerScreen extends StatefulWidget {
@@ -330,9 +331,9 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
                   ? HeatmapGrid(
                       slots: scheduler.suggestedSlots,
                       selectedDay: _selectedDay,
-                      ignoredParticipantIds: _ignoredParticipantIds,
                       myMeetings: context.watch<MeetingProvider>().meetings,
                       onSlotSelected: (slot) => _handleSlotSelected(context, scheduler, slot),
+                      calendarType: CalendarType.group,
                     )
                   : _buildListSlots(slotsForDay, scheduler),
             ),

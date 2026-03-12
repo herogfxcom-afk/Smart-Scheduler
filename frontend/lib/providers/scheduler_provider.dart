@@ -72,7 +72,6 @@ class SchedulerProvider extends ChangeNotifier {
     _isLoading = true;
     _error = null;
     _currentChatId = chatId;
-    // Remember these IDs so createMeeting/deleteMeeting can refresh correctly
     if (telegramIds.isNotEmpty) {
       _lastTelegramIds = List<int>.from(telegramIds);
     }
@@ -94,6 +93,17 @@ class SchedulerProvider extends ChangeNotifier {
       notifyListeners();
     }
   }
+
+  /// Returns slots filtered by type (Solo vs Group)
+  List<TimeSlot> getSlotsForType(CalendarType type) {
+    if (type == CalendarType.solo) {
+      // In solo mode, we only care about slots without sourceUserId (usually)
+      // or specifically tagged as yours.
+      return _suggestedSlots.where((slot) => slot.isFromSolo).toList();
+    }
+    return _suggestedSlots;
+  }
+
 
   Future<bool> createMeeting({
     required String title,

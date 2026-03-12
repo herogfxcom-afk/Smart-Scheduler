@@ -6,6 +6,7 @@ import 'package:smart_scheduler_frontend/providers/language_provider.dart';
 import 'package:smart_scheduler_frontend/screens/scheduler/widgets/heatmap_grid.dart';
 import 'package:smart_scheduler_frontend/models/time_slot.dart';
 import 'package:smart_scheduler_frontend/utils/timezone_utils.dart';
+import 'package:smart_scheduler_frontend/utils/calendar_processor.dart';
 
 class SoloDashboard extends StatefulWidget {
   const SoloDashboard({super.key});
@@ -72,6 +73,7 @@ class _SoloDashboardState extends State<SoloDashboard> {
                 }
               },
               myMeetings: meetingProvider.meetings,
+              calendarType: CalendarType.solo,
             ),
           ),
         ),
