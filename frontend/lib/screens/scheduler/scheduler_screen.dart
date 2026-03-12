@@ -671,6 +671,15 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
                   ),
                 ),
                 Divider(color: Color(0xFF2A2A2A), height: 1),
+                if (scheduler.error != null)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                    child: Text(
+                      scheduler.error!,
+                      style: const TextStyle(color: Colors.redAccent, fontSize: 13),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
                 // Поля формы
                 Padding(
                   padding: EdgeInsets.fromLTRB(20, 16, 20, 0),
@@ -968,8 +977,8 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
                       onPressed: canSubmit ? () async {
                         setState(() => isLoading = true);
                         final updatedSlot = TimeSlot(
-                            start: startTime.toUtc(), 
-                            end: endTime.toUtc());
+                            start: fromUserLocal(startTime), 
+                            end: fromUserLocal(endTime));
                         final groupProvider = context.read<GroupProvider>();
                         
                         // Collect IDs of participants who are NOT ignored

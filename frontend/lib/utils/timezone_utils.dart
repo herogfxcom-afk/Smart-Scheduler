@@ -21,6 +21,14 @@ DateTime userNow() {
   return toUserLocal(DateTime.now().toUtc());
 }
 
+DateTime fromUserLocal(DateTime localDateTime) {
+  if (!localDateTime.isUtc) {
+    return localDateTime.toUtc();
+  }
+  final offsetHours = getUserTzOffset();
+  return localDateTime.subtract(Duration(minutes: (offsetHours * 60).toInt()));
+}
+
 String getUserTimezone() {
   try {
     final jsTz = globalContext['userTimezone'];
