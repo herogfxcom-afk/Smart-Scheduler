@@ -1149,28 +1149,33 @@ async def create_meeting(data: dict, background_tasks: BackgroundTasks, current_
         models.UserAvailability.day_of_week == start_local.weekday()
     ).first()
     
-    if u_avail and u_avail.is_enabled:
+    # Use defaults if not found, same as the heatmap grid logic
+    if u_avail:
+        is_enabled = u_avail.is_enabled
+        try:
+            u_h_start = int(u_avail.start_time.split(":")[0])
+            u_h_end = int(u_avail.end_time.split(":")[0])
+            u_m_end = int(u_avail.end_time.split(":")[1])
+        except:
+            u_h_start, u_h_end, u_m_end = 9, 18, 0
+    else:
+        is_enabled = True
+        u_h_start, u_h_end, u_m_end = 9, 18, 0
+        
+    if is_enabled:
         h_start = start_local.hour
         h_end = end_local.hour
         m_end = end_local.minute
         
-        try:
-            # Parse "HH:MM" to int hour
-            u_h_start = int(u_avail.start_time.split(":")[0])
-            u_h_end = int(u_avail.end_time.split(":")[0])
-        except Exception as e:
-            print(f"DEBUG: Error parsing availability hours: {e}")
-            u_h_start, u_h_end = 9, 18
-            
         if h_end == 0 and m_end == 0 and start_local.date() != end_local.date():
             h_end = 24
             
-        if h_start < u_h_start or h_end > u_h_end or (h_end == u_h_end and m_end > 0):
-            print(f"DEBUG: Booking outside working hours: {h_start}:00 to {h_end}:{m_end} (Working from {u_h_start}:00 to {u_h_end}:00)")
+        if h_start < u_h_start or h_end > u_h_end or (h_end == u_h_end and m_end > u_m_end):
+            print(f"DEBUG: Booking outside working hours: {h_start}:00 to {h_end}:{m_end} (Working from {u_h_start}:00 to {u_h_end}:{u_m_end})")
             raise HTTPException(status_code=400, detail="outside_working_hours")
     else:
-        # If no availability defined for this day OR it is disabled, assume non-working day
-        print(f"DEBUG: Booking on non-working day/disabled availability: {start_local.weekday()}")
+        # If explicitly disabled, assume non-working day
+        print(f"DEBUG: Booking on disabled availability: {start_local.weekday()}")
         raise HTTPException(status_code=400, detail="outside_working_hours")
 
     # Check Idempotency
