@@ -742,12 +742,20 @@ async def get_solo_scheduler(
             raise HTTPException(status_code=422, detail="Invalid timezone offset")
             
         from calendar_service import find_common_free_slots
+        from zoneinfo import ZoneInfo
         
+        # Determine user's timezone (priority: DB field, fallback: UTC)
+        user_tz_name = current_user.timezone or "UTC"
+        try:
+            u_tz = ZoneInfo(user_tz_name)
+        except:
+            u_tz = ZoneInfo("UTC")
+
         # Range: from user's local midnight (today 00:00 in user TZ) to 7 days later.
         utc_now = datetime.now(timezone.utc)
-        user_local_now = utc_now + timedelta(hours=tz_offset)
+        user_local_now = utc_now.astimezone(u_tz)
         user_local_midnight = user_local_now.replace(hour=0, minute=0, second=0, microsecond=0)
-        start_date = user_local_midnight - timedelta(hours=tz_offset)  # back to UTC
+        start_date = user_local_midnight.astimezone(timezone.utc)
         end_date = start_date + timedelta(days=7)
         
         # Get user's working hours in the format expected by find_common_free_slots
@@ -790,7 +798,8 @@ async def get_solo_scheduler(
             start_date, 
             end_date, 
             [user_avail],
-            tz_offset_hours=tz_offset,
+            user_timezones=[user_tz_name],
+            viewer_tz=user_tz_name,
             requesting_user_index=0
         )
         
