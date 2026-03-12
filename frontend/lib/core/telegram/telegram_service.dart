@@ -50,6 +50,13 @@ class TelegramService {
     return {'id': 0, 'first_name': 'Unknown'};
   }
 
+  String? getUserId() {
+    final user = getUser();
+    final id = user['id'];
+    if (id == 0 || id == null) return null;
+    return id.toString();
+  }
+
   String? getChatTitle() {
     if (!isReady) return null;
     try {

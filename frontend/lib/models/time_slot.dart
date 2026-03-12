@@ -50,6 +50,12 @@ class TimeSlot {
       };
 
   bool get isCommonSlot => type == 'match';
+  bool get isFullMatch => type == 'match';
+  bool get isMyBusy => type == 'my_busy' || type == 'busy';
+  bool get isOthersBusy => type == 'others_busy';
+
+  bool get isFromSolo => sourceUserId == null;
+  bool get isFromGroup => sourceUserId != null;
 
   bool isFromMe(String? myUserId) {
     if (myUserId == null || sourceUserId == null) return false;

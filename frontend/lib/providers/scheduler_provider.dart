@@ -4,6 +4,7 @@ import '../core/api/api_service.dart';
 import '../models/time_slot.dart';
 import '../models/user.dart';
 import '../utils/timezone_utils.dart';
+import '../utils/calendar_processor.dart';
 
 class SchedulerProvider extends ChangeNotifier {
   final ApiService _apiService;

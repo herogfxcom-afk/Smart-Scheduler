@@ -4,6 +4,7 @@ import '../../../models/time_slot.dart';
 import '../../../models/meeting.dart';
 import '../../../utils/timezone_utils.dart';
 import '../../../utils/calendar_processor.dart';
+import '../../../core/telegram/telegram_service.dart';
 
 class HeatmapGrid extends StatelessWidget {
   final List<TimeSlot> slots;
@@ -35,11 +36,91 @@ class HeatmapGrid extends StatelessWidget {
 
     return Column(
       children: [
-        // ... (Days Header logic stays same)
-        // ...
-        // ...
-        // In the cell render loop:
-        // ...
+        // Days Header
+        Container(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.05),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            children: [
+              const SizedBox(width: 50),
+              ...List.generate(7, (index) {
+                final day = processor.gridStart.add(Duration(days: index));
+                final isToday = DateUtils.isSameDay(day, now);
+                final isSelected = DateUtils.isSameDay(day, selectedDay);
+                
+                return Expanded(
+                  child: Center(
+                    child: Column(
+                      children: [
+                        Text(
+                          DateFormat('E').format(day),
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: isSelected ? Colors.blue : Colors.grey,
+                          ),
+                        ),
+                        Text(
+                          day.day.toString(),
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                            color: isSelected ? Colors.blue : (isToday ? Colors.green : Colors.white70),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.only(bottom: 20), 
+            itemCount: processor.maxHour - processor.minHour,
+            itemBuilder: (context, index) {
+              final hour = index + processor.minHour;
+              return SizedBox(
+                height: 50,
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 50,
+                      child: Text(
+                        "$hour:00",
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.grey.shade600,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                    ...List.generate(7, (dayIndex) {
+                      final day = processor.gridStart.add(Duration(days: dayIndex));
+                      final cellSlots = processor.getSlots(hour, dayIndex);
+                      final isSelectedColumn = DateUtils.isSameDay(day, selectedDay);
+
+                      final cellStartLocal = DateTime(day.year, day.month, day.day, hour);
+                      final cellEndLocal = cellStartLocal.add(const Duration(hours: 1));
+                      final isPast = cellEndLocal.isBefore(now);
+                      
+                      return Expanded(
+                        child: GestureDetector(
+                          onTap: (!isPast && cellSlots.isNotEmpty) ? () {
+                            final baseSlot = cellSlots.first.originalSlot;
+                            onSlotSelected(TimeSlot(
+                              start: cellStartLocal.toUtc(),
+                              end: cellEndLocal.toUtc(),
+                              type: baseSlot.type,
+                              availability: baseSlot.availability,
+                            ));
+                          } : null,
                           child: Container(
                             margin: const EdgeInsets.all(1.5),
                             decoration: BoxDecoration(
