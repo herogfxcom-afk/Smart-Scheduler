@@ -215,7 +215,7 @@ async def on_startup_webhook():
 @app.post("/webhook/bot")
 @limiter.limit("60/minute") # Protect from webhook spam
 async def telegram_webhook(
-    req: FastAPIRequest, 
+    request: Request, 
     db: Session = Depends(get_db),
     x_telegram_bot_api_secret_token: str = Header(None)
 ):
@@ -231,7 +231,7 @@ async def telegram_webhook(
         return {"ok": False}
     
     try:
-        update = await req.json()
+        update = await request.json()
     except Exception:
         return {"ok": False}
     
