@@ -29,11 +29,20 @@ SCOPES = [
 ]
 
 @router.get("/url")
-async def get_google_auth_url(current_user: User = Depends(get_current_user)):
+async def get_google_auth_url(request: Request, current_user: User = Depends(get_current_user)):
     """Returns the Google OAuth2 authorization URL."""
     # Debug logging to identify why Google might see client_id as None
     client_id = os.getenv("GOOGLE_CLIENT_ID")
     redirect_uri = os.getenv("GOOGLE_REDIRECT_URI")
+    
+    # Robust redirect URI detection for production
+    if not redirect_uri or "localhost" in redirect_uri:
+        host = request.headers.get("host")
+        scheme = "https" if "vercel.app" in str(host) or "railway.app" in str(host) else "http"
+        if host:
+            redirect_uri = f"{scheme}://{host}/auth/google/callback"
+            print(f"DEBUG GOOGLE OAUTH: Auto-detected redirect_uri: {redirect_uri}")
+
     print(f"DEBUG GOOGLE OAUTH: Fetching URL for user {current_user.id}")
     print(f"DEBUG GOOGLE OAUTH: CLIENT_ID starts with: {str(client_id)[:10]}... (len: {len(str(client_id)) if client_id else 0})")
     print(f"DEBUG GOOGLE OAUTH: REDIRECT_URI: {redirect_uri}")
@@ -53,13 +62,20 @@ async def get_google_auth_url(current_user: User = Depends(get_current_user)):
     return {"url": auth_url}
 
 @router.get("/callback")
-async def google_oauth_callback(code: str, state: str, db: Session = Depends(get_db)):
+async def google_oauth_callback(request: Request, code: str, state: str, db: Session = Depends(get_db)):
     """Handles the Google OAuth2 callback and stores tokens."""
     token_url = "https://oauth2.googleapis.com/token"
     
     client_id = os.getenv("GOOGLE_CLIENT_ID")
     client_secret = os.getenv("GOOGLE_CLIENT_SECRET")
     redirect_uri = os.getenv("GOOGLE_REDIRECT_URI")
+    
+    # Robust redirect URI detection for production
+    if not redirect_uri or "localhost" in redirect_uri:
+        host = request.headers.get("host")
+        scheme = "https" if "vercel.app" in str(host) or "railway.app" in str(host) else "http"
+        if host:
+            redirect_uri = f"{scheme}://{host}/auth/google/callback"
     
     data = {
         "code": code,
