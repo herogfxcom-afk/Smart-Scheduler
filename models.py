@@ -14,7 +14,7 @@ class User(Base):
     first_name = Column(String(255), nullable=True)
     photo_url = Column(Text, nullable=True)
     email = Column(String(255), nullable=True)  # Added for collective invites
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.datetime.now(datetime.timezone.utc))
 
     busy_slots = relationship("BusySlot", back_populates="user")
     created_meetings = relationship("GroupMeeting", back_populates="creator")
@@ -33,8 +33,8 @@ class CalendarConnection(Base):
     status = Column(String(50), default="active")  # 'active', 'error', 'needs_reauth'
     last_error = Column(Text, nullable=True)
     is_active = Column(Integer, default=1)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
-    last_sync = Column(DateTime, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.datetime.now(datetime.timezone.utc))
+    last_sync = Column(DateTime(timezone=True), nullable=True)
 
     user = relationship("User", back_populates="connections")
     busy_slots = relationship("BusySlot", back_populates="connection", cascade="all, delete-orphan")
@@ -49,7 +49,7 @@ class Group(Base):
     telegram_chat_id = Column(String(255), unique=True, index=True, nullable=False)
     title = Column(String(255), nullable=True)
     last_invite_message_id = Column(BigInteger, nullable=True) # For updating the "Magic Sync" card
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.datetime.now(datetime.timezone.utc))
     
     participants = relationship("GroupParticipant", back_populates="group")
     meetings = relationship("GroupMeeting", back_populates="group")
@@ -73,8 +73,8 @@ class GroupMeeting(Base):
     id = Column(Integer, primary_key=True)
     group_id = Column(Integer, ForeignKey("groups.id"))
     user_id = Column(Integer, ForeignKey("users.id"))  # Track the creator
-    start_time = Column(DateTime, nullable=False)
-    end_time = Column(DateTime, nullable=False)
+    start_time = Column(DateTime(timezone=True), nullable=False)
+    end_time = Column(DateTime(timezone=True), nullable=False)
     title = Column(String(255))
     location = Column(Text, nullable=True)
     description = Column(Text, nullable=True)
@@ -93,8 +93,8 @@ class BusySlot(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"))
     connection_id = Column(Integer, ForeignKey("calendar_connections.id"), nullable=True)
-    start_time = Column(DateTime, nullable=False)
-    end_time = Column(DateTime, nullable=False)
+    start_time = Column(DateTime(timezone=True), nullable=False)
+    end_time = Column(DateTime(timezone=True), nullable=False)
 
     user = relationship("User", back_populates="busy_slots")
     connection = relationship("CalendarConnection", back_populates="busy_slots")
@@ -126,7 +126,7 @@ class MeetingInvite(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     status = Column(String(50), default="pending")  # 'pending', 'accepted', 'declined'
     google_event_id = Column(String(255), nullable=True) # Each participant might have their own event
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.datetime.now(datetime.timezone.utc))
 
     meeting = relationship("GroupMeeting", back_populates="invites")
     user = relationship("User")

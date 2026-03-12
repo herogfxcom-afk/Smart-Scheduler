@@ -8,6 +8,16 @@ google-auth-oauthlib
 google-api-python-client
 python-multipart
 python-dotenv
+fastapi
+uvicorn
+sqlalchemy
+psycopg2-binary
+cryptography
+google-auth
+google-auth-oauthlib
+google-api-python-client
+python-multipart
+python-dotenv
 pytest
 httpx
 pytz
@@ -16,3 +26,5 @@ requests
 aiogram
 alembic
 cachetools
+sentry-sdk
+slowapi

@@ -656,375 +656,60 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
                   padding: EdgeInsets.fromLTRB(20, 4, 8, 12),
                   child: Row(
                     children: [
-                      Icon(Icons.event_rounded, 
-                          color: Color(0xFF4A90E2), size: 22),
-                      SizedBox(width: 10),
-                      Text('Новая встреча',
-                        style: TextStyle(color: Colors.white, 
-                            fontSize: 18, fontWeight: FontWeight.w600)),
-                      Spacer(),
-                      IconButton(
-                        icon: Icon(Icons.close, color: Color(0xFF707070)),
-                        onPressed: () => Navigator.pop(context),
-                      ),
-                    ],
-                  ),
-                ),
-                Divider(color: Color(0xFF2A2A2A), height: 1),
-                if (scheduler.error != null)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-                    child: Text(
-                      scheduler.error!,
-                      style: const TextStyle(color: Colors.redAccent, fontSize: 13),
-                      textAlign: TextAlign.center,
+      builder: (context) {
+        return Container(
+          decoration: BoxDecoration(
+            color: Color(0xFF1E1E1E),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            border: Border.all(color: Colors.white.withOpacity(0.05)),
+          ),
+          child: Consumer<SchedulerProvider>(
+            builder: (context, schedulerWatch, _) {
+              final isLoading = schedulerWatch.isLoading;
+              final error = schedulerWatch.error;
+              
+              return StatefulBuilder(
+                builder: (context, setInternalState) {
+                  final bool canSubmit = titleController.text.trim().isNotEmpty && !isLoading && hasPickedTime;
+
+                  return Padding(
+                    padding: EdgeInsets.only(
+                      bottom: MediaQuery.of(context).viewInsets.bottom,
                     ),
-                  ),
-                // Поля формы
-                Padding(
-                  padding: EdgeInsets.fromLTRB(20, 16, 20, 0),
-                  child: Column(
-                    children: [
-                      // Поле названия
-                      TextField(
-                        controller: titleController,
-                        onChanged: (_) => setState(() {}),
-                        style: TextStyle(color: Colors.white, fontSize: 20,
-                            fontWeight: FontWeight.w500),
-                        decoration: InputDecoration(
-                          hintText: 'Название встречи',
-                          hintStyle: TextStyle(color: Color(0xFF505050), 
-                              fontSize: 20),
-                          border: InputBorder.none,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Индикатор перетаскивания
+                        Container(
+                          margin: EdgeInsets.only(top: 12),
+                          width: 40,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: Color(0xFF404040),
+                            borderRadius: BorderRadius.circular(2),
+                          ),
                         ),
-                      ),
-                      SizedBox(height: 4),
-                      // Поле описания
-                      TextField(
-                        controller: descriptionController,
-                        maxLines: 2,
-                        style: TextStyle(color: Color(0xFFB0B0B0), fontSize: 14),
-                        decoration: InputDecoration(
-                          hintText: 'Описание (необязательно)',
-                          hintStyle: TextStyle(color: Color(0xFF454545), fontSize: 14),
-                          border: InputBorder.none,
-                          contentPadding: EdgeInsets.zero,
-                        ),
-                      ),
-                      SizedBox(height: 8),
-                      // Дата
-                      InkWell(
-                        onTap: () async {
-                          final picked = await showDatePicker(
-                            context: context,
-                            initialDate: startTime.isBefore(userNow()) ? userNow() : startTime,
-                            firstDate: userNow(),
-                            lastDate: userNow()
-                                .add(Duration(days: 365)),
-                            builder: (ctx, child) => Theme(
-                              data: Theme.of(ctx).copyWith(
-                                colorScheme: ColorScheme.dark(
-                                  primary: Color(0xFF4A90E2),
-                                  surface: Color(0xFF252525),
-                                ),
-                              ),
-                              child: child!,
-                            ),
-                          );
-                          if (picked != null) {
-                            setState(() {
-                              final diff = endTime.difference(startTime);
-                              startTime = DateTime(picked.year, 
-                                  picked.month, picked.day,
-                                  startTime.hour, startTime.minute);
-                              endTime = startTime.add(diff);
-                            });
-                          }
-                        },
-                        child: Padding(
-                          padding: EdgeInsets.symmetric(vertical: 10),
+                        // Заголовок
+                        Padding(
+                          padding: EdgeInsets.fromLTRB(20, 4, 8, 12),
                           child: Row(
                             children: [
-                              Icon(Icons.calendar_today_rounded,
-                                  color: Color(0xFF606060), size: 20),
-                              SizedBox(width: 12),
-                              Text(
-                                DateFormat('EEEE, d MMMM yyyy')
-                                    .format(startTime),
-                                style: TextStyle(color: Color(0xFFD0D0D0),
-                                    fontSize: 15),
+                              Icon(Icons.event_rounded, 
+                                  color: Color(0xFF4A90E2), size: 22),
+                              SizedBox(width: 10),
+                              Text('Новая встреча',
+                                style: TextStyle(color: Colors.white, 
+                                    fontSize: 18, fontWeight: FontWeight.w600)),
+                              Spacer(),
+                              IconButton(
+                                icon: Icon(Icons.close, color: Color(0xFF707070)),
+                                onPressed: () => Navigator.pop(context),
                               ),
                             ],
                           ),
                         ),
-                      ),
-                      // Время (Отдельные кнопки для Start и End)
-                      Padding(
-                        padding: EdgeInsets.symmetric(vertical: 10),
-                        child: Row(
-                          children: [
-                            Icon(Icons.schedule_rounded, color: Color(0xFF606060), size: 20),
-                            SizedBox(width: 12),
-                            
-                            // Начало
-                            InkWell(
-                              onTap: () async {
-                                final picked = await showTimePicker(
-                                  context: context,
-                                  initialTime: TimeOfDay.fromDateTime(startTime),
-                                  builder: (ctx, child) => Theme(
-                                    data: Theme.of(ctx).copyWith(
-                                      colorScheme: ColorScheme.dark(
-                                        primary: Color(0xFF4A90E2),
-                                        surface: Color(0xFF252525),
-                                      ),
-                                    ),
-                                    child: child!,
-                                  ),
-                                );
-                                if (picked != null) {
-                                  setState(() {
-                                    hasPickedTime = true;
-                                    startTime = DateTime(startTime.year,
-                                        startTime.month, startTime.day,
-                                        picked.hour, picked.minute);
-                                    // Авто-правка конца, если он стал раньше начала
-                                    if (endTime.isBefore(startTime)) {
-                                      endTime = startTime.add(Duration(hours: 1));
-                                    }
-                                  });
-                                }
-                              },
-                              child: Container(
-                                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                decoration: BoxDecoration(
-                                  color: Color(0xFF2A2A2A),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Text(
-                                  DateFormat('HH:mm').format(startTime),
-                                  style: TextStyle(
-                                      color: Color(0xFF4A90E2),
-                                      fontWeight: FontWeight.w600),
-                                ),
-                              ),
-                            ),
-                            
-                            Padding(
-                              padding: EdgeInsets.symmetric(horizontal: 8),
-                              child: Text('—', style: TextStyle(color: Color(0xFF606060))),
-                            ),
-                            
-                            // Конец
-                            InkWell(
-                              onTap: () async {
-                                final picked = await showTimePicker(
-                                  context: context,
-                                  initialTime: TimeOfDay.fromDateTime(endTime),
-                                  builder: (ctx, child) => Theme(
-                                    data: Theme.of(ctx).copyWith(
-                                      colorScheme: ColorScheme.dark(
-                                        primary: Color(0xFF4A90E2),
-                                        surface: Color(0xFF252525),
-                                      ),
-                                    ),
-                                    child: child!,
-                                  ),
-                                );
-                                if (picked != null) {
-                                  setState(() {
-                                    hasPickedTime = true;
-                                    final newEnd = DateTime(endTime.year,
-                                        endTime.month, endTime.day,
-                                        picked.hour, picked.minute);
-                                    
-                                    // Защита от выбора времени конца ДО времени начала
-                                    if (newEnd.isAfter(startTime)) {
-                                      endTime = newEnd;
-                                    } else {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(
-                                          content: Text('Конец встречи не может быть раньше начала!'),
-                                          backgroundColor: Colors.red,
-                                        )
-                                      );
-                                    }
-                                  });
-                                }
-                              },
-                              child: Container(
-                                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                decoration: BoxDecoration(
-                                  color: Color(0xFF2A2A2A),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Text(
-                                  DateFormat('HH:mm').format(endTime),
-                                  style: TextStyle(
-                                      color: Color(0xFF4A90E2),
-                                      fontWeight: FontWeight.w600),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      SizedBox(height: 16),
-
-                      // Тип встречи: Online / Offline
-                      Container(
-                        decoration: BoxDecoration(
-                          color: Color(0xFF252525),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        padding: EdgeInsets.all(4),
-                        child: Row(
-                          children: [
-                            // Online
-                            Expanded(
-                              child: GestureDetector(
-                                onTap: () => setState(() => isOnline = true),
-                                child: AnimatedContainer(
-                                  duration: Duration(milliseconds: 200),
-                                  padding: EdgeInsets.symmetric(vertical: 10),
-                                  decoration: BoxDecoration(
-                                    color: isOnline ? Color(0xFF4A90E2) : Colors.transparent,
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(Icons.videocam_rounded,
-                                          color: isOnline ? Colors.white : Colors.grey,
-                                          size: 18),
-                                      SizedBox(width: 6),
-                                      Text('Онлайн',
-                                          style: TextStyle(
-                                            color: isOnline ? Colors.white : Colors.grey,
-                                            fontWeight: isOnline ? FontWeight.w600 : FontWeight.normal,
-                                          )),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                            // Offline
-                            Expanded(
-                              child: GestureDetector(
-                                onTap: () => setState(() => isOnline = false),
-                                child: AnimatedContainer(
-                                  duration: Duration(milliseconds: 200),
-                                  padding: EdgeInsets.symmetric(vertical: 10),
-                                  decoration: BoxDecoration(
-                                    color: !isOnline ? Color(0xFF27AE60) : Colors.transparent,
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(Icons.location_on_rounded,
-                                          color: !isOnline ? Colors.white : Colors.grey,
-                                          size: 18),
-                                      SizedBox(width: 6),
-                                      Text('Оффлайн',
-                                          style: TextStyle(
-                                            color: !isOnline ? Colors.white : Colors.grey,
-                                            fontWeight: !isOnline ? FontWeight.w600 : FontWeight.normal,
-                                          )),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      // Поле адреса (только для оффлайн)
-                      if (!isOnline) ...[
-                        SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Icon(Icons.place_rounded, color: Color(0xFF606060), size: 20),
-                            SizedBox(width: 12),
-                            Expanded(
-                              child: TextField(
-                                controller: locationController,
-                                style: TextStyle(color: Colors.white, fontSize: 15),
-                                decoration: InputDecoration(
-                                  hintText: 'Адрес или место встречи',
-                                  hintStyle: TextStyle(color: Color(0xFF505050)),
-                                  border: InputBorder.none,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        Divider(color: Color(0xFF2A2A2A)),
-                      ],
-
-                      SizedBox(height: 20),
-                    ],
-                  ),
-                ),
-                // Кнопка
-                Padding(
-                  padding: EdgeInsets.fromLTRB(20, 0, 20, 20),
-                  child: SizedBox(
-                    width: double.infinity,
-                    height: 52,
-                    child: ElevatedButton(
-                      onPressed: canSubmit ? () async {
-                        setState(() => isLoading = true);
-                        final updatedSlot = TimeSlot(
-                            start: fromUserLocal(startTime), 
-                            end: fromUserLocal(endTime));
-                        final groupProvider = context.read<GroupProvider>();
+                        Divider(color: Color(0xFF2A2A2A), height: 1),
                         
-                        // Collect IDs of participants who are NOT ignored
-                        final invitedIds = groupProvider.participants
-                            .where((p) => !_ignoredParticipantIds.contains(p.id.toString()))
-                            .map((p) => p.telegramId)
-                            .toList();
-
-                        final success = await scheduler.createMeeting(
-                          title: titleController.text.trim(),
-                          description: descriptionController.text.trim(),
-                          slot: updatedSlot,
-                          invitedTelegramIds: invitedIds,
-                          chatId: groupProvider.chatId,
-                          meetingType: isOnline ? 'online' : 'offline',
-                          location: isOnline ? null : locationController.text.trim(),
-                        );
-                        setState(() => isLoading = false);
-                        if (success && context.mounted) {
-                          // Refresh meeting list AND heatmap to show purple highlights
-                          final ids = groupProvider.participants.map((p) => p.telegramId).toList();
-                          context.read<MeetingProvider>().fetchMyMeetings();
-                          scheduler.fetchCommonSlots(ids, chatId: groupProvider.chatId);
-                          Navigator.pop(context);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('✅ Встреча забронирована!'),
-                              backgroundColor: Color(0xFF2ECC71),
-                            ),
-                          );
-                        }
-                      } : null,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: canSubmit 
-                            ? Color(0xFF4A90E2) 
-                            : Color(0xFF2A2A2A),
-                        foregroundColor: canSubmit 
-                            ? Colors.white 
-                            : Color(0xFF505050),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                      ),
-                      child: isLoading
-                        ? SizedBox(width: 22, height: 22,
-                            child: CircularProgressIndicator(
                                 color: Colors.white, strokeWidth: 2.5))
                         : Text('Забронировать',
                             style: TextStyle(fontSize: 16,

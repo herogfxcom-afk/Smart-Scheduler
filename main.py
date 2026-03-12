@@ -4,6 +4,10 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
+import sentry_sdk
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta, timezone
@@ -20,6 +24,7 @@ import os
 import httpx
 import asyncio
 import re
+import json
 
 def parse_ms_datetime(dt_str: str) -> datetime:
     # Microsoft returns 7 decimal places for microseconds: 2026-03-12T07:00:00.0000000Z
@@ -29,6 +34,21 @@ def parse_ms_datetime(dt_str: str) -> datetime:
     return datetime.fromisoformat(dt_str)
 
 app = FastAPI(title="Smart Scheduler API")
+
+# Initialize Sentry
+SENTRY_DSN = os.getenv("SENTRY_DSN")
+if SENTRY_DSN:
+    sentry_sdk.init(
+        dsn=SENTRY_DSN,
+        traces_sample_rate=0.1,
+        environment=os.getenv("RAILWAY_ENVIRONMENT_NAME", "production")
+    )
+    print("Sentry initialized")
+
+# Initialize Rate Limiter
+limiter = Limiter(key_func=lambda req: req.headers.get("init-data", "anon"))
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Create database tables
 from database import engine
@@ -44,154 +64,167 @@ def migrate_db():
         models.Base.metadata.create_all(bind=engine)
         print("Database tables ensured.")
     except Exception as e:
-        print(f"Table Creation Error: {e}")
+# @app.on_event("startup")
+# def migrate_db():
+#     from sqlalchemy import text, inspect
+#     # Ensure tables exist first
+#     try:
+#         models.Base.metadata.create_all(bind=engine)
+#         print("Database tables ensured.")
+#     except Exception as e:
+#         print(f"Table Creation Error: {e}")
 
-    inspector = inspect(engine)
+#     inspector = inspect(engine)
     
-    # Check users table
-    users_cols = [col['name'] for col in inspector.get_columns('users')]
-    if 'email' not in users_cols:
-        with engine.connect() as conn:
-            try:
-                conn.execute(text("ALTER TABLE users ADD COLUMN email VARCHAR(255)"))
-                conn.commit()
-                print("Migration: Added email column to users table.")
-            except Exception as e:
-                print(f"Migration Error (email): {e}")
+#     # Check users table
+#     users_cols = [col['name'] for col in inspector.get_columns('users')]
+#     if 'email' not in users_cols:
+#         with engine.connect() as conn:
+#             try:
+#                 conn.execute(text("ALTER TABLE users ADD COLUMN email VARCHAR(255)"))
+#                 conn.commit()
+#                 print("Migration: Added email column to users table.")
+#             except Exception as e:
+#                 print(f"Migration Error (email): {e}")
 
-    # Check groups table for telegram_chat_id type change
-    try:
-        with engine.connect() as conn:
-            # We use USING clause for PostgreSQL to handle BigInteger to VARCHAR conversion
-            if engine.url.drivername == 'postgresql':
-                conn.execute(text("ALTER TABLE groups ALTER COLUMN telegram_chat_id TYPE VARCHAR(255) USING telegram_chat_id::text"))
-            else:
-                # SQLite or others - note SQLite can't actually do this via ALTER, 
-                # but we'll try standard SQL for MySQL/etc.
-                conn.execute(text("ALTER TABLE groups ALTER COLUMN telegram_chat_id VARCHAR(255)"))
+#     # Check groups table for telegram_chat_id type change
+#     try:
+#         with engine.connect() as conn:
+#             # We use USING clause for PostgreSQL to handle BigInteger to VARCHAR conversion
+#             if engine.url.drivername == 'postgresql':
+#                 conn.execute(text("ALTER TABLE groups ALTER COLUMN telegram_chat_id TYPE VARCHAR(255) USING telegram_chat_id::text"))
+#             else:
+#                 # SQLite or others - note SQLite can't actually do this via ALTER, 
+#                 # but we'll try standard SQL for MySQL/etc.
+#                 conn.execute(text("ALTER TABLE groups ALTER COLUMN telegram_chat_id VARCHAR(255)"))
                 
-            conn.commit()
-            print("Migration: Updated telegram_chat_id to VARCHAR for invite tokens.")
-    except Exception as e:
-        print(f"Migration Note (telegram_chat_id): {e}. This might be expected on SQLite or if already migrated.")
+#             conn.commit()
+#             print("Migration: Updated telegram_chat_id to VARCHAR for invite tokens.")
+#     except Exception as e:
+#         print(f"Migration Note (telegram_chat_id): {e}. This might be expected on SQLite or if already migrated.")
 
-    # Check user_availability table
-    if not inspector.has_table('user_availability'):
-        try:
-            models.Base.metadata.tables['user_availability'].create(engine)
-            print("Migration: Created user_availability table.")
-        except Exception as e:
-            print(f"Migration Error (user_availability): {e}")
+#     # Check user_availability table
+#     if not inspector.has_table('user_availability'):
+#         try:
+#             models.Base.metadata.tables['user_availability'].create(engine)
+#             print("Migration: Created user_availability table.")
+#         except Exception as e:
+#             print(f"Migration Error (user_availability): {e}")
 
-    # Check group_meetings table for user_id column
-    meeting_cols = [col['name'] for col in inspector.get_columns('group_meetings')]
-    if 'user_id' not in meeting_cols:
-        try:
-            with engine.connect() as conn:
-                conn.execute(text("ALTER TABLE group_meetings ADD COLUMN user_id INTEGER REFERENCES users(id)"))
-                conn.commit()
-                print("Migration: Added user_id column to group_meetings table.")
-        except Exception as e:
-            print(f"Migration Error (user_id): {e}")
+#     # Check group_meetings table for user_id column
+#     meeting_cols = [col['name'] for col in inspector.get_columns('group_meetings')]
+#     if 'user_id' not in meeting_cols:
+#         try:
+#             with engine.connect() as conn:
+#                 conn.execute(text("ALTER TABLE group_meetings ADD COLUMN user_id INTEGER REFERENCES users(id)"))
+#                 conn.commit()
+#                 print("Migration: Added user_id column to group_meetings table.")
+#         except Exception as e:
+#             print(f"Migration Error (user_id): {e}")
 
-    # Add description column to group_meetings if missing
-    meeting_cols2 = [col['name'] for col in inspector.get_columns('group_meetings')]
-    if 'description' not in meeting_cols2:
-        try:
-            with engine.connect() as conn:
-                conn.execute(text("ALTER TABLE group_meetings ADD COLUMN description TEXT"))
-                conn.commit()
-                print("Migration: Added description column to group_meetings table.")
-        except Exception as e:
-            print(f"Migration Error (description): {e}")
+#     # Add description column to group_meetings if missing
+#     meeting_cols2 = [col['name'] for col in inspector.get_columns('group_meetings')]
+#     if 'description' not in meeting_cols2:
+#         try:
+#             with engine.connect() as conn:
+#                 conn.execute(text("ALTER TABLE group_meetings ADD COLUMN description TEXT"))
+#                 conn.commit()
+#                 print("Migration: Added description column to group_meetings table.")
+#         except Exception as e:
+#             print(f"Migration Error (description): {e}")
 
-    # --- PHASE 0: MULTI-CALENDAR MIGRATION ---
+#     # --- PHASE 0: MULTI-CALENDAR MIGRATION ---
     
-    # 1. Create calendar_connections table if it doesn't exist
-    if not inspector.has_table('calendar_connections'):
-        try:
-            models.CalendarConnection.__table__.create(engine)
-            print("Migration: Created calendar_connections table.")
-        except Exception as e:
-            print(f"Migration Error (calendar_connections): {e}")
+#     # 1. Create calendar_connections table if it doesn't exist
+#     if not inspector.has_table('calendar_connections'):
+#         try:
+#             models.CalendarConnection.__table__.create(engine)
+#             print("Migration: Created calendar_connections table.")
+#         except Exception as e:
+#             print(f"Migration Error (calendar_connections): {e}")
 
-    # 2. Add connection_id to busy_slots if it doesn't exist
-    busy_cols = [col['name'] for col in inspector.get_columns('busy_slots')]
-    if 'connection_id' not in busy_cols:
-        try:
-            with engine.connect() as conn:
-                conn.execute(text("ALTER TABLE busy_slots ADD COLUMN connection_id INTEGER REFERENCES calendar_connections(id)"))
-                conn.commit()
-                print("Migration: Added connection_id to busy_slots table.")
-        except Exception as e:
-            print(f"Migration Error (connection_id): {e}")
+#     # 2. Add connection_id to busy_slots if it doesn't exist
+#     busy_cols = [col['name'] for col in inspector.get_columns('busy_slots')]
+#     if 'connection_id' not in busy_cols:
+#         try:
+#             with engine.connect() as conn:
+#                 conn.execute(text("ALTER TABLE busy_slots ADD COLUMN connection_id INTEGER REFERENCES calendar_connections(id)"))
+#                 conn.commit()
+#                 print("Migration: Added connection_id to busy_slots table.")
+#         except Exception as e:
+#             print(f"Migration Error (connection_id): {e}")
 
-    # 4. Check meeting_invites table
-    if not inspector.has_table('meeting_invites'):
-        try:
-            models.MeetingInvite.__table__.create(engine)
-            print("Migration: Created meeting_invites table.")
-        except Exception as e:
-            print(f"Migration Error (meeting_invites): {e}")
+#     # 4. Check meeting_invites table
+#     if not inspector.has_table('meeting_invites'):
+#         try:
+#             models.MeetingInvite.__table__.create(engine)
+#             print("Migration: Created meeting_invites table.")
+#         except Exception as e:
+#             print(f"Migration Error (meeting_invites): {e}")
 
-    # 3. Data Migration: Move tokens from User to CalendarConnection
-    from sqlalchemy.orm import Session
-    from database import SessionLocal
-    db = SessionLocal()
+#     # 3. Data Migration: Move tokens from User to CalendarConnection
+#     from sqlalchemy.orm import Session
+#     from database import SessionLocal
+#     db = SessionLocal()
     
-    # Check if legacy columns exist before trying to query them
-    user_cols = [col['name'] for col in inspector.get_columns('users')]
-    if 'google_refresh_token' not in user_cols and 'apple_auth_data' not in user_cols:
-        print("Migration: Legacy token columns already removed. Skipping data migration.")
-        db.close()
-        return
+#     # Check if legacy columns exist before trying to query them
+#     user_cols = [col['name'] for col in inspector.get_columns('users')]
+#     if 'google_refresh_token' not in user_cols and 'apple_auth_data' not in user_cols:
+#         print("Migration: Legacy token columns already removed. Skipping data migration.")
+#         db.close()
+#         return
 
-    try:
-        # Use text() to safely query columns that might be deleted in the code but still exist in DB
-        users_with_tokens = db.execute(text("SELECT id, email, google_refresh_token, apple_auth_data FROM users WHERE google_refresh_token IS NOT NULL OR apple_auth_data IS NOT NULL")).all()
+#     try:
+#         # Use text() to safely query columns that might be deleted in the code but still exist in DB
+#         users_with_tokens = db.execute(text("SELECT id, email, google_refresh_token, apple_auth_data FROM users WHERE google_refresh_token IS NOT NULL OR apple_auth_data IS NOT NULL")).all()
         
-        for u_id, u_email, g_token, a_token in users_with_tokens:
-            # Migrate Google
-            if g_token:
-                # Check if already migrated
-                exists = db.query(models.CalendarConnection).filter_by(user_id=u_id, provider='google').first()
-                if not exists:
-                    new_conn = models.CalendarConnection(
-                        user_id=u_id,
-                        provider='google',
-                        email=u_email,
-                        auth_data=g_token,
-                        is_active=1
-                    )
-                    db.add(new_conn)
-                    print(f"Migration: Moved Google token for user {u_id}")
+#         for u_id, u_email, g_token, a_token in users_with_tokens:
+#             # Migrate Google
+#             if g_token:
+#                 # Check if already migrated
+#                 exists = db.query(models.CalendarConnection).filter_by(user_id=u_id, provider='google').first()
+#                 if not exists:
+#                     new_conn = models.CalendarConnection(
+#                         user_id=u_id,
+#                         provider='google',
+#                         email=u_email,
+#                         auth_data=g_token,
+#                         is_active=1
+#                     )
+#                     db.add(new_conn)
+#                     print(f"Migration: Moved Google token for user {u_id}")
             
-            # Migrate Apple
-            if a_token:
-                exists = db.query(models.CalendarConnection).filter_by(user_id=u_id, provider='apple').first()
-                if not exists:
-                    new_conn = models.CalendarConnection(
-                        user_id=u_id,
-                        provider='apple',
-                        auth_data=a_token,
-                        is_active=1
-                    )
-                    db.add(new_conn)
-                    print(f"Migration: Moved Apple token for user {u_id}")
+#             # Migrate Apple
+#             if a_token:
+#                 exists = db.query(models.CalendarConnection).filter_by(user_id=u_id, provider='apple').first()
+#                 if not exists:
+#                     new_conn = models.CalendarConnection(
+#                         user_id=u_id,
+#                         provider='apple',
+#                         auth_data=a_token,
+#                         is_active=1
+#                     )
+#                     db.add(new_conn)
+#                     print(f"Migration: Moved Apple token for user {u_id}")
         
-        db.commit()
-    except Exception as e:
-        print(f"Migration Error (Data Migration): {e}")
-        db.rollback()
-    finally:
-        db.close()
+#         db.commit()
+#     except Exception as e:
+#         print(f"Migration Error (Data Migration): {e}")
+#         db.rollback()
+#     finally:
+#         db.close()
 
 FRONTEND_URL = os.getenv("FRONTEND_URL", "https://frontend-five-gules-5u3aqd6fzp.vercel.app")
 BOT_USERNAME_FALLBACK = os.getenv("BOT_USERNAME", "smartschedulertime_bot")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=r"https://.*frontend.*\.vercel\.app|https://t\.me|http://localhost:8080",
+    allow_origins=[
+        FRONTEND_URL,
+        "https://t.me",
+        "https://web.telegram.org",
+        "http://localhost:8080"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -251,6 +284,34 @@ async def is_user_in_chat(chat_id: str, user_telegram_id: int) -> bool:
     _membership_cache[cache_key] = result
     return result
 
+# ─────────────────── BOT USERNAME CACHE ───────────────────
+_bot_username_cache = None
+
+async def get_bot_username() -> str:
+    global _bot_username_cache
+    if _bot_username_cache:
+        return _bot_username_cache
+        
+    bot_token = os.getenv("BOT_TOKEN")
+    if not bot_token:
+        return BOT_USERNAME_FALLBACK
+        
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            resp = (await client.get(f"https://api.telegram.org/bot{bot_token}/getMe")).json()
+        if resp.get("ok"):
+            _bot_username_cache = resp.get("result", {}).get("username")
+            return _bot_username_cache
+    except Exception as e:
+        print(f"DEBUG: Failed to get bot username: {e}")
+        
+    return BOT_USERNAME_FALLBACK
+
+# ─────────────────── RATE LIMITING ───────────────────
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 # ─────────────────── ROUTERS ───────────────────
 app.include_router(google_auth_router)
 app.include_router(outlook_auth_router)
@@ -269,9 +330,14 @@ async def _setup_bot_ui():
     webhook_url = f"{api_url.rstrip('/')}/webhook/bot"
     try:
         async with httpx.AsyncClient(timeout=5) as client:
-            # 1. Webhook
-            resp = (await client.post(f"https://api.telegram.org/bot{bot_token}/setWebhook", json={"url": webhook_url, "drop_pending_updates": True})).json()
-            print(f"WEBHOOK SETUP: {resp}")
+            # 1. Webhook with Secret Token
+            webhook_secret = os.getenv("WEBHOOK_SECRET")
+            webhook_payload = {"url": webhook_url, "drop_pending_updates": True}
+            if webhook_secret:
+                webhook_payload["secret_token"] = webhook_secret
+                
+            resp = (await client.post(f"https://api.telegram.org/bot{bot_token}/setWebhook", json=webhook_payload)).json()
+            print(f"WEBHOOK SETUP: {resp} (Secret enabled: {bool(webhook_secret)})")
             
             # 2. Main Menu Button Setup
             menu_resp = (await client.post(f"https://api.telegram.org/bot{bot_token}/setChatMenuButton", json={
@@ -287,13 +353,27 @@ async def _setup_bot_ui():
     except Exception as e:
         print(f"BOT UI SETUP Error: {e}")
 
+# Removed `/users` and redundant startup logic for security/performance.
 @app.on_event("startup")
 async def on_startup_webhook():
+    # Cache bot username and setup UI
+    await get_bot_username()
     asyncio.create_task(_setup_bot_ui())
 
 @app.post("/webhook/bot")
-async def telegram_webhook(req: FastAPIRequest, db: Session = Depends(get_db)):
+@limiter.limit("60/minute") # Protect from webhook spam
+async def telegram_webhook(
+    req: FastAPIRequest, 
+    db: Session = Depends(get_db),
+    x_telegram_bot_api_secret_token: str = Header(None)
+):
     """Receives Telegram updates and handles /sync command."""
+    # Verify Webhook Secret if configured
+    webhook_secret = os.getenv("WEBHOOK_SECRET")
+    if webhook_secret and x_telegram_bot_api_secret_token != webhook_secret:
+        print(f"WEBHOOK ERROR: Unauthorized access attempt to bot webhook!")
+        raise HTTPException(status_code=403, detail="Unauthorized")
+    
     bot_token = os.getenv("BOT_TOKEN")
     if not bot_token:
         return {"ok": False}
@@ -363,7 +443,33 @@ async def telegram_webhook(req: FastAPIRequest, db: Session = Depends(get_db)):
     # Only respond to /sync or /start in groups
     if (text.startswith("/sync") or text.startswith("/start")) and chat_type in ["group", "supergroup"]:
         await _send_sync_invite(bot_token, chat_id, chat_title, db)
-    
+    elif text.startswith("/start") and chat_type == "private":
+        first_name = message.get("from", {}).get("first_name", "User")
+        bot_username = await get_bot_username()
+        
+        welcome_text = (
+            f"Hi {first_name}! 🚀\n\n"
+            f"I can help you find free time that works for everyone in your group.\n\n"
+            f"1. Add me to a group 👥\n"
+            f"2. Use /sync to connect your calendars\n"
+            f"3. Find the best slot for meeting!\n\n"
+            f"Click the button below to open the Mini App."
+        )
+        
+        payload = {
+            "chat_id": chat_id,
+            "text": welcome_text,
+            "parse_mode": "Markdown",
+            "reply_markup": json.dumps({
+                "inline_keyboard": [[{
+                    "text": "📊 Open Scheduler",
+                    "web_app": {"url": f"{FRONTEND_URL}/?startapp=private"}
+                }]]
+            })
+        }
+        async with httpx.AsyncClient(timeout=5) as client:
+            await client.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json=payload)
+
     return {"ok": True}
 
 async def _send_sync_invite(bot_token: str, chat_id: int, chat_title: str, db: Session):
@@ -568,39 +674,22 @@ async def sync_group(data: dict, current_user: User = Depends(get_current_user),
 
 @app.get("/groups/{chat_id}/participants")
 async def get_group_participants(chat_id: str, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Returns all participants in a group."""
-    print(f"DEBUG: Fetching participants for chat_id: {chat_id}")
-    group = db.query(models.Group).filter(models.Group.telegram_chat_id == str(chat_id)).first()
+    """Returns list of participants who are currently members of the Telegram chat."""
+    group = db.query(models.Group).filter(models.Group.telegram_chat_id == chat_id).first()
     if not group:
-        print(f"DEBUG: Group not found in DB for chat_id: {chat_id}")
-        return []
+        raise HTTPException(status_code=404, detail="Group not found")
+        
+    participants = db.query(models.GroupParticipant).filter_by(group_id=group.id).all()
     
-    # 1.5 Verify Membership
-    membership_status = await is_user_in_chat(chat_id, current_user.telegram_id)
-    if membership_status != "ok":
-        raise HTTPException(status_code=403, detail=f"Forbidden: membership status is {membership_status}")
-        print(f"DEBUG: Denying /participants fetch - user {current_user.telegram_id} NOT in chat {chat_id}")
-        return []
-
-    participants = db.query(models.GroupParticipant).filter(models.GroupParticipant.group_id == group.id).all()
-    print(f"DEBUG: Found {len(participants)} potential participants in DB")
+    # NEW: Run membership checks in parallel!
+    checks = await asyncio.gather(*[
+        is_user_in_chat(chat_id, p.user.telegram_id) for p in participants
+    ])
     
-    bot_token = os.getenv("BOT_TOKEN")
     active_participants = []
-    
-    for p in participants:
+    for p, status in zip(participants, checks):
         u = p.user
-        print(f"DEBUG: Checking membership for user {u.telegram_id} ({u.username}) in chat {chat_id}")
         try:
-            # Safe int conversion for numeric chat_ids
-            try:
-                target_chat = int(chat_id)
-            except:
-                target_chat = str(chat_id)
-
-            # Check if user is still in chat
-            status = await is_user_in_chat(chat_id, u.telegram_id)
-            
             if status == "ok":
                 active_participants.append({
                     "id": u.id,
@@ -612,20 +701,20 @@ async def get_group_participants(chat_id: str, current_user: models.User = Depen
                     "is_synced": bool(p.is_synced)
                 })
             elif status in ["not_member", "left", "kicked"]:
-                print(f"DEBUG: HARD DELETE ghost participant {u.telegram_id} (status: {status})")
+                print(f"DEBUG: Ghost participant {u.telegram_id} (status: {status}) - Removing from DB")
                 db.delete(p)
                 db.commit()
             else:
                 print(f"DEBUG: Status {status} for {u.telegram_id}, excluding but NOT deleting yet.")
         except Exception as e:
-            print(f"TRACE: Error checking member {u.telegram_id}: {e}")
+            print(f"TRACE: Error processing participant {u.telegram_id}: {e}")
+            # Fallback: include if we failed to check status
             active_participants.append({
                 "id": u.id,
                 "telegram_id": u.telegram_id,
                 "username": u.username,
                 "first_name": u.first_name,
                 "photo_url": u.photo_url,
-                "email": u.email,
                 "is_synced": bool(p.is_synced)
             })
             
@@ -672,7 +761,8 @@ async def connect_apple(data: dict, current_user: User = Depends(get_current_use
     
     return {"status": "success"}
 
-@app.post("/calendar/sync")
+@app.get("/calendar/sync")
+@limiter.limit("5/minute") # Syncing is heavy, limit it
 async def sync_calendar(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Syncs busy slots from all connected calendars to the database."""
     try:
@@ -753,8 +843,17 @@ async def sync_calendar(current_user: User = Depends(get_current_user), db: Sess
 
 @app.get("/calendar/busy-slots")
 async def get_busy_slots(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Returns cached busy slots for the user with explicit Z suffix."""
-    slots = db.query(BusySlot).filter(BusySlot.user_id == current_user.id).all()
+    """Returns a list of all busy slots for the current user, filtered to recent/upcoming to improve performance."""
+    now = datetime.now(timezone.utc)
+    # Filter to 1 day ago and 30 days ahead
+    recent_limit = now - timedelta(days=1)
+    future_limit = now + timedelta(days=365) # We keep a year for archival but query limited
+    
+    slots = db.query(BusySlot).filter(
+        BusySlot.user_id == current_user.id,
+        BusySlot.end_time >= recent_limit,
+        BusySlot.start_time <= now + timedelta(days=30)
+    ).all()
     return [
         {"start": s.start_time.isoformat() + "Z", "end": s.end_time.isoformat() + "Z"} 
         for s in slots
@@ -767,6 +866,9 @@ async def get_solo_scheduler(
     tz_offset: float = Query(default=0.0)
 ):
     """Returns 7-day busy/free segments for the current user's personal heatmap."""
+    if not (-12.0 <= tz_offset <= 14.0):
+        raise HTTPException(status_code=422, detail="Invalid timezone offset")
+        
     from calendar_service import find_common_free_slots
     
     # Range: from user's local midnight (today 00:00 in user TZ) to 7 days later.
@@ -992,35 +1094,29 @@ async def delete_meeting(meeting_id: int, current_user: User = Depends(get_curre
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
         
-    # Delete from Google Calendar if event exists and user is connected
-    if meeting.google_event_id and current_user.google_refresh_token:
+    # Remove from external calendar if connected
+    # We fetch connection to get the token
+    google_conn = next((c for c in current_user.connections if c.provider == 'google' and c.is_active), None)
+    if meeting.google_event_id and google_conn:
         try:
-            from calendar_service import GoogleCalendarService
             from encryption import decrypt_token
-            refresh_token = decrypt_token(current_user.google_refresh_token)
+            from calendar_service import GoogleCalendarService
+            refresh_token = decrypt_token(google_conn.auth_data)
             g_service = GoogleCalendarService(refresh_token)
             await g_service.delete_event(meeting.google_event_id)
         except Exception as e:
-            print(f"DEBUG: Failed to delete Google Event {meeting.google_event_id}: {e}")
-            
-    # Delete from Outlook Calendar if event exists
-    if meeting.outlook_event_id:
+            print(f"DEBUG: Failed to delete Google Event: {e}")
+
+    outlook_conn = next((c for c in current_user.connections if c.provider == 'outlook' and c.is_active), None)
+    if meeting.outlook_event_id and outlook_conn:
         try:
-            # Find the user's outlook connection
-            outlook_conn = None
-            for conn in current_user.connections:
-                if conn.provider == 'outlook' and conn.is_active:
-                    outlook_conn = conn
-                    break
-            
-            if outlook_conn:
-                from outlook_service import OutlookCalendarService
-                from encryption import decrypt_token
-                refresh_token = decrypt_token(outlook_conn.auth_data)
-                o_service = OutlookCalendarService(refresh_token)
-                await o_service.delete_event(meeting.outlook_event_id)
+            from encryption import decrypt_token
+            from outlook_service import OutlookCalendarService
+            refresh_token = decrypt_token(outlook_conn.auth_data)
+            o_service = OutlookCalendarService(refresh_token)
+            await o_service.delete_event(meeting.outlook_event_id)
         except Exception as e:
-            print(f"DEBUG: Failed to delete Outlook Event {meeting.outlook_event_id}: {e}")
+            print(f"DEBUG: Failed to delete Outlook Event: {e}")
 
     db.delete(meeting)
     db.commit()
@@ -1157,17 +1253,8 @@ async def get_free_slots(data: dict, current_user: User = Depends(get_current_us
         print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/users")
-async def get_all_users(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Returns a list of all registered users (for group selection)."""
-    users = db.query(User).all()
-    return [{
-        "id": u.id,
-        "telegram_id": u.telegram_id,
-        "username": u.username,
-        "first_name": u.first_name,
-        "photo_url": u.photo_url
-    } for u in users]
+# Removed insecure /users endpoint due to data leak concerns.
+# Use group-specific member endpoints instead.
 
 @app.post("/meeting/create")
 async def create_meeting(data: dict, background_tasks: BackgroundTasks, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):

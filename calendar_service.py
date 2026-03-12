@@ -1,7 +1,8 @@
 import os
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
-from googleapiclient.discovery import build
+import googleapiclient.discovery
+import asyncio
 from datetime import datetime, timedelta
 
 SCOPES = [
@@ -20,30 +21,50 @@ class GoogleCalendarService:
             client_secret=os.getenv("GOOGLE_CLIENT_SECRET"),
             scopes=SCOPES
         )
-        self.service = build('calendar', 'v3', credentials=self.creds)
+        self.service = googleapiclient.discovery.build('calendar', 'v3', credentials=self.creds)
+
+    def _get_calendar_list(self):
+        return self.service.calendarList().list().execute()
+
+    def _query_freebusy(self, body):
+        return self.service.freebusy().query(body=body).execute()
+
+    def _insert_event(self, calendar_id, body, conference_data_version=None, send_updates='all'):
+        insert_kwargs = {
+            'calendarId': calendar_id,
+            'body': body,
+            'sendUpdates': send_updates,
+        }
+        if conference_data_version is not None:
+            insert_kwargs['conferenceDataVersion'] = conference_data_version
+        return self.service.events().insert(**insert_kwargs).execute()
+
+    def _delete_event_sync(self, calendar_id, event_id):
+        return self.service.events().delete(calendarId=calendar_id, eventId=event_id).execute()
 
     async def get_busy_slots(self, start_time: datetime, end_time: datetime) -> list:
-        """Fetches busy slots for all calendars in the user's calendar list."""
+        # 1. Fetch all calendars as secondary calendars can also have events
+        loop = asyncio.get_event_loop()
         try:
-            # 1. Get list of all calendars
-            calendar_list = self.service.calendarList().list().execute()
-            calendar_ids = [item['id'] for item in calendar_list.get('items', [])]
-            
-            if not calendar_ids:
-                calendar_ids = ['primary']
+            calendar_list = await loop.run_in_executor(None, self._get_calendar_list)
+            calendar_ids = [entry['id'] for entry in calendar_list.get('items', [])]
+        except Exception as e:
+            print(f"DEBUG: Failed to fetch calendar list: {e}")
+            calendar_ids = ['primary']
 
-            # 2. Query freebusy for all calendars
-            body = {
-                "timeMin": start_time.isoformat() + "Z",
-                "timeMax": end_time.isoformat() + "Z",
-                "items": [{"id": cid} for cid in calendar_ids]
-            }
-            
-            print(f"DEBUG: Querying FreeBusy for calendars: {calendar_ids}")
-            events_result = self.service.freebusy().query(body=body).execute()
+        # 2. Query FreeBusy
+        body = {
+            "timeMin": start_time.isoformat() + 'Z',
+            "timeMax": end_time.isoformat() + 'Z',
+            "items": [{"id": cid} for cid in calendar_ids]
+        }
+        
+        try:
+            events_result = await loop.run_in_executor(None, self._query_freebusy, body)
             
             all_busy = []
-            for cal_id, cal_data in events_result.get('calendars', {}).items():
+            calendars_busy = events_result.get('calendars', {})
+            for cal_id, cal_data in calendars_busy.items():
                 busy = cal_data.get('busy', [])
                 print(f"DEBUG: Calendar {cal_id} has {len(busy)} busy slots")
                 all_busy.extend(busy)
@@ -71,6 +92,7 @@ class GoogleCalendarService:
         }
         
         # Only add Google Meet for online meetings
+        conference_data_version = None
         if meeting_type == 'online':
             event['conferenceData'] = {
                 'createRequest': {
@@ -78,22 +100,21 @@ class GoogleCalendarService:
                     'conferenceSolutionKey': {'type': 'hangoutsMeet'}
                 }
             }
+            conference_data_version = 1
         
-        insert_kwargs = {
-            'calendarId': 'primary',
-            'body': event,
-            'sendUpdates': 'all',
-        }
-        if meeting_type == 'online':
-            insert_kwargs['conferenceDataVersion'] = 1
-            
-        event = self.service.events().insert(**insert_kwargs).execute()
-        return event
+        loop = asyncio.get_event_loop()
+        try:
+            event_result = await loop.run_in_executor(None, self._insert_event, 'primary', event, conference_data_version)
+            return event_result.get('id')
+        except Exception as e:
+            print(f"DEBUG: Error creating Google Event: {e}")
+            return None
 
     async def delete_event(self, event_id: str):
         """Deletes a specific calendar event by ID."""
+        loop = asyncio.get_event_loop()
         try:
-            self.service.events().delete(calendarId='primary', eventId=event_id).execute()
+            await loop.run_in_executor(None, self._delete_event_sync, 'primary', event_id)
             print(f"DEBUG: Deleted Google Event {event_id}")
             return True
         except Exception as e:
@@ -114,6 +135,11 @@ def find_common_free_slots(
     tz_offset_hours: The timezone offset of the user (e.g. +2 for UTC+2), used to align UTC loop with local working hours.
     requesting_user_index: Index of the current user in the busy_slots_per_user list to determine "my_busy".
     """
+    # Validation: Timezone offsets must be between -12 and +14
+    if not (-12 <= tz_offset_hours <= 14):
+        print(f"DEBUG: Invalid timezone offset: {tz_offset_hours}")
+        tz_offset_hours = 0.0 # Force fallback or we could raise an error
+        
     num_users = len(busy_slots_per_user)
     if num_users == 0:
         return []

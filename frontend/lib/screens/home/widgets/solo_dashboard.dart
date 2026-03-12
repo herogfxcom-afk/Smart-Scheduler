@@ -117,33 +117,19 @@ class _SoloDashboardState extends State<SoloDashboard> {
                   style: const TextStyle(color: Colors.white70, fontSize: 16),
                 ),
                 const SizedBox(height: 32),
+                const SizedBox(height: 32),
                 SizedBox(
                   width: double.infinity,
                   height: 56,
-                  child: ElevatedButton(
-                    onPressed: isProcessing ? null : () async {
-                      setState(() => isProcessing = true);
-                      if (isBusy) {
-                        await soloProvider.freeSlot(slot.start, slot.end);
-                      } else {
-                        await soloProvider.reserveSlot(slot.start, slot.end);
-                      }
-                      if (context.mounted) Navigator.pop(context);
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: isBusy ? Colors.red.withOpacity(0.2) : Colors.green.withOpacity(0.2),
-                      foregroundColor: isBusy ? Colors.redAccent : Colors.greenAccent,
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white70,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                      side: BorderSide(color: isBusy ? Colors.redAccent : Colors.greenAccent, width: 1),
+                      side: BorderSide(color: Colors.white.withOpacity(0.1), width: 1),
                     ),
-                    child: isProcessing 
-                      ? const SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                        )
-                      : Text(isBusy ? "Освободить время" : "Занять это время", 
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    child: const Text("Закрыть", 
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                   ),
                 ),
                 const SizedBox(height: 12),
