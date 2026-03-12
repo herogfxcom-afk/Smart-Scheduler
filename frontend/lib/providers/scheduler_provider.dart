@@ -23,6 +23,7 @@ class SchedulerProvider extends ChangeNotifier {
   List<int> get selectedParticipants => _selectedParticipants;
   List<TimeSlot> get suggestedSlots => _suggestedSlots;
   bool get isLoading => _isLoading;
+  String? get error => _error;
 
   Future<void> fetchUsers() async {
     try {
