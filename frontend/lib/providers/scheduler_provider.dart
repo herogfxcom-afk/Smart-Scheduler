@@ -134,7 +134,8 @@ class SchedulerProvider extends ChangeNotifier {
         'idempotency_key': idempotencyKey,
         'meeting_type': meetingType,
         'location': location ?? '',
-        if (chatId != null) 'chat_id': chatId,  // FIX: send chat_id explicitly
+        if (chatId != null) 'chat_id': chatId,
+        'tz_offset': getUserTzOffset(),
       });
 
       print("DEBUG: Server response: ${response.data}");
@@ -143,8 +144,14 @@ class SchedulerProvider extends ChangeNotifier {
     } catch (e) {
       print("DEBUG: createMeeting Error: $e");
       
-      if (e is DioException && e.response?.statusCode == 409) {
-        _error = "Это время уже занято в вашем календаре или другой встречей.";
+      if (e is DioException) {
+        if (e.response?.statusCode == 409) {
+          _error = "Это время уже занято в вашем календаре или другой встречей.";
+        } else if (e.response?.statusCode == 400 && e.response?.data?['detail'] == 'outside_working_hours') {
+          _error = "Невозможно назначить встречу на нерабочее время.";
+        } else {
+          _error = e.toString();
+        }
       } else {
         _error = e.toString();
       }

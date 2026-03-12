@@ -48,22 +48,29 @@ class HeatmapGrid extends StatelessWidget {
       final localStart = slot.start;
       final localEnd = slot.end;
       
-      final int diff = DateUtils.dateOnly(localStart).difference(gridStart).inDays;
-      if (diff >= 0 && diff < 7) {
-        int startHour = localStart.hour;
-        int endHour = localEnd.hour;
-        
-        // If it spans midnight, cap at 24 for today
-        if (localEnd.day != localStart.day) endHour = 24;
-        
-        // If it ends exactly on the hour, it doesn't spill into that hour
-        if (localEnd.minute == 0 && endHour > startHour) {
-          endHour -= 1;
-        }
+      final int startDiff = DateUtils.dateOnly(localStart).difference(gridStart).inDays;
+      final int endDiff = DateUtils.dateOnly(localEnd).difference(gridStart).inDays;
 
-        for (int h = startHour; h <= endHour; h++) {
-          if (h >= 7 && h < 24) {
-            gridData[h]![diff]!.add(slot);
+      for (int currentDiff = startDiff; currentDiff <= endDiff; currentDiff++) {
+        if (currentDiff >= 0 && currentDiff < 7) {
+          int startHour = 7;
+          int endHour = 24;
+
+          if (currentDiff == startDiff) {
+            startHour = localStart.hour;
+          }
+          if (currentDiff == endDiff) {
+            endHour = localEnd.hour;
+            // If it ends exactly on the hour, don't spill into that hour
+            if (localEnd.minute == 0 && endHour > startHour) {
+              endHour -= 1;
+            }
+          }
+
+          for (int h = startHour; h <= endHour; h++) {
+            if (h >= 7 && h < 24) {
+              gridData[h]![currentDiff]!.add(slot);
+            }
           }
         }
       }
@@ -192,7 +199,7 @@ class HeatmapGrid extends StatelessWidget {
                                           child: Container(
                                             width: double.infinity,
                                             decoration: BoxDecoration(
-                                              color: _getSlotColor(slot),
+                                              color: _getSlotColor(slot, hour, day),
                                               borderRadius: BorderRadius.circular(2),
                                               border: Border.all(
                                                 color: slot.availability == 1.0 ? Colors.white.withOpacity(0.2) : Colors.transparent,
@@ -233,7 +240,7 @@ class HeatmapGrid extends StatelessWidget {
     );
   }
 
-  Color _getSlotColor(TimeSlot? slot) {
+  Color _getSlotColor(TimeSlot? slot, int cellHour, DateTime cellDay) {
     if (slot == null) return Colors.white.withOpacity(0.02);
     
     // 4-Color Logic
@@ -243,6 +250,14 @@ class HeatmapGrid extends StatelessWidget {
       // Подсчет: если это слот моей встречи из приложения, красим в фиолетовый
       final sStart = slot.start;
       final sEnd = slot.end;
+      
+      // Calculate intersection bounds inside THIS cell specifically
+      final cellStart = DateTime(cellDay.year, cellDay.month, cellDay.day, cellHour, 0);
+      final cellEnd = cellStart.add(const Duration(hours: 1));
+      
+      final boxStart = sStart.isAfter(cellStart) ? sStart : cellStart;
+      final boxEnd = sEnd.isBefore(cellEnd) ? sEnd : cellEnd;
+      
       bool isAppMeeting = false;
       
       for (final m in myMeetings) {
@@ -250,8 +265,8 @@ class HeatmapGrid extends StatelessWidget {
         final mEnd = m.end;
         
         // Calculate max of starts and min of ends
-        final latestStart = sStart.isAfter(mStart) ? sStart : mStart;
-        final earliestEnd = sEnd.isBefore(mEnd) ? sEnd : mEnd;
+        final latestStart = boxStart.isAfter(mStart) ? boxStart : mStart;
+        final earliestEnd = boxEnd.isBefore(mEnd) ? boxEnd : mEnd;
 
         if (latestStart.isBefore(earliestEnd)) {
           isAppMeeting = true;

@@ -1197,6 +1197,30 @@ async def create_meeting(data: dict, background_tasks: BackgroundTasks, current_
         print(f"DEBUG: Error parsing dates {start_str}/{end_str}: {e}")
         raise HTTPException(status_code=400, detail=f"Invalid date format: {e}")
     
+    tz_offset_hours = data.get("tz_offset", 0.0)
+
+    # 3. Working Hours Boundary Check
+    # Validate that the meeting falls within the requesting user's working hours
+    start_local = start_time + timedelta(hours=tz_offset_hours)
+    end_local = end_time + timedelta(hours=tz_offset_hours)
+    
+    u_avail = db.query(models.UserAvailability).filter(
+        models.UserAvailability.user_id == current_user.id,
+        models.UserAvailability.day_of_week == start_local.weekday()
+    ).first()
+    
+    if u_avail and u_avail.enabled:
+        h_start = start_local.hour
+        h_end = end_local.hour
+        m_end = end_local.minute
+        
+        if h_end == 0 and m_end == 0 and start_local.date() != end_local.date():
+            h_end = 24
+            
+        if h_start < u_avail.start or h_end > u_avail.end or (h_end == u_avail.end and m_end > 0):
+            print(f"DEBUG: Booking outside working hours: {h_start}:00 to {h_end}:{m_end} (Working until {u_avail.end}:00)")
+            raise HTTPException(status_code=400, detail="outside_working_hours")
+
     # Check Idempotency
     if idempotency_key:
         existing = db.query(models.GroupMeeting).filter(models.GroupMeeting.idempotency_key == idempotency_key).first()
@@ -1210,7 +1234,6 @@ async def create_meeting(data: dict, background_tasks: BackgroundTasks, current_
         models.GroupMeeting.start_time < end_time,
         models.GroupMeeting.end_time > start_time
     ).first()
-    
     if not conflict:
         # Also check BusySlot (synced external calendars)
         conflict = db.query(models.BusySlot).filter(
