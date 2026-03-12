@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:dio/dio.dart';
 import 'package:smart_scheduler_frontend/core/api/api_service.dart';
 import 'package:smart_scheduler_frontend/models/time_slot.dart';
 

@@ -109,13 +109,14 @@ class SchedulerProvider extends ChangeNotifier {
     _error = null;
     notifyListeners();
 
+    List<TimeSlot> originalSlots = [];
     try {
       // 1. Logging for debug
       print("DEBUG: Booking slot (Local): ${slot.start} - ${slot.end}");
       print("DEBUG: Booking slot (UTC): ${slot.start.toUtc()} - ${slot.end.toUtc()}");
 
       // 2. Optimistic Update: Remove from suggested list immediately
-      final originalSlots = List<TimeSlot>.from(_suggestedSlots);
+      originalSlots = List<TimeSlot>.from(_suggestedSlots);
       _suggestedSlots.removeWhere((s) => s.start == slot.start && s.end == slot.end);
       notifyListeners();
 
