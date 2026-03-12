@@ -25,7 +25,7 @@ class HeatmapGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     // 1. Calculate the start date for the grid. 
     final now = userNow();
-    final today = DateTime(now.year, now.month, now.day);
+    final today = DateTime.utc(now.year, now.month, now.day);
     
     final int dayOffset = selectedDay.difference(today).inDays;
     final DateTime gridStart = dayOffset >= 7 

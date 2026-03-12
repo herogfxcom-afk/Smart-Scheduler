@@ -46,6 +46,14 @@ class _SoloDashboardState extends State<SoloDashboard> {
           ],
         ),
         const SizedBox(height: 12),
+        if (soloProvider.errorText != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8.0),
+            child: Text(
+              'Ошибка: ${soloProvider.errorText}',
+              style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+            ),
+          ),
         Container(
           height: 350,
           decoration: BoxDecoration(

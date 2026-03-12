@@ -282,11 +282,21 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
 
     final pending = provider.meetings.where((m) => m.status == 'pending').toList();
-    final confirmed = provider.meetings.where((m) => m.status == 'accepted').toList();
+    final confirmed = provider.meetings.where((m) => m.status == 'accepted' || m.isCreator).toList();
 
     return Column(
+      // Show error if meetings failed to load
+
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (provider.error != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8.0),
+            child: Text(
+              'Ошибка загрузки: ${provider.error}',
+              style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+            ),
+          ),
         if (pending.isNotEmpty) ...[
           Text(
             lang.translate('invites'),
