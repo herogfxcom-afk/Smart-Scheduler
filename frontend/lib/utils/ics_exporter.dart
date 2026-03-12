@@ -16,7 +16,7 @@ class IcsExporter {
     
     final uid = meeting.id.toString() + "@smartscheduler.local";
     final summary = meeting.title.replaceAll(',', '\\,').replaceAll('\n', '\\n');
-    final description = (meeting.description ?? "Smart Scheduler Meeting").replaceAll(',', '\\,').replaceAll('\n', '\\n');
+    final description = (meeting.title).replaceAll(',', '\\,').replaceAll('\n', '\\n');
     
     final String icsContent = '''BEGIN:VCALENDAR
 VERSION:2.0

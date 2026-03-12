@@ -8,6 +8,7 @@ import '../../providers/group_provider.dart';
 import '../../providers/meeting_provider.dart';
 import '../../providers/solo_provider.dart';
 import '../../models/time_slot.dart';
+import '../../models/meeting.dart';
 import '../../utils/timezone_utils.dart';
 import '../../utils/calendar_processor.dart';
 import '../../utils/ics_exporter.dart';
