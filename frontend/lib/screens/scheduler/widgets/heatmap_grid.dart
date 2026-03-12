@@ -240,6 +240,20 @@ class _HeatmapGridState extends State<HeatmapGrid> {
       );
     }
 
+    // Show fractional availability for group partial matches
+    if (widget.calendarType == CalendarType.group && 
+        appt.originalSlot.type == 'others_busy' && 
+        appt.originalSlot.freeCount != null) {
+      return Text(
+        "${appt.originalSlot.freeCount}/${appt.originalSlot.totalCount}",
+        style: const TextStyle(
+          fontSize: 9, 
+          fontWeight: FontWeight.bold, 
+          color: Colors.white70,
+        ),
+      );
+    }
+
     return const SizedBox.shrink();
   }
 

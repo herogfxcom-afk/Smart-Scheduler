@@ -3,7 +3,9 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
 import googleapiclient.discovery
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
+import pytz
 
 SCOPES = [
     'https://www.googleapis.com/auth/calendar',
@@ -96,7 +98,7 @@ class GoogleCalendarService:
         if meeting_type == 'online':
             event['conferenceData'] = {
                 'createRequest': {
-                    'requestId': f"meet_{int(datetime.utcnow().timestamp())}",
+                    'requestId': f"meet_{int(datetime.now(timezone.utc).timestamp())}",
                     'conferenceSolutionKey': {'type': 'hangoutsMeet'}
                 }
             }
@@ -126,18 +128,16 @@ def find_common_free_slots(
     start_date: datetime, 
     end_date: datetime,
     user_availabilities: list[dict] = None,
-    tz_offset_hours: float = 0,
+    user_timezones: list[str] = None,
+    viewer_tz: str = "UTC",
+    snap_to_local: bool = True,
     requesting_user_index: int = -1,
     user_ids: list[str] = None
 ) -> list[dict]:
     """
-    Finds time slots and categorizes them as match, my_busy, or others_busy.
-    user_ids: optional list of string IDs corresponding to the users in busy_slots_per_user.
+    Finds common free time slots among multiple users.
+    Categorizes them as 'match' (all available), 'my_busy', or 'others_busy'.
     """
-    if not (-12 <= tz_offset_hours <= 14):
-        print(f"DEBUG: Invalid timezone offset: {tz_offset_hours}")
-        tz_offset_hours = 0.0
-        
     num_users = len(busy_slots_per_user)
     if num_users == 0:
         return []
@@ -145,110 +145,126 @@ def find_common_free_slots(
     if not user_availabilities:
         default_day = {"start": 9, "end": 18, "enabled": True}
         user_availabilities = [{d: default_day for d in range(7)} for _ in range(num_users)]
+    
+    if not user_timezones:
+        user_timezones = ["UTC"] * num_users
 
     free_slots = []
-    curr_day_start = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
-    last_day = end_date.replace(hour=0, minute=0, second=0, microsecond=0)
     
-    current = curr_day_start
-    while current <= last_day:
-        weekday = current.weekday()
+    if snap_to_local:
+        try:
+            v_tz = ZoneInfo(viewer_tz)
+        except:
+            v_tz = ZoneInfo("UTC")
         
-        for hour in range(24):
-            for minute in [0, 30]:
-                segment_start = current.replace(hour=hour, minute=minute)
-                segment_end = segment_start + timedelta(minutes=30)
-                
-                local_segment_start = segment_start + timedelta(hours=tz_offset_hours)
-                local_segment_end = segment_end + timedelta(hours=tz_offset_hours)
-                local_weekday = local_segment_start.weekday()
-                
-                if segment_start < start_date:
-                    continue
-                if segment_start >= end_date:
-                    break
-                
-                active_users_in_segment = 0
-                working_but_busy_count = 0
-                requesting_user_busy = False
-                
-                # NEW: Track which specific user is busy
-                busy_user_id = None
-                busy_user_count = 0
+        local_now = start_date.astimezone(v_tz)
+        local_midnight = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
+        current_utc = local_midnight.astimezone(timezone.utc)
+    else:
+        current_utc = start_date.astimezone(timezone.utc)
+    
+    end_utc_limit = end_date.astimezone(timezone.utc)
 
-                for i in range(num_users):
-                    is_busy_with_event = False
-                    for b_start, b_end in busy_slots_per_user[i]:
-                        if max(segment_start, b_start) < min(segment_end, b_end):
-                            is_busy_with_event = True
-                            break
-                    
-                    if is_busy_with_event:
-                        busy_user_count += 1
-                        if user_ids and i < len(user_ids):
-                            busy_user_id = user_ids[i]
-                        
-                        if i == requesting_user_index:
-                            requesting_user_busy = True
+    while current_utc < end_utc_limit:
+        segment_start = current_utc
+        segment_end = current_utc + timedelta(minutes=30)
+        
+        active_users_in_segment = 0
+        working_but_busy_count = 0
+        requesting_user_busy = False
+        
+        busy_user_id = None
+        busy_user_count = 0
 
-                    u_avail = user_availabilities[i].get(local_weekday, {"start": 9, "end": 18, "enabled": True})
-                    is_working = u_avail["enabled"]
-                    if is_working:
-                        h_start = local_segment_start.hour
-                        h_end = local_segment_end.hour
-                        m_end = local_segment_end.minute
-                        if h_end == 0 and m_end == 0 and local_segment_start.date() != local_segment_end.date():
-                            h_end = 24
-                        if h_start < u_avail["start"] or h_end > u_avail["end"] or (h_end == u_avail["end"] and m_end > 0):
-                            is_working = False
-                    
-                    if not is_working: continue
-                    
-                    active_users_in_segment += 1
-                    if is_busy_with_event:
-                        working_but_busy_count += 1
-                
-                # Logic for type and source identity
-                source_user_id = None
-                if requesting_user_busy:
-                    type_label = "my_busy"
-                    availability = 0.0
-                    if user_ids and requesting_user_index != -1:
-                        source_user_id = user_ids[requesting_user_index]
-                elif active_users_in_segment > 0:
-                    free_count = active_users_in_segment - working_but_busy_count
-                    if free_count == active_users_in_segment:
-                        type_label = "match"
-                        availability = 1.0
-                    else:
-                        type_label = "others_busy"
-                        availability = free_count / active_users_in_segment
-                        # If exactly one other person is busy, we can identify them
-                        if busy_user_count == 1:
-                            source_user_id = busy_user_id
-                else:
-                    type_label = "others_busy"
-                    availability = 0.0
-                
-                total_c = max(active_users_in_segment, 1)
-                
-                # Combine adjacent segments with same properties
-                if free_slots and free_slots[-1]["type"] == type_label and \
-                   free_slots[-1]["end"] == segment_start.isoformat() + "Z" and \
-                   free_slots[-1].get("availability") == availability and \
-                   free_slots[-1].get("source_user_id") == source_user_id:
-                    free_slots[-1]["end"] = segment_end.isoformat() + "Z"
-                else:
-                    free_slots.append({
-                        "start": segment_start.isoformat() + "Z",
-                        "end": segment_end.isoformat() + "Z",
-                        "type": type_label,
-                        "free_count": max(active_users_in_segment - working_but_busy_count, 0),
-                        "total_count": total_c,
-                        "availability": availability,
-                        "source_user_id": source_user_id
-                    })
+        for i in range(num_users):
+            user_tz_str = user_timezones[i] if i < len(user_timezones) else "UTC"
+            try:
+                u_tz = ZoneInfo(user_tz_str)
+            except:
+                u_tz = ZoneInfo("UTC")
             
-        current += timedelta(days=1)
+            local_segment_start = segment_start.astimezone(u_tz)
+            local_segment_end = segment_end.astimezone(u_tz)
+            local_weekday = local_segment_start.weekday()
+
+            is_working = False
+            u_avail = user_availabilities[i].get(local_weekday, {"start": 9, "end": 18, "enabled": True})
+            
+            if u_avail["enabled"]:
+                h_start = local_segment_start.hour
+                m_start = local_segment_start.minute
+                # For half-hour increments, check if the segment is fully within the working window
+                total_min_start = h_start * 60 + m_start
+                total_min_end = total_min_start + 30
+                
+                avail_start = u_avail["start"] * 60
+                avail_end = u_avail["end"] * 60
+                
+                if total_min_start >= avail_start and total_min_end <= avail_end:
+                    is_working = True
+            
+            if not is_working:
+                continue
+            
+            # Intersection check with busy slots
+            is_busy_with_event = False
+            for b_start, b_end in busy_slots_per_user[i]:
+                b_s = b_start if b_start.tzinfo else b_start.replace(tzinfo=timezone.utc)
+                b_e = b_end if b_end.tzinfo else b_end.replace(tzinfo=timezone.utc)
+                
+                if max(segment_start, b_s) < min(segment_end, b_e):
+                    is_busy_with_event = True
+                    break
+            
+            active_users_in_segment += 1
+            if is_busy_with_event:
+                working_but_busy_count += 1
+                busy_user_count += 1
+                if user_ids and i < len(user_ids):
+                    busy_user_id = user_ids[i]
+                if i == requesting_user_index:
+                    requesting_user_busy = True
+
+        # Determine type
+        # For a group, a "match" should strictly mean ALL participants are available and free.
+        # However, to avoid a completely empty heatmap when not all are in working hours,
+        # we calculate availability relative to the total number of participants.
+        
+        free_count = active_users_in_segment - working_but_busy_count
+        
+        # Determine the type label based on the requesting user's status and group availability
+        if requesting_user_busy:
+            type_label = "my_busy"
+            availability = 0.0
+            if user_ids and requesting_user_index != -1:
+                source_user_id = user_ids[requesting_user_index]
+        elif active_users_in_segment == num_users and working_but_busy_count == 0:
+            type_label = "match"
+            availability = 1.0
+            source_user_id = None
+        else:
+            type_label = "others_busy"
+            # Availability is the fraction of total participants who are both working and free
+            availability = free_count / num_users
+            source_user_id = busy_user_id if busy_user_count == 1 else None
+
+        # Combine adjacent segments
+        if free_slots and free_slots[-1]["type"] == type_label and \
+           free_slots[-1]["end"] == segment_start.isoformat().replace('+00:00', 'Z') and \
+           free_slots[-1].get("availability") == availability and \
+           free_slots[-1].get("source_user_id") == source_user_id:
+            free_slots[-1]["end"] = segment_end.isoformat().replace('+00:00', 'Z')
+        else:
+            free_slots.append({
+                "start": segment_start.isoformat().replace('+00:00', 'Z'),
+                "end": segment_end.isoformat().replace('+00:00', 'Z'),
+                "type": type_label,
+                "free_count": free_count,
+                "total_count": num_users,
+                "availability": availability,
+                "source_user_id": source_user_id
+            })
+            
+        current_utc += timedelta(minutes=30)
         
     return free_slots

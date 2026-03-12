@@ -648,7 +648,7 @@ async def sync_calendar(request: Request, current_user: User = Depends(get_curre
         db.query(BusySlot).filter(BusySlot.user_id == current_user.id).delete()
         
         # Start looking 2 days in the past so we don't miss manual events created today or yesterday
-        start = datetime.utcnow() - timedelta(days=2)
+        start = datetime.now(timezone.utc) - timedelta(days=2)
         end = start + timedelta(days=21) # Sync 3 weeks ahead
 
         for conn in active_connections:
@@ -677,7 +677,7 @@ async def sync_calendar(request: Request, current_user: User = Depends(get_curre
                     all_busy_slots.extend(outlook_busy)
                 
                 # Update last sync time
-                conn.last_sync = datetime.utcnow()
+                conn.last_sync = datetime.now(timezone.utc)
                 conn.status = "active"
                 conn.last_error = None
                 
@@ -689,8 +689,8 @@ async def sync_calendar(request: Request, current_user: User = Depends(get_curre
                         new_slot = BusySlot(
                             user_id=current_user.id,
                             connection_id=conn.id,
-                            start_time=parse_ms_datetime(s_out).astimezone(pytz.utc).replace(tzinfo=None),
-                            end_time=parse_ms_datetime(e_out).astimezone(pytz.utc).replace(tzinfo=None)
+                            start_time=parse_ms_datetime(s_out).astimezone(pytz.utc),
+                            end_time=parse_ms_datetime(e_out).astimezone(pytz.utc)
                         )
                         db.add(new_slot)
                         total_slots += 1
@@ -744,7 +744,7 @@ async def get_solo_scheduler(
         from calendar_service import find_common_free_slots
         
         # Range: from user's local midnight (today 00:00 in user TZ) to 7 days later.
-        utc_now = datetime.utcnow()
+        utc_now = datetime.now(timezone.utc)
         user_local_now = utc_now + timedelta(hours=tz_offset)
         user_local_midnight = user_local_now.replace(hour=0, minute=0, second=0, microsecond=0)
         start_date = user_local_midnight - timedelta(hours=tz_offset)  # back to UTC
@@ -768,8 +768,8 @@ async def get_solo_scheduler(
         db_slots = db.query(models.BusySlot).filter(models.BusySlot.user_id == current_user.id).all()
         busy_slots = []
         for s in db_slots:
-            st = s.start_time.replace(tzinfo=None) if s.start_time.tzinfo else s.start_time
-            et = s.end_time.replace(tzinfo=None) if s.end_time.tzinfo else s.end_time
+            st = s.start_time if s.start_time.tzinfo else s.start_time
+            et = s.end_time if s.end_time.tzinfo else s.end_time
             busy_slots.append((st, et))
         
         # Добавляем встречи созданные в приложении как занятые слоты
@@ -780,8 +780,8 @@ async def get_solo_scheduler(
         for mi in meeting_invites:
             m = mi.meeting
             if m:
-                st = m.start_time.replace(tzinfo=None) if m.start_time.tzinfo else m.start_time
-                et = m.end_time.replace(tzinfo=None) if m.end_time.tzinfo else m.end_time
+                st = m.start_time if m.start_time.tzinfo else m.start_time
+                et = m.end_time if m.end_time.tzinfo else m.end_time
                 busy_slots.append((st, et))
         print(f"DEBUG SOLO: {len(db_slots)} synced slots + {len(meeting_invites)} meeting invites for user {current_user.id}")
         # We use find_common_free_slots for a single user
@@ -807,8 +807,8 @@ async def get_solo_scheduler(
 async def add_busy_slot(data: dict, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Creates a personal busy slot manualy from the app."""
     try:
-        start_time = parse_ms_datetime(data["start"]).replace(tzinfo=None)
-        end_time = parse_ms_datetime(data["end"]).replace(tzinfo=None)
+        start_time = parse_ms_datetime(data["start"])
+        end_time = parse_ms_datetime(data["end"])
         
         # Check if identical slot already exists
         exists = db.query(models.BusySlot).filter_by(
@@ -837,8 +837,8 @@ async def add_busy_slot(data: dict, current_user: User = Depends(get_current_use
 async def delete_busy_slot(start: str, end: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Deletes personal busy slots within a time range."""
     try:
-        start_time = parse_ms_datetime(start).replace(tzinfo=None)
-        end_time = parse_ms_datetime(end).replace(tzinfo=None)
+        start_time = parse_ms_datetime(start)
+        end_time = parse_ms_datetime(end)
         
         # Delete only manual slots (connection_id is NULL) or any slot in this range?
         # User wants to "free" time, so we delete slots that START precisely here
@@ -914,8 +914,8 @@ async def get_my_meetings(current_user: User = Depends(get_current_user), db: Se
     for m in sorted(meetings, key=lambda x: x.start_time):
         invite = invite_map.get(m.id)
         # Ensure naive UTC datetimes (strip tzinfo if present) before adding Z
-        s_time = m.start_time.replace(tzinfo=None) if m.start_time.tzinfo else m.start_time
-        e_time = m.end_time.replace(tzinfo=None) if m.end_time.tzinfo else m.end_time
+        s_time = m.start_time if m.start_time.tzinfo else m.start_time
+        e_time = m.end_time if m.end_time.tzinfo else m.end_time
         result.append({
             "id": m.id,
             "title": m.title,
@@ -1071,10 +1071,10 @@ async def update_meeting(meeting_id: int, data: dict, current_user: User = Depen
     if "location" in data: meeting.location = data["location"]
     if "start" in data: 
         s_raw = data["start"].replace('Z', '+00:00')
-        meeting.start_time = datetime.fromisoformat(s_raw).astimezone(pytz.utc).replace(tzinfo=None)
+        meeting.start_time = datetime.fromisoformat(s_raw).astimezone(pytz.utc)
     if "end" in data: 
         e_raw = data["end"].replace('Z', '+00:00')
-        meeting.end_time = datetime.fromisoformat(e_raw).astimezone(pytz.utc).replace(tzinfo=None)
+        meeting.end_time = datetime.fromisoformat(e_raw).astimezone(pytz.utc)
     
     db.commit()
     return {"status": "success"}
@@ -1124,7 +1124,7 @@ async def get_free_slots(data: dict, current_user: User = Depends(get_current_us
             return {"free_slots": [], "debug": f"no_users_found_for_ids_{tg_ids}"}
 
         # 3. Fetch all cached busy slots for these users for next 14 days
-        start = datetime.utcnow()
+        start = datetime.now(timezone.utc)
         end = start + timedelta(days=30)
         
         busy_slots_per_user = []
@@ -1170,20 +1170,23 @@ async def get_free_slots(data: dict, current_user: User = Depends(get_current_us
 
         # 5. Find intersections
         from calendar_service import find_common_free_slots
-        tz_offset = data.get("tz_offset", 0)
-        print(f"DEBUG: Finding slots for TG IDs: {tg_ids} Offset: {tz_offset}")
         
-        # Prepare string IDs for find_common_free_slots to use as source_user_id
-        tg_id_strings = [str(uid) for uid in tg_ids] # Should match the IDs from 'users' list but we need strings
+        user_timezones = [u.timezone or "UTC" for u in users]
+        snap_to_local = not bool(chat_id)
+        viewer_tz = current_user.timezone or "UTC"
 
+        print(f"DEBUG: Finding slots | Group: {bool(chat_id)} | Snap: {snap_to_local}")
+        
         free_windows = find_common_free_slots(
             busy_slots_per_user,
             start_date=start,
             end_date=end,
             user_availabilities=user_availabilities,
-            tz_offset_hours=tz_offset,
+            user_timezones=user_timezones,
+            viewer_tz=viewer_tz,
+            snap_to_local=snap_to_local,
             requesting_user_index=requesting_user_index,
-            user_ids=[str(u.telegram_id) for u in users] # Pass the actually resolved users' TG IDs
+            user_ids=[str(u.telegram_id) for u in users]
         )
         
         print(f"DEBUG: Found {len(free_windows)} free windows")
@@ -1220,8 +1223,8 @@ async def create_meeting(data: dict, background_tasks: BackgroundTasks, current_
         # Robust UTC parsing: handle Z and offsets, convert to UTC, then store as naive
         s_raw = str(start_str).replace('Z', '+00:00')
         e_raw = str(end_str).replace('Z', '+00:00')
-        start_time = datetime.fromisoformat(s_raw).astimezone(pytz.utc).replace(tzinfo=None)
-        end_time = datetime.fromisoformat(e_raw).astimezone(pytz.utc).replace(tzinfo=None)
+        start_time = datetime.fromisoformat(s_raw).astimezone(pytz.utc)
+        end_time = datetime.fromisoformat(e_raw).astimezone(pytz.utc)
     except Exception as e:
         print(f"DEBUG: Error parsing dates {start_str}/{end_str}: {e}")
         raise HTTPException(status_code=400, detail=f"Invalid date format: {e}")

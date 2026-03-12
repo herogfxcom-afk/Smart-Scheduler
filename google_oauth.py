@@ -35,13 +35,13 @@ async def get_google_auth_url(request: Request, current_user: User = Depends(get
     client_id = os.getenv("GOOGLE_CLIENT_ID")
     redirect_uri = os.getenv("GOOGLE_REDIRECT_URI")
     
-    # Robust redirect URI detection for production
-    if not redirect_uri or "localhost" in redirect_uri:
-        host = request.headers.get("host")
-        scheme = "https" if "vercel.app" in str(host) or "railway.app" in str(host) else "http"
-        if host:
-            redirect_uri = f"{scheme}://{host}/auth/google/callback"
-            print(f"DEBUG GOOGLE OAUTH: Auto-detected redirect_uri: {redirect_uri}")
+    # Robust redirect URI detection for production (behind proxies like Vercel/Railway)
+    scheme = request.headers.get("X-Forwarded-Proto", request.url.scheme)
+    host = request.headers.get("X-Forwarded-Host", request.url.hostname) or request.headers.get("host")
+    
+    # In some proxies, request.url.path might be empty or redirected
+    redirect_uri = f"{scheme}://{host}/auth/google/callback"
+    print(f"DEBUG GOOGLE OAUTH: Auto-detected redirect_uri: {redirect_uri}")
 
     print(f"DEBUG GOOGLE OAUTH: Fetching URL for user {current_user.id}")
     print(f"DEBUG GOOGLE OAUTH: CLIENT_ID starts with: {str(client_id)[:10]}... (len: {len(str(client_id)) if client_id else 0})")
@@ -59,6 +59,7 @@ async def get_google_auth_url(request: Request, current_user: User = Depends(get
         "prompt": "select_account consent"  # Force account selector and ensure refresh token
     }
     auth_url = f"{base_url}?{urlencode(params)}"
+    print(f"DEBUG GOOGLE OAUTH: Generated Authorization URL: {auth_url}")
     return {"url": auth_url}
 
 @router.get("/callback")
@@ -70,12 +71,10 @@ async def google_oauth_callback(request: Request, code: str, state: str, db: Ses
     client_secret = os.getenv("GOOGLE_CLIENT_SECRET")
     redirect_uri = os.getenv("GOOGLE_REDIRECT_URI")
     
-    # Robust redirect URI detection for production
-    if not redirect_uri or "localhost" in redirect_uri:
-        host = request.headers.get("host")
-        scheme = "https" if "vercel.app" in str(host) or "railway.app" in str(host) else "http"
-        if host:
-            redirect_uri = f"{scheme}://{host}/auth/google/callback"
+    # Robust redirect URI detection for production (behind proxies like Vercel/Railway)
+    scheme = request.headers.get("X-Forwarded-Proto", request.url.scheme)
+    host = request.headers.get("X-Forwarded-Host", request.url.hostname) or request.headers.get("host")
+    redirect_uri = f"{scheme}://{host}/auth/google/callback"
     
     data = {
         "code": code,
@@ -95,7 +94,13 @@ async def google_oauth_callback(request: Request, code: str, state: str, db: Ses
             raise HTTPException(status_code=400, detail=f"OAuth error: {error_msg}")
         
         refresh_token = tokens.get("refresh_token")
-        telegram_id = int(state)
+        # Ensure we have a valid int state
+        try:
+            telegram_id = int(state)
+        except (ValueError, TypeError):
+             print(f"ERROR: Invalid state in Google Callback: {state}")
+             raise HTTPException(status_code=400, detail="Invalid state parameter")
+             
         user = db.query(User).filter(User.telegram_id == telegram_id).first()
         
         if not user:
