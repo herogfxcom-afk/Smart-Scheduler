@@ -24,8 +24,8 @@ class TimeSlot {
   });
 
   factory TimeSlot.fromJson(Map<String, dynamic> json) => TimeSlot(
-    start: toUserLocal(DateTime.parse(json['start'] as String)),
-    end: toUserLocal(DateTime.parse(json['end'] as String)),
+    start: DateTime.parse(json['start'] as String),
+    end: DateTime.parse(json['end'] as String),
     type: json['type'] as String? ?? 'match',
     availability: (json['availability'] as num?)?.toDouble() ?? 1.0,
     freeCount: json['free_count'] as int?,

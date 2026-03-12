@@ -42,8 +42,8 @@ class HeatmapGrid extends StatelessWidget {
     }
 
     for (final slot in slots) {
-      final localStart = slot.start;
-      final localEnd = slot.end;
+      final localStart = toUserLocal(slot.start);
+      final localEnd = toUserLocal(slot.end);
       
       final int startDiff = DateUtils.dateOnly(localStart).difference(gridStart).inDays;
       final int endDiff = DateUtils.dateOnly(localEnd).difference(gridStart).inDays;
@@ -167,14 +167,17 @@ class HeatmapGrid extends StatelessWidget {
                                   double topFactor = 0.0;
                                   double heightFactor = 1.0;
 
-                                  if (slot.start.hour == hour) {
-                                    topFactor = slot.start.minute / 60.0;
+                                  final localStart = toUserLocal(slot.start);
+                                  final localEnd = toUserLocal(slot.end);
+
+                                  if (localStart.hour == hour) {
+                                    topFactor = localStart.minute / 60.0;
                                     heightFactor -= topFactor;
                                   }
 
-                                  if (slot.end.hour == hour && (slot.end.day == slot.start.day || slot.end.hour != 0)) {
-                                    double bottomFactor = (60 - slot.end.minute) / 60.0;
-                                    if (slot.end.minute > 0) {
+                                  if (localEnd.hour == hour && (localEnd.day == localStart.day || localEnd.hour != 0)) {
+                                    double bottomFactor = (60 - localEnd.minute) / 60.0;
+                                    if (localEnd.minute > 0) {
                                       heightFactor -= bottomFactor;
                                     } else {
                                       heightFactor = 0.0;
@@ -228,21 +231,26 @@ class HeatmapGrid extends StatelessWidget {
                                 ...myMeetings.where((m) {
                                   final cellStart = gridStart.add(Duration(days: dayIndex, hours: hour));
                                   final cellEnd = cellStart.add(const Duration(hours: 1));
-                                  final latestStart = m.start.isAfter(cellStart) ? m.start : cellStart;
-                                  final earliestEnd = m.end.isBefore(cellEnd) ? m.end : cellEnd;
+                                  final localStart = toUserLocal(m.start);
+                                  final localEnd = toUserLocal(m.end);
+                                  final latestStart = localStart.isAfter(cellStart) ? localStart : cellStart;
+                                  final earliestEnd = localEnd.isBefore(cellEnd) ? localEnd : cellEnd;
                                   return latestStart.isBefore(earliestEnd);
                                 }).map((meeting) {
                                   double mTopFactor = 0.0;
                                   double mHeightFactor = 1.0;
 
-                                  if (meeting.start.hour == hour) {
-                                    mTopFactor = meeting.start.minute / 60.0;
+                                  final localStart = toUserLocal(meeting.start);
+                                  final localEnd = toUserLocal(meeting.end);
+
+                                  if (localStart.hour == hour) {
+                                    mTopFactor = localStart.minute / 60.0;
                                     mHeightFactor -= mTopFactor;
                                   }
 
-                                  if (meeting.end.hour == hour && (meeting.end.day == meeting.start.day || meeting.end.hour != 0)) {
-                                    double mBottomFactor = (60 - meeting.end.minute) / 60.0;
-                                    if (meeting.end.minute > 0) {
+                                  if (localEnd.hour == hour && (localEnd.day == localStart.day || localEnd.hour != 0)) {
+                                    double mBottomFactor = (60 - localEnd.minute) / 60.0;
+                                    if (localEnd.minute > 0) {
                                       mHeightFactor -= mBottomFactor;
                                     } else {
                                       mHeightFactor = 0.0;

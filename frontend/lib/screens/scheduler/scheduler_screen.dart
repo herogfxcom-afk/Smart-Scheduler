@@ -140,7 +140,8 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
     }
     final Map<String, List<TimeSlot>> groupedSlots = {};
     for (var slot in scheduler.suggestedSlots) {
-      final dateKey = "${slot.start.year}-${slot.start.month}-${slot.start.day}";
+      final localStart = toUserLocal(slot.start);
+      final dateKey = "${localStart.year}-${localStart.month}-${localStart.day}";
       groupedSlots.putIfAbsent(dateKey, () => []).add(slot);
     }
 
