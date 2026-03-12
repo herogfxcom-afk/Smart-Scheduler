@@ -23,7 +23,12 @@ class ApiService {
         return handler.next(options);
       },
       onError: (e, handler) {
-        print("API Error: ${e.message}");
+        print("--- API ERROR DEBUG ---");
+        print("Path: ${e.requestOptions.path}");
+        print("Status Code: ${e.response?.statusCode}");
+        print("Response Data: ${e.response?.data}");
+        print("Headers: ${e.response?.headers}");
+        print("-----------------------");
         return handler.next(e);
       },
     ));
