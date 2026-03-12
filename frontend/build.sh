@@ -37,6 +37,6 @@ if [ -n "$API_URL" ]; then
   echo "Using environment API_URL: $API_URL"
   flutter build web --release --no-tree-shake-icons --verbose --dart-define=API_URL=$API_URL
 else
-  echo "Using fallback production API_URL"
-  flutter build web --release --no-tree-shake-icons --verbose --dart-define=API_URL=https://smart-scheduler-production-2006.up.railway.app
+  echo "No API_URL provided, defaulting to relative paths (Vercel rewrite strategy)"
+  flutter build web --release --no-tree-shake-icons --verbose
 fi

@@ -11,9 +11,8 @@ class ApiService {
           connectTimeout: const Duration(seconds: 30),
           receiveTimeout: const Duration(seconds: 30),
         )) {
-    if (_dio.options.baseUrl.isEmpty) {
-      _dio.options.baseUrl = 'https://smart-scheduler-production-2006.up.railway.app'; // Default to production
-    }
+    // If baseUrl is empty, Dio will use the current origin on Web,
+    // which is exactly what we want for Vercel rewrites to work.
 
     _dio.interceptors.add(InterceptorsWrapper(
       onRequest: (options, handler) {
