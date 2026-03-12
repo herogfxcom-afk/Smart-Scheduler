@@ -8,19 +8,7 @@
     "outputDirectory": "frontend/build/web",
     "rewrites": [
         {
-            "source": "/api/(.*)",
-            "destination": "/api/index"
-        },
-        {
-            "source": "/api",
-            "destination": "/api/index"
-        },
-        {
-            "source": "/webhook/(.*)",
-            "destination": "/api/index"
-        },
-        {
-            "source": "/(.*)",
+            "source": "/((?!api|webhook).*)",
             "destination": "/index.html"
         }
     ]
