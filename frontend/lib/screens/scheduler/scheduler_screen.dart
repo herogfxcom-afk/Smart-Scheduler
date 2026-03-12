@@ -5,11 +5,8 @@ import 'package:intl/intl.dart';
 import 'package:go_router/go_router.dart';
 import '../../providers/scheduler_provider.dart';
 import '../../providers/group_provider.dart';
-import '../../providers/sync_provider.dart';
 import '../../providers/meeting_provider.dart';
-import '../../core/telegram/telegram_service.dart';
 import '../../models/time_slot.dart';
-import '../../models/meeting.dart';
 import '../../utils/timezone_utils.dart';
 import 'widgets/heatmap_grid.dart';
 
@@ -86,7 +83,7 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 const Icon(Icons.group_off, size: 64, color: Colors.grey),
-                const SizedBox(height: 16),
+                const SizedBox(height: 32),
                 const SizedBox(height: 16),
                 const Text(
                   "Группа не определена.\nИспользуйте кнопку Magic Sync в Telegram или введите данные ниже.",
@@ -345,13 +342,10 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
           ),
         ),
       ),
-      floatingActionButton: null,
     );
   }
 
-  /// Opens a manual date/time picker so users can book even without Google Calendar data.
   void _showManualBooking(BuildContext context, SchedulerProvider scheduler) async {
-    // Step 1: Date picker
     final date = await showDatePicker(
       context: context,
       initialDate: _selectedDay,
@@ -366,7 +360,6 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
     );
     if (date == null || !mounted) return;
 
-    // Step 2: Time picker
     final time = await showTimePicker(
       context: context,
       initialTime: const TimeOfDay(hour: 10, minute: 0),
@@ -430,7 +423,7 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(20),
-        onTap: () => _showBookingOptions(context, scheduler, slot),
+        onTap: () => _handleSlotSelected(context, scheduler, slot),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
           child: Row(
@@ -486,41 +479,30 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
   }
 
   void _handleSlotSelected(BuildContext context, SchedulerProvider scheduler, TimeSlot slot) {
-    // 1. If it's a perfect match, proceed to booking
     if (slot.isFullMatch) {
       _showBookingOptions(context, scheduler, slot);
       return;
     }
 
-    // 2. If I am busy, check if it's an app-created meeting I can delete
     if (slot.isMyBusy) {
-      final utcStart = slot.start.toUtc().toIso8601String().replaceAll('.000', '');
-      
-      // Look for a matching meeting in myMeetings
-      final matchedMeeting = context.read<MeetingProvider>().meetings.firstWhereOrNull(
-        (m) {
-          final mStart = toUserLocal(m.start);
-          final mEnd = toUserLocal(m.end);
-          final sStart = toUserLocal(slot.start);
-          
-          // slot starts exactly at or after meeting start AND slot starts strictly before meeting end
-          return (sStart.isAtSameMomentAs(mStart) || sStart.isAfter(mStart)) && sStart.isBefore(mEnd);
-        },
-      );
+      final matchedMeeting = context.read<MeetingProvider>().meetings.firstWhereOrNull((m) {
+        final mStart = toUserLocal(m.start);
+        final mEnd = toUserLocal(m.end);
+        final sStart = toUserLocal(slot.start);
+        return (sStart.isAtSameMomentAs(mStart) || sStart.isAfter(mStart)) && sStart.isBefore(mEnd);
+      });
 
       if (matchedMeeting != null && matchedMeeting.isCreator) {
         _showMeetingDetailsOptions(context, scheduler, matchedMeeting.toJson());
         return;
       }
 
-      // If no match found or not creator, it's a personal Google event
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('В это время у вас запланированы личные дела (внешний календарь).')),
       );
       return;
     }
 
-    // 3. Someone else is busy
     if (slot.isOthersBusy) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Один или несколько участников заняты в это время.')),
@@ -584,7 +566,7 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                       side: const BorderSide(color: Colors.redAccent, width: 1),
                     ),
-                    child: isDeleting 
+                    child: isDeleting
                       ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.redAccent, strokeWidth: 2))
                       : const Text('Отменить встречу', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                   ),
@@ -595,7 +577,11 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
                   height: 52,
                   child: TextButton(
                     onPressed: () => Navigator.pop(context),
-                    child: const Text('Назад', style: TextStyle(color: Colors.grey, fontSize: 16)),
+                    style: TextButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    ),
+                    child: const Text('Закрыть', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                   ),
                 ),
               ],
@@ -606,127 +592,138 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
     );
   }
 
-  void _showBookingOptions(BuildContext context, 
-      SchedulerProvider scheduler, TimeSlot slot) {
-    
-    // slot.start and slot.end are stored as UTC in the model.
-    // We localize them here for the interactive UI dialog.
-    DateTime startTime = toUserLocal(slot.start);
-    DateTime endTime = toUserLocal(slot.end);
+  void _showBookingOptions(BuildContext context, SchedulerProvider scheduler, TimeSlot slot) {
     final titleController = TextEditingController();
     final descriptionController = TextEditingController();
-    final locationController = TextEditingController();
-    bool hasPickedTime = true; // Enabled by default since we start with a valid slot
+    DateTime startTime = toUserLocal(slot.start);
+    DateTime endTime = toUserLocal(slot.end);
     bool isLoading = false;
-    bool isOnline = true; // Default to online (video call)
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) => StatefulBuilder(
-        builder: (context, setState) {
-          
-          bool canSubmit = titleController.text.trim().isNotEmpty 
-              && hasPickedTime 
-              && !isLoading;
-
-          return Container(
-            margin: EdgeInsets.fromLTRB(12, 0, 12, 12),
-            padding: EdgeInsets.only(
-                bottom: MediaQuery.of(context).viewInsets.bottom),
-            decoration: BoxDecoration(
-              color: Color(0xFF1E1E1E),
-              borderRadius: BorderRadius.circular(24),
-            ),
+        builder: (context, setState) => Container(
+          padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+          decoration: const BoxDecoration(
+            color: Color(0xFF1E1E1E),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
+          ),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Ручка
                 Container(
-                  margin: EdgeInsets.only(top: 12, bottom: 8),
-                  width: 36, height: 4,
+                  width: 40,
+                  height: 4,
                   decoration: BoxDecoration(
-                    color: Color(0xFF404040),
+                    color: Colors.white24,
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
-                // Заголовок
-                Padding(
-                  padding: EdgeInsets.fromLTRB(20, 4, 8, 12),
-                  child: Row(
-                    children: [
-      builder: (context) {
-        return Container(
-          decoration: BoxDecoration(
-            color: Color(0xFF1E1E1E),
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-            border: Border.all(color: Colors.white.withOpacity(0.05)),
-          ),
-          child: Consumer<SchedulerProvider>(
-            builder: (context, schedulerWatch, _) {
-              final isLoading = schedulerWatch.isLoading;
-              final error = schedulerWatch.error;
-              
-              return StatefulBuilder(
-                builder: (context, setInternalState) {
-                  final bool canSubmit = titleController.text.trim().isNotEmpty && !isLoading && hasPickedTime;
-
-                  return Padding(
-                    padding: EdgeInsets.only(
-                      bottom: MediaQuery.of(context).viewInsets.bottom,
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // Индикатор перетаскивания
-                        Container(
-                          margin: EdgeInsets.only(top: 12),
-                          width: 40,
-                          height: 4,
-                          decoration: BoxDecoration(
-                            color: Color(0xFF404040),
-                            borderRadius: BorderRadius.circular(2),
-                          ),
-                        ),
-                        // Заголовок
-                        Padding(
-                          padding: EdgeInsets.fromLTRB(20, 4, 8, 12),
-                          child: Row(
-                            children: [
-                              Icon(Icons.event_rounded, 
-                                  color: Color(0xFF4A90E2), size: 22),
-                              SizedBox(width: 10),
-                              Text('Новая встреча',
-                                style: TextStyle(color: Colors.white, 
-                                    fontSize: 18, fontWeight: FontWeight.w600)),
-                              Spacer(),
-                              IconButton(
-                                icon: Icon(Icons.close, color: Color(0xFF707070)),
-                                onPressed: () => Navigator.pop(context),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Divider(color: Color(0xFF2A2A2A), height: 1),
-                        
-                                color: Colors.white, strokeWidth: 2.5))
-                        : Text('Забронировать',
-                            style: TextStyle(fontSize: 16,
-                                fontWeight: FontWeight.w600)),
+                const SizedBox(height: 24),
+                const Text(
+                  "Новая встреча",
+                  style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 24),
+                TextField(
+                  controller: titleController,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    labelText: "Название встречи",
+                    labelStyle: const TextStyle(color: Colors.white60),
+                    filled: true,
+                    fillColor: Colors.white.withOpacity(0.05),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: BorderSide.none,
                     ),
                   ),
                 ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: descriptionController,
+                  style: const TextStyle(color: Colors.white),
+                  maxLines: 3,
+                  decoration: InputDecoration(
+                    labelText: "Описание (необязательно)",
+                    labelStyle: const TextStyle(color: Colors.white60),
+                    filled: true,
+                    fillColor: Colors.white.withOpacity(0.05),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    const Icon(Icons.access_time, color: Colors.blueAccent),
+                    const SizedBox(width: 12),
+                    Text(
+                      "${startTime.hour}:${startTime.minute.toString().padLeft(2, '0')} - ${endTime.hour}:${endTime.minute.toString().padLeft(2, '0')}",
+                      style: const TextStyle(color: Colors.white, fontSize: 18),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 32),
+                SizedBox(
+                  width: double.infinity,
+                  height: 56,
+                  child: ElevatedButton(
+                    onPressed: isLoading ? null : () async {
+                      if (titleController.text.trim().isEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text("Введите название встречи")),
+                        );
+                        return;
+                      }
+
+                      setState(() => isLoading = true);
+                      final success = await scheduler.createMeeting(
+                        title: titleController.text.trim(),
+                        description: descriptionController.text.trim(),
+                        slot: slot,
+                        chatId: context.read<GroupProvider>().chatId,
+                      );
+
+                      if (context.mounted) {
+                        Navigator.pop(context);
+                        if (success) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text("Встреча успешно создана!"), backgroundColor: Colors.green),
+                          );
+                          context.read<MeetingProvider>().fetchMyMeetings();
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text("Ошибка при создании встречи"), backgroundColor: Colors.red),
+                          );
+                        }
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    ),
+                    child: isLoading
+                        ? const CircularProgressIndicator(color: Colors.white)
+                        : const Text("Подтвердить", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text("Отмена", style: TextStyle(color: Colors.grey)),
+                ),
               ],
             ),
-          );
-        },
+          ),
+        ),
       ),
     );
-  }
-
-  String _getDayName(int weekday) {
-    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    return days[weekday - 1];
   }
 }
