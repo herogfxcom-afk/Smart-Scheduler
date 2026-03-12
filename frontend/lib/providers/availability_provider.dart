@@ -1,12 +1,13 @@
-import 'package:flutter/material.dart';
-import '../core/api/api_service.dart';
+import 'package:flutter/foundation.dart';
 import '../models/availability.dart';
+import '../core/api/api_service.dart';
 
-class AvailabilityProvider with ChangeNotifier {
+class AvailabilityProvider extends ChangeNotifier {
   final ApiService _apiService;
   List<Availability> _availability = [];
   bool _isLoading = false;
   String? _error;
+  DateTime lastUpdated = DateTime.now();
 
   AvailabilityProvider(this._apiService);
 
@@ -25,6 +26,7 @@ class AvailabilityProvider with ChangeNotifier {
       
       // Sort by day of week
       _availability.sort((a, b) => a.dayOfWeek.compareTo(b.dayOfWeek));
+      lastUpdated = DateTime.now();
     } catch (e) {
       _error = e.toString();
     } finally {
@@ -36,10 +38,12 @@ class AvailabilityProvider with ChangeNotifier {
   Future<void> saveAvailability() async {
     try {
       _isLoading = true;
+      _error = null;
       notifyListeners();
 
       final data = _availability.map((a) => a.toJson()).toList();
       await _apiService.updateAvailability(data);
+      lastUpdated = DateTime.now();
     } catch (e) {
       _error = e.toString();
     } finally {
@@ -48,16 +52,17 @@ class AvailabilityProvider with ChangeNotifier {
     }
   }
 
-  void updateDay(int dayOfWeek, {String? start, String? end, bool? enabled}) {
-    final index = _availability.indexWhere((a) => a.dayOfWeek == dayOfWeek);
+  void updateDay(int dayIndex, {String? start, String? end, bool? enabled}) {
+    final index = _availability.indexWhere((a) => a.dayOfWeek == dayIndex);
     if (index != -1) {
       final old = _availability[index];
       _availability[index] = Availability(
-        dayOfWeek: dayOfWeek,
+        dayOfWeek: old.dayOfWeek,
         startTime: start ?? old.startTime,
         endTime: end ?? old.endTime,
         isEnabled: enabled ?? old.isEnabled,
       );
+      lastUpdated = DateTime.now();
       notifyListeners();
     }
   }

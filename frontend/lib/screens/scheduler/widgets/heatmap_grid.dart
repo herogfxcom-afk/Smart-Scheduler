@@ -29,7 +29,6 @@ class HeatmapGrid extends StatefulWidget {
 }
 
 class _HeatmapGridState extends State<HeatmapGrid> {
-  final GlobalKey<SfCalendarState> _calendarKey = GlobalKey<SfCalendarState>();
   final CalendarController _calendarController = CalendarController();
   late String? myUserId;
 
@@ -38,15 +37,13 @@ class _HeatmapGridState extends State<HeatmapGrid> {
     super.initState();
     myUserId = TelegramService().getUserId();
     
-    // Explicitly refresh SfCalendar when availability changes
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<AvailabilityProvider>().addListener(_refreshCalendar);
-    });
+    // We don't need an explicit listener because context.watch handles it,
+    // but just in case we need to trigger something else, we keep it simple.
   }
 
   void _refreshCalendar() {
     if (mounted) {
-      _calendarKey.currentState?.refresh();
+      setState(() {});
     }
   }
 
@@ -71,7 +68,7 @@ class _HeatmapGridState extends State<HeatmapGrid> {
       children: [
         Expanded(
           child: SfCalendar(
-            key: _calendarKey,
+            key: ValueKey('sf_calendar_${context.watch<AvailabilityProvider>().lastUpdated.millisecondsSinceEpoch}'),
             controller: _calendarController,
             view: CalendarView.week,
             initialDisplayDate: widget.selectedDay,
