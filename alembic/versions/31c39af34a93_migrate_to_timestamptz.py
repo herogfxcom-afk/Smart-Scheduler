@@ -20,11 +20,18 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Upgrade schema."""
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+
     # 1. users
+    users_columns = [c['name'] for c in inspector.get_columns('users')]
     with op.batch_alter_table('users', schema=None) as batch_op:
-        batch_op.alter_column('created_at', type_=sa.DateTime(timezone=True))
-        batch_op.drop_column('google_refresh_token')
-        batch_op.drop_column('apple_auth_data')
+        if 'created_at' in users_columns:
+            batch_op.alter_column('created_at', type_=sa.DateTime(timezone=True))
+        if 'google_refresh_token' in users_columns:
+            batch_op.drop_column('google_refresh_token')
+        if 'apple_auth_data' in users_columns:
+            batch_op.drop_column('apple_auth_data')
 
     # 2. calendar_connections
     with op.batch_alter_table('calendar_connections', schema=None) as batch_op:
@@ -46,11 +53,15 @@ def upgrade() -> None:
         batch_op.alter_column('end_time', type_=sa.DateTime(timezone=True))
 
     # 6. meeting_invites
+    invites_columns = [c['name'] for c in inspector.get_columns('meeting_invites')]
     with op.batch_alter_table('meeting_invites', schema=None) as batch_op:
-        batch_op.alter_column('created_at', type_=sa.DateTime(timezone=True))
-        # SQLite workarounds for dropping constraints often require batch mode + recreate
-        # but for unique constraints it's safer to just handle it via batch
-        batch_op.drop_constraint('_meeting_user_invite_uc', type_='unique')
+        if 'created_at' in invites_columns:
+            batch_op.alter_column('created_at', type_=sa.DateTime(timezone=True))
+        
+        # Check if constraint exists before dropping
+        unique_constraints = inspector.get_unique_constraints('meeting_invites')
+        if any(uc['name'] == '_meeting_user_invite_uc' for uc in unique_constraints):
+            batch_op.drop_constraint('_meeting_user_invite_uc', type_='unique')
 
 
 def downgrade() -> None:

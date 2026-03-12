@@ -17,12 +17,13 @@ down_revision: Union[str, Sequence[str], None] = 'db7ffc2db40e'
 branch_labels: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     """Upgrade schema."""
-    import sqlalchemy.exc
-    try:
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    columns = [c['name'] for c in inspector.get_columns('group_meetings')]
+    
+    if 'outlook_event_id' not in columns:
         with op.batch_alter_table('group_meetings', schema=None) as batch_op:
             batch_op.add_column(sa.Column('outlook_event_id', sa.String(length=255), nullable=True))
-    except sqlalchemy.exc.OperationalError as e:
-        print(f"Ignoring OperationalError (likely duplicate column): {e}")
 
 def downgrade() -> None:
     """Downgrade schema."""
