@@ -1,7 +1,7 @@
 {
     "functions": {
         "api/**/*.py": {
-            "excludeFiles": ["frontend/**", "test.db"]
+            "excludeFiles": "frontend/**"
         }
     },
     "buildCommand": "cd frontend && bash build.sh",
