@@ -148,7 +148,23 @@ class HeatmapGrid extends StatelessWidget {
                       
                       return Expanded(
                         child: GestureDetector(
-                          onTap: cellSlots.isNotEmpty ? () => onSlotSelected(cellSlots.first) : null,
+                          onTap: cellSlots.isNotEmpty ? () {
+                            // Instead of picking the first merged slot (which could be the whole day),
+                            // we create a granular 1-hour slot starting at the clicked hour.
+                            final baseSlot = cellSlots.first;
+                            final clickedStart = DateTime(day.year, day.month, day.day, hour, 0).toUtc();
+                            final clickedEnd = clickedStart.add(const Duration(hours: 1));
+                            
+                            // Ensure the 1-hour slot is within the bounds of the merged block
+                            // (though for 'match' type it usually is)
+                            final granularSlot = TimeSlot(
+                              start: clickedStart,
+                              end: clickedEnd,
+                              type: baseSlot.type,
+                              availability: baseSlot.availability,
+                            );
+                            onSlotSelected(granularSlot);
+                          } : null,
                           child: Container(
                             margin: const EdgeInsets.all(1.5),
                             decoration: BoxDecoration(

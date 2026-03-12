@@ -664,9 +664,69 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
                   children: [
                     const Icon(Icons.access_time, color: Colors.blueAccent),
                     const SizedBox(width: 12),
-                    Text(
-                      "${startTime.hour}:${startTime.minute.toString().padLeft(2, '0')} - ${endTime.hour}:${endTime.minute.toString().padLeft(2, '0')}",
-                      style: const TextStyle(color: Colors.white, fontSize: 18),
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () async {
+                          final picked = await showTimePicker(
+                            context: context,
+                            initialTime: TimeOfDay.fromDateTime(startTime),
+                          );
+                          if (picked != null) {
+                            setState(() {
+                              startTime = DateTime(startTime.year, startTime.month, startTime.day, picked.hour, picked.minute);
+                              if (endTime.isBefore(startTime)) {
+                                endTime = startTime.add(const Duration(hours: 1));
+                              }
+                            });
+                          }
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.05),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            DateFormat('HH:mm').format(startTime),
+                            style: const TextStyle(color: Colors.white, fontSize: 16),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 8),
+                      child: Text("-", style: TextStyle(color: Colors.white)),
+                    ),
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () async {
+                          final picked = await showTimePicker(
+                            context: context,
+                            initialTime: TimeOfDay.fromDateTime(endTime),
+                          );
+                          if (picked != null) {
+                            setState(() {
+                              endTime = DateTime(endTime.year, endTime.month, endTime.day, picked.hour, picked.minute);
+                              if (endTime.isBefore(startTime)) {
+                                startTime = endTime.subtract(const Duration(hours: 1));
+                              }
+                            });
+                          }
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.05),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            DateFormat('HH:mm').format(endTime),
+                            style: const TextStyle(color: Colors.white, fontSize: 16),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -684,10 +744,19 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
                       }
 
                       setState(() => isLoading = true);
+                      
+                      // Create a new TimeSlot based on selected interactive times
+                      final finalSlot = TimeSlot(
+                        start: startTime.toUtc(),
+                        end: endTime.toUtc(),
+                        type: slot.type,
+                        availability: slot.availability,
+                      );
+
                       final success = await scheduler.createMeeting(
                         title: titleController.text.trim(),
                         description: descriptionController.text.trim(),
-                        slot: slot,
+                        slot: finalSlot,
                         chatId: context.read<GroupProvider>().chatId,
                       );
 
