@@ -1,4 +1,9 @@
 {
+    "functions": {
+        "api/**/*.py": {
+            "excludeFiles": "{frontend/**,test.db}"
+        }
+    },
     "buildCommand": "cd frontend && bash build.sh",
     "outputDirectory": "frontend/build/web",
     "rewrites": [
