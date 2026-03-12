@@ -615,7 +615,7 @@ async def connect_apple(data: dict, current_user: User = Depends(get_current_use
 
 @app.get("/calendar/sync")
 @limiter.limit("5/minute") # Syncing is heavy, limit it
-async def sync_calendar(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+async def sync_calendar(request: Request, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Syncs busy slots from all connected calendars to the database."""
     try:
         total_slots = 0
