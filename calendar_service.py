@@ -252,8 +252,3 @@ def find_common_free_slots(
         current += timedelta(days=1)
         
     return free_slots
-
-            
-        current += timedelta(days=1)
-        
-    return free_slots
