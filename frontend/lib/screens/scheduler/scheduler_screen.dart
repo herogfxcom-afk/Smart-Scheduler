@@ -379,7 +379,7 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
     );
     if (time == null || !mounted) return;
 
-    final start = DateTime(date.year, date.month, date.day, time.hour, time.minute);
+    final start = DateTime(date.year, date.month, date.day, time.hour, time.minute).toUtc();
     final end = start.add(const Duration(hours: 1));
 
     final manualSlot = TimeSlot(
@@ -609,14 +609,14 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
   void _showBookingOptions(BuildContext context, 
       SchedulerProvider scheduler, TimeSlot slot) {
     
-    // slot.start is already in user local time (toUserLocal applied in TimeSlot.fromJson).
-    // Calling toUserLocal() again would cause a double-offset (+2h for UTC+2 users).
-    DateTime startTime = slot.start;
-    DateTime endTime = slot.end;
+    // slot.start and slot.end are stored as UTC in the model.
+    // We localize them here for the interactive UI dialog.
+    DateTime startTime = toUserLocal(slot.start);
+    DateTime endTime = toUserLocal(slot.end);
     final titleController = TextEditingController();
     final descriptionController = TextEditingController();
     final locationController = TextEditingController();
-    bool hasPickedTime = false;
+    bool hasPickedTime = true; // Enabled by default since we start with a valid slot
     bool isLoading = false;
     bool isOnline = true; // Default to online (video call)
 
