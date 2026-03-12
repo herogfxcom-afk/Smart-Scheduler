@@ -936,6 +936,25 @@ async def respond_to_invite(invite_id: int, data: dict, current_user: User = Dep
     if not invite:
         raise HTTPException(status_code=404, detail="Invite not found")
         
+    # If moving from accepted to declined, clean up external calendars
+    if status == "declined" and invite.status == "accepted":
+        for conn in current_user.connections:
+            if not conn.is_active: continue
+            try:
+                from encryption import decrypt_token
+                if conn.provider == 'google' and invite.google_event_id:
+                    from calendar_service import GoogleCalendarService
+                    g_service = GoogleCalendarService(decrypt_token(conn.auth_data))
+                    await g_service.delete_event(invite.google_event_id)
+                    invite.google_event_id = None
+                elif conn.provider == 'outlook' and invite.outlook_event_id:
+                    from outlook_service import OutlookCalendarService
+                    o_service = OutlookCalendarService(decrypt_token(conn.auth_data))
+                    await o_service.delete_event(invite.outlook_event_id)
+                    invite.outlook_event_id = None
+            except Exception as e:
+                print(f"DEBUG: Failed to cleanup declined meeting on {conn.provider}: {e}")
+
     invite.status = status
     
     # If accepted, try to add to Google/Apple Calendar
@@ -943,7 +962,7 @@ async def respond_to_invite(invite_id: int, data: dict, current_user: User = Dep
         meeting = invite.meeting
         for conn in current_user.connections:
             if not conn.is_active: continue
-            if conn.provider == 'google':
+            if conn.provider == 'google' and not invite.google_event_id:
                 try:
                     from calendar_service import GoogleCalendarService
                     from encryption import decrypt_token
@@ -954,26 +973,40 @@ async def respond_to_invite(invite_id: int, data: dict, current_user: User = Dep
                         meeting.title, 
                         meeting.start_time, 
                         meeting.end_time,
-                        location=meeting.location
+                        location=meeting.location,
+                        description=meeting.description
                     )
                     invite.google_event_id = g_event.get('id')
                 except Exception as e:
                     print(f"DEBUG: Failed to sync accepted meeting to Google: {e}")
-            
-            # Apple logic could be added here too
+            elif conn.provider == 'outlook' and not invite.outlook_event_id:
+                try:
+                    from outlook_service import OutlookCalendarService
+                    from encryption import decrypt_token
+                    refresh_token = decrypt_token(conn.auth_data)
+                    o_service = OutlookCalendarService(refresh_token)
+                    o_event = await o_service.create_event(
+                        meeting.title, 
+                        meeting.start_time, 
+                        meeting.end_time,
+                        location=meeting.location,
+                        description=meeting.description
+                    )
+                    invite.outlook_event_id = o_event.get('id')
+                except Exception as e:
+                    print(f"DEBUG: Failed to sync accepted meeting to Outlook: {e}")
             
     db.commit()
     return {"status": "success"}
 
 @app.delete("/api/meetings/{meeting_id}")
 async def delete_meeting(meeting_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Deletes a meeting from DB and Google Calendar if applicable."""
+    """Deletes a meeting from DB and external Calendars of ALL participants."""
     meeting = db.query(models.GroupMeeting).filter(models.GroupMeeting.id == meeting_id).first()
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
         
-    # Remove from external calendar if connected
-    # We fetch connection to get the token
+    # Delete from creator's external calendar
     google_conn = next((c for c in current_user.connections if c.provider == 'google' and c.is_active), None)
     if meeting.google_event_id and google_conn:
         try:
@@ -995,6 +1028,27 @@ async def delete_meeting(meeting_id: int, current_user: User = Depends(get_curre
             await o_service.delete_event(meeting.outlook_event_id)
         except Exception as e:
             print(f"DEBUG: Failed to delete Outlook Event: {e}")
+
+    # Delete from invitees' external calendars
+    invites = db.query(models.MeetingInvite).filter(models.MeetingInvite.meeting_id == meeting_id).all()
+    for invite in invites:
+        user = invite.user
+        if not user: continue
+        
+        for conn in user.connections:
+            if not conn.is_active: continue
+            try:
+                from encryption import decrypt_token
+                if conn.provider == 'google' and invite.google_event_id:
+                    from calendar_service import GoogleCalendarService
+                    g_service = GoogleCalendarService(decrypt_token(conn.auth_data))
+                    await g_service.delete_event(invite.google_event_id)
+                elif conn.provider == 'outlook' and invite.outlook_event_id:
+                    from outlook_service import OutlookCalendarService
+                    o_service = OutlookCalendarService(decrypt_token(conn.auth_data))
+                    await o_service.delete_event(invite.outlook_event_id)
+            except Exception as e:
+                print(f"DEBUG: Failed to delete invitee external Event: {e}")
 
     db.delete(meeting)
     db.commit()
@@ -1379,7 +1433,7 @@ async def create_meeting(data: dict, background_tasks: BackgroundTasks, current_
             if not mentions_str:
                 mentions_str = "коллеги"
             
-            time_str = start_time.strftime("%d.%m %H:%M")
+            time_str = start_local.strftime("%d.%m %H:%M")
             
             # IMPORTANT: StartApp parameter CANNOT contain the minus (-) sign.
             app_chat_id = str(target_chat).replace("-", "n")

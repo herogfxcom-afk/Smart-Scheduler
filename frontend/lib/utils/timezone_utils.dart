@@ -1,6 +1,8 @@
+import 'package:timezone/timezone.dart' as tz;
 import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
 
+/// Returns the user's timezone offset in hours
 double getUserTzOffset() {
   try {
     final jsOffset = globalContext['userTzOffset'];
@@ -8,31 +10,54 @@ double getUserTzOffset() {
       return (jsOffset as JSNumber).toDartDouble;
     }
   } catch (_) {}
-  return DateTime.now().timeZoneOffset.inMinutes / 60.0;
+  
+  // Also fallback to the formal location
+  final now = tz.TZDateTime.now(tz.local);
+  return now.timeZoneOffset.inMinutes / 60.0;
 }
 
+/// Converts a UTC DateTime received from the backend into the user's local clock time representations
 DateTime toUserLocal(DateTime utcDateTime) {
-  final offsetHours = getUserTzOffset();
-  // We assume the input is UTC and we add the offset to get the user's wall clock time
-  return utcDateTime.toUtc().add(Duration(minutes: (offsetHours * 60).toInt()));
+  // Ensure we are working with UTC source
+  final utc = utcDateTime.isUtc ? utcDateTime : utcDateTime.toUtc();
+  // We use TZDateTime to get the strict local representation
+  final localTzDateTime = tz.TZDateTime.from(utc, tz.local);
+  return DateTime(
+    localTzDateTime.year,
+    localTzDateTime.month,
+    localTzDateTime.day,
+    localTzDateTime.hour,
+    localTzDateTime.minute,
+    localTzDateTime.second,
+  );
 }
 
+/// The current time in user's local timeline (ignoring system UTC settings, purely local time representation)
 DateTime userNow() {
   return toUserLocal(DateTime.now().toUtc());
 }
 
+/// Converts a locally selected wall-clock DateTime into a strict UTC DateTime 
+/// for sending to the backend
 DateTime fromUserLocal(DateTime localDateTime) {
-  if (!localDateTime.isUtc) {
-    return localDateTime.toUtc();
-  }
-  final offsetHours = getUserTzOffset();
-  return localDateTime.subtract(Duration(minutes: (offsetHours * 60).toInt()));
+  // We treat the passed localDateTime as if it happened in tz.local
+  final localTzDateTime = tz.TZDateTime(
+    tz.local,
+    localDateTime.year,
+    localDateTime.month,
+    localDateTime.day,
+    localDateTime.hour,
+    localDateTime.minute,
+    localDateTime.second,
+  );
+  return localTzDateTime.toUtc();
 }
 
 String getUserTimezone() {
   try {
-    final jsTz = globalContext['userTimezone'];
-    if (jsTz != null) return (jsTz as JSString).toDart;
-  } catch (_) {}
-  return 'UTC';
+    return tz.local.name;
+  } catch (_) {
+    return 'UTC';
+  }
 }
+

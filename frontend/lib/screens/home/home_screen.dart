@@ -12,6 +12,7 @@ import '../../providers/language_provider.dart';
 import '../../providers/solo_provider.dart'; // Added
 import '../../models/meeting.dart';
 import '../../utils/timezone_utils.dart';
+import '../../utils/ics_exporter.dart';
 import 'widgets/solo_dashboard.dart'; // Added
 
 class HomeScreen extends StatefulWidget {
@@ -608,6 +609,22 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               ),
             ],
             const SizedBox(height: 32),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                icon: const Icon(Icons.apple),
+                label: const Text("Добавить в Apple Calendar"),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  foregroundColor: Colors.black,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+                onPressed: () {
+                  IcsExporter.exportMeeting(meeting);
+                },
+              ),
+            ),
+            const SizedBox(height: 12),
             SizedBox(
               width: double.infinity,
               child: OutlinedButton(

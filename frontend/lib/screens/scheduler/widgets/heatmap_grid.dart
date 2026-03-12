@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
+import 'package:syncfusion_flutter_calendar/calendar.dart';
 import '../../../models/time_slot.dart';
 import '../../../models/meeting.dart';
 import '../../../utils/timezone_utils.dart';
 import '../../../utils/calendar_processor.dart';
 import '../../../core/telegram/telegram_service.dart';
 
-class HeatmapGrid extends StatelessWidget {
+class HeatmapGrid extends StatefulWidget {
   final List<TimeSlot> slots;
   final DateTime selectedDay;
   final Function(TimeSlot) onSlotSelected;
@@ -23,178 +23,79 @@ class HeatmapGrid extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    final now = userNow();
-    final String? myUserId = TelegramService().getUserId();
-    final processor = CalendarProcessor(
-      slots: slots,
-      selectedDay: selectedDay,
-      meetings: myMeetings,
-      type: calendarType,
-      myUserId: myUserId,
-    );
+  State<HeatmapGrid> createState() => _HeatmapGridState();
+}
 
+class _HeatmapGridState extends State<HeatmapGrid> {
+  final CalendarController _calendarController = CalendarController();
+  late String? myUserId;
+
+  @override
+  void initState() {
+    super.initState();
+    myUserId = TelegramService().getUserId();
+  }
+
+  @override
+  void didUpdateWidget(covariant HeatmapGrid oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!DateUtils.isSameDay(oldWidget.selectedDay, widget.selectedDay)) {
+      _calendarController.displayDate = widget.selectedDay;
+    }
+  }
+
+  @override
+  void dispose() {
+    _calendarController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Column(
       children: [
-        // Days Header
-        Container(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.05),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Row(
-            children: [
-              const SizedBox(width: 50),
-              ...List.generate(7, (index) {
-                final day = processor.gridStart.add(Duration(days: index));
-                final isToday = DateUtils.isSameDay(day, now);
-                final isSelected = DateUtils.isSameDay(day, selectedDay);
-                
-                return Expanded(
-                  child: Center(
-                    child: Column(
-                      children: [
-                        Text(
-                          DateFormat('E').format(day),
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            color: isSelected ? Colors.blue : Colors.grey,
-                          ),
-                        ),
-                        Text(
-                          day.day.toString(),
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                            color: isSelected ? Colors.blue : (isToday ? Colors.green : Colors.white70),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              }),
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
         Expanded(
-          child: ListView.builder(
-            padding: const EdgeInsets.only(bottom: 20), 
-            itemCount: processor.maxHour - processor.minHour,
-            itemBuilder: (context, index) {
-              final hour = index + processor.minHour;
-              return SizedBox(
-                height: 50,
-                child: Row(
-                  children: [
-                    SizedBox(
-                      width: 50,
-                      child: Text(
-                        "$hour:00",
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: Colors.grey.shade600,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                    ...List.generate(7, (dayIndex) {
-                      final day = processor.gridStart.add(Duration(days: dayIndex));
-                      final cellSlots = processor.getSlots(hour, dayIndex);
-                      final isSelectedColumn = DateUtils.isSameDay(day, selectedDay);
-
-                      final cellStartLocal = DateTime(day.year, day.month, day.day, hour);
-                      final cellEndLocal = cellStartLocal.add(const Duration(hours: 1));
-                      final isPast = cellEndLocal.isBefore(now);
-                      
-                      return Expanded(
-                        child: GestureDetector(
-                          onTap: (!isPast && cellSlots.isNotEmpty) ? () {
-                            final baseSlot = cellSlots.first.originalSlot;
-                            onSlotSelected(TimeSlot(
-                              start: cellStartLocal.toUtc(),
-                              end: cellEndLocal.toUtc(),
-                              type: baseSlot.type,
-                              availability: baseSlot.availability,
-                            ));
-                          } : null,
-                          child: Container(
-                            margin: const EdgeInsets.all(1.5),
-                            decoration: BoxDecoration(
-                              color: isSelectedColumn 
-                                  ? Colors.white.withOpacity(0.06) 
-                                  : Colors.white.withOpacity(0.01),
-                              borderRadius: BorderRadius.circular(4),
-                              border: Border.all(
-                                color: isSelectedColumn 
-                                    ? Colors.blue.withOpacity(0.3) 
-                                    : Colors.white.withOpacity(0.03),
-                                width: 0.5,
-                              ),
-                            ),
-                            clipBehavior: Clip.hardEdge,
-                            child: Stack(
-                              children: [
-                                ...cellSlots.map((ps) {
-                                  final slot = ps.originalSlot;
-                                  final frac = _calcFraction(slot, cellStartLocal);
-                                  if (frac.height <= 0) return const SizedBox.shrink();
-
-                                  return Positioned.fill(
-                                    child: Column(
-                                      children: [
-                                        if (frac.top > 0) Spacer(flex: frac.top),
-                                        Expanded(
-                                          flex: frac.height,
-                                          child: Tooltip(
-                                            message: processor.getSlotTooltip(ps, myUserId),
-                                            child: Container(
-                                              decoration: BoxDecoration(
-                                                color: processor.getSlotColor(ps, myUserId),
-                                                borderRadius: BorderRadius.circular(2),
-                                                border: ps.isMeeting 
-                                                  ? Border.all(color: Colors.white.withOpacity(0.4), width: 1.0)
-                                                  : (slot.isFromMe(myUserId) ? Border.all(color: Colors.blue.withOpacity(0.8), width: 1.0) : null),
-                                              ),
-                                              child: !ps.isMeeting && slot.availability > 0 && frac.height >= 25
-                                                  ? Center(
-                                                      child: Text(
-                                                        "${(slot.availability * 100).toInt()}%",
-                                                        style: const TextStyle(
-                                                          fontSize: 8,
-                                                          fontWeight: FontWeight.bold,
-                                                          color: Colors.white24,
-                                                        ),
-                                                      ),
-                                                    )
-                                                  : null,
-                                            ),
-                                          ),
-                                        ),
-                                        if (frac.bottom > 0) Spacer(flex: frac.bottom),
-                                      ],
-                                    ),
-                                  );
-                                }),
-
-                                if (isPast)
-                                  Positioned.fill(
-                                    child: Container(
-                                      color: Colors.black.withOpacity(0.4),
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      );
-                    }),
-                  ],
-                ),
-              );
+          child: SfCalendar(
+            key: const ValueKey('sf_calendar_heatmap'),
+            controller: _calendarController,
+            view: CalendarView.week,
+            initialDisplayDate: widget.selectedDay,
+            firstDayOfWeek: 1, // Monday
+            timeSlotViewSettings: const TimeSlotViewSettings(
+              startHour: 7,
+              endHour: 24,
+              timeInterval: Duration(hours: 1),
+              timeFormat: 'H:mm',
+              dateFormat: 'd',
+              dayFormat: 'E',
+            ),
+            backgroundColor: Colors.transparent,
+            headerHeight: 0, // We hide the default header to rely on the timeline week header
+            dataSource: _MeetingDataSource(_buildAppointments()),
+            appointmentBuilder: _appointmentBuilder,
+            onTap: (CalendarTapDetails details) {
+              if (details.targetElement == CalendarElement.calendarCell) {
+                final date = details.date;
+                if (date != null) {
+                  // Only allow selection if the slot is in the future
+                  if (date.isBefore(userNow())) return;
+                  
+                  // Construct a dummy TimeSlot for the selected cell
+                  // We default to free type so the user can interact
+                  final selectedSlot = TimeSlot(
+                    start: fromUserLocal(date),
+                    end: fromUserLocal(date.add(const Duration(hours: 1))),
+                    type: 'match',
+                    availability: 1.0,
+                  );
+                  widget.onSlotSelected(selectedSlot);
+                }
+              } else if (details.targetElement == CalendarElement.appointment) {
+                final ProcessedAppointment appt = details.appointments!.first;
+                // Don't allow selecting past slots
+                if (appt.startTime.isBefore(userNow())) return;
+                widget.onSlotSelected(appt.originalSlot);
+              }
             },
           ),
         ),
@@ -203,12 +104,117 @@ class HeatmapGrid extends StatelessWidget {
     );
   }
 
+  List<ProcessedAppointment> _buildAppointments() {
+    final List<ProcessedAppointment> appointments = [];
+    final now = userNow();
+
+    // Add Meetings
+    for (final meeting in widget.myMeetings) {
+      final startLocal = toUserLocal(meeting.start);
+      final endLocal = toUserLocal(meeting.end);
+      
+      appointments.add(ProcessedAppointment(
+        startTime: startLocal,
+        endTime: endLocal,
+        color: Colors.purple.withOpacity(0.85),
+        subject: meeting.title,
+        originalSlot: TimeSlot(start: meeting.start, end: meeting.end, type: 'meeting'),
+        isMeeting: true,
+        customMeeting: meeting,
+      ));
+    }
+
+    // Add Busy Slots / Free Slots
+    for (final slot in widget.slots) {
+      final startLocal = toUserLocal(slot.start);
+      final endLocal = toUserLocal(slot.end);
+      final color = _getSlotColor(slot);
+      
+      appointments.add(ProcessedAppointment(
+        startTime: startLocal,
+        endTime: endLocal,
+        color: color,
+        subject: '',
+        originalSlot: slot,
+        availability: slot.availability,
+        isPast: endLocal.isBefore(now),
+      ));
+    }
+
+    return appointments;
+  }
+
+  Color _getSlotColor(TimeSlot timeSlot) {
+    if (widget.calendarType == CalendarType.solo) {
+      if (timeSlot.availability == 1.0) return Colors.green.withOpacity(0.35);
+      if (timeSlot.availability > 0.6) return Colors.green.withOpacity(0.2);
+      if (timeSlot.availability > 0.0) return Colors.orange.withOpacity(0.2);
+      return Colors.red.withOpacity(0.2);
+    }
+    
+    // Group Colors
+    if (timeSlot.isCommonSlot) return const Color(0xFF2E7D32).withOpacity(0.8);
+    if (timeSlot.isFromMe(myUserId)) return Colors.blue.withOpacity(0.6);
+    if (timeSlot.isFromOthers(myUserId)) return Colors.deepOrange.withOpacity(0.5);
+    
+    return Colors.white.withOpacity(0.05);
+  }
+
+  Widget _appointmentBuilder(BuildContext context, CalendarAppointmentDetails details) {
+    final ProcessedAppointment appt = details.appointments.first;
+    
+    // Past events are darkened
+    final isPast = appt.isPast;
+    final color = isPast ? Colors.grey.withOpacity(0.3) : appt.color;
+    
+    // Border for meetings or my busy slots
+    final hasBorder = appt.isMeeting || (appt.originalSlot.isFromMe(myUserId));
+    final borderColor = appt.isMeeting 
+        ? Colors.white.withOpacity(0.4) 
+        : Colors.blue.withOpacity(0.8);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(2),
+        border: hasBorder ? Border.all(color: borderColor, width: 1.0) : null,
+      ),
+      child: Center(
+        child: _buildAppointmentContent(appt),
+      ),
+    );
+  }
+
+  Widget _buildAppointmentContent(ProcessedAppointment appt) {
+    if (appt.isMeeting) {
+      return Text(
+        appt.subject,
+        style: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold),
+        overflow: TextOverflow.ellipsis,
+      );
+    }
+
+    // Show percentage for solo calendar non-busy slots
+    if (widget.calendarType == CalendarType.solo && appt.availability > 0) {
+      return Text(
+        "${(appt.availability * 100).toInt()}%",
+        style: const TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
+          color: Colors.white70,
+        ),
+      );
+    }
+
+    return const SizedBox.shrink();
+  }
+
   Widget _buildLegend() {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
-        children: calendarType == CalendarType.group 
+        children: widget.calendarType == CalendarType.group 
         ? [
             _legendItem(const Color(0xFF2E7D32), "Match"),
             _legendItem(Colors.blue, "Me"),
@@ -240,33 +246,30 @@ class HeatmapGrid extends StatelessWidget {
       ),
     );
   }
-
-  _Frac _calcFraction(TimeSlot slot, DateTime cellStart) {
-    final cellEnd = cellStart.add(const Duration(hours: 1));
-    final localStart = toUserLocal(slot.start);
-    final localEnd = toUserLocal(slot.end);
-    
-    final latestStart = localStart.isAfter(cellStart) ? localStart : cellStart;
-    final earliestEnd = localEnd.isBefore(cellEnd) ? localEnd : cellEnd;
-    
-    if (!latestStart.isBefore(earliestEnd)) return const _Frac(0, 0, 0);
-    
-    final topMinutes = latestStart.difference(cellStart).inMinutes;
-    final durationMinutes = earliestEnd.difference(latestStart).inMinutes;
-    
-    if (durationMinutes <= 0) return const _Frac(0, 0, 0);
-
-    final top = ((topMinutes / 60.0) * 100).round();
-    final height = ((durationMinutes / 60.0) * 100).round();
-    final bottom = 100 - top - height;
-    
-    return _Frac(top, height, bottom);
-  }
 }
 
-class _Frac {
-  final int top;
-  final int height;
-  final int bottom;
-  const _Frac(this.top, this.height, this.bottom);
+class ProcessedAppointment extends Appointment {
+  final TimeSlot originalSlot;
+  final bool isMeeting;
+  final Meeting? customMeeting;
+  final double availability;
+  final bool isPast;
+  
+  ProcessedAppointment({
+    required super.startTime,
+    required super.endTime,
+    required super.color,
+    super.subject,
+    required this.originalSlot,
+    this.isMeeting = false,
+    this.customMeeting,
+    this.availability = 0.0,
+    this.isPast = false,
+  });
+}
+
+class _MeetingDataSource extends CalendarDataSource {
+  _MeetingDataSource(List<ProcessedAppointment> source) {
+    appointments = source;
+  }
 }

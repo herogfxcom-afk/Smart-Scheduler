@@ -126,6 +126,7 @@ class MeetingInvite(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     status = Column(String(50), default="pending")  # 'pending', 'accepted', 'declined'
     google_event_id = Column(String(255), nullable=True) # Each participant might have their own event
+    outlook_event_id = Column(String(255), nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.datetime.now(datetime.timezone.utc))
 
     meeting = relationship("GroupMeeting", back_populates="invites")

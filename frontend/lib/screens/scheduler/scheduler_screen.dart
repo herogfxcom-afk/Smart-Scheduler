@@ -10,6 +10,7 @@ import '../../providers/solo_provider.dart';
 import '../../models/time_slot.dart';
 import '../../utils/timezone_utils.dart';
 import '../../utils/calendar_processor.dart';
+import '../../utils/ics_exporter.dart';
 import 'widgets/heatmap_grid.dart';
 
 class SchedulerScreen extends StatefulWidget {
@@ -592,6 +593,24 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
                     child: isDeleting
                       ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.redAccent, strokeWidth: 2))
                       : const Text('Отменить встречу', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      final m = Meeting.fromJson(meetingData);
+                      IcsExporter.exportMeeting(m);
+                    },
+                    icon: const Icon(Icons.apple),
+                    label: const Text('Добавить в Apple Calendar', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: Colors.black,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 12),

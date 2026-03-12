@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'package:timezone/data/latest.dart' as tz;
+import 'package:timezone/timezone.dart' as tz;
+import 'package:flutter_timezone/flutter_timezone.dart';
 
 import 'core/api/api_service.dart';
 import 'core/telegram/telegram_service.dart';
@@ -18,7 +21,16 @@ import 'providers/language_provider.dart';
 import 'providers/solo_provider.dart'; // Added
 import 'screens/settings/availability_settings_screen.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  tz.initializeTimeZones();
+  try {
+    final String currentTimeZone = await FlutterTimezone.getLocalTimezone();
+    tz.setLocalLocation(tz.getLocation(currentTimeZone));
+  } catch (e) {
+    print('Could not get local timezone: $e');
+  }
+
   final TelegramService telegramService = TelegramService();
   
   telegramService.init();
