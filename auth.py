@@ -68,22 +68,33 @@ def get_current_user(init_data: Optional[str] = Header(None), db: Session = Depe
         print("===> DEBUG AUTH: Fail! Telegram ID missing in validated data.")
         raise HTTPException(status_code=401, detail="User ID missing in initData")
     
-    user = db.query(User).filter(User.telegram_id == telegram_id).first()
-    if not user:
-        user = User(
-            telegram_id=telegram_id,
-            username=user_info.get("username"),
-            first_name=user_info.get("first_name"),
-            photo_url=user_info.get("photo_url")
-        )
-        db.add(user)
-        db.commit()
-        db.refresh(user)
-    else:
-        # Update user info if changed
-        user.username = user_info.get("username")
-        user.first_name = user_info.get("first_name")
-        user.photo_url = user_info.get("photo_url")
-        db.commit()
-        
-    return user
+    print(f"AUTH: Extracted Telegram ID: {telegram_id}")
+    
+    try:
+        user = db.query(User).filter(User.telegram_id == telegram_id).first()
+        if not user:
+            print(f"AUTH: Creating new user for ID: {telegram_id}")
+            user = User(
+                telegram_id=telegram_id,
+                username=user_info.get("username"),
+                first_name=user_info.get("first_name"),
+                photo_url=user_info.get("photo_url")
+            )
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+            print("AUTH: User created successfully")
+        else:
+            print(f"AUTH: Found existing user: {user.id}")
+            # Update user info if changed
+            user.username = user_info.get("username")
+            user.first_name = user_info.get("first_name")
+            user.photo_url = user_info.get("photo_url")
+            db.commit()
+            print("AUTH: User updated successfully")
+            
+        return user
+    except Exception as e:
+        print(f"AUTH ERROR IN DB OPERATION: {str(e)}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
