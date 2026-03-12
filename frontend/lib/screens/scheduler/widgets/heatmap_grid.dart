@@ -71,6 +71,7 @@ class _HeatmapGridState extends State<HeatmapGrid> {
             key: ValueKey('sf_calendar_${context.watch<AvailabilityProvider>().lastUpdated.millisecondsSinceEpoch}'),
             controller: _calendarController,
             view: CalendarView.week,
+            timeZone: 'UTC', // We handle local conversion ourselves via toUserLocal in _buildAppointments
             initialDisplayDate: widget.selectedDay,
             firstDayOfWeek: 1, // Monday
             timeSlotViewSettings: const TimeSlotViewSettings(
