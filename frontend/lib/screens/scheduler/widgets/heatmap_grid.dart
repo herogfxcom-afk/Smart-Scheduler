@@ -68,7 +68,10 @@ class _HeatmapGridState extends State<HeatmapGrid> {
               timeFormat: 'H:mm',
               dateFormat: 'd',
               dayFormat: 'E',
+              nonWorkingDays: [7], // Sunday
             ),
+            specialRegions: _getWorkingHoursRegions(),
+            timeRegionBuilder: _timeRegionBuilder,
             backgroundColor: Colors.transparent,
             headerHeight: 0, // We hide the default header to rely on the timeline week header
             dataSource: _MeetingDataSource(_buildAppointments()),
@@ -79,9 +82,14 @@ class _HeatmapGridState extends State<HeatmapGrid> {
                 if (date != null) {
                   // Only allow selection if the slot is in the future
                   if (date.isBefore(userNow())) return;
+
+                  // Validate working hours
+                  if (!_isWithinWorkingHours(date)) {
+                    _showNonWorkingHourWarning(context);
+                    return;
+                  }
                   
                   // Construct a dummy TimeSlot for the selected cell
-                  // We default to free type so the user can interact
                   final selectedSlot = TimeSlot(
                     start: fromUserLocal(date),
                     end: fromUserLocal(date.add(const Duration(hours: 1))),
@@ -243,6 +251,74 @@ class _HeatmapGridState extends State<HeatmapGrid> {
           const SizedBox(width: 4),
           Text(label, style: const TextStyle(fontSize: 9, color: Colors.white54)),
         ],
+      ),
+    );
+  }
+
+  List<TimeRegion> _getWorkingHoursRegions() {
+    return [
+      // Mon-Fri: 09:00 - 18:00
+      TimeRegion(
+        startTime: DateTime(2024, 1, 1, 9, 0, 0),
+        endTime: DateTime(2024, 1, 1, 18, 0, 0),
+        recurrenceRule: 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR',
+        color: Colors.green.withOpacity(0.05),
+        text: 'Working Hours',
+        enablePointerInteraction: true,
+      ),
+      // Saturday: 09:00 - 14:00
+      TimeRegion(
+        startTime: DateTime(2024, 1, 6, 9, 0, 0),
+        endTime: DateTime(2024, 1, 6, 14, 0, 0),
+        recurrenceRule: 'FREQ=WEEKLY;BYDAY=SA',
+        color: Colors.green.withOpacity(0.05),
+        text: 'Working Hours',
+        enablePointerInteraction: true,
+      ),
+    ];
+  }
+
+  Widget _timeRegionBuilder(BuildContext context, TimeRegionDetails details) {
+    return Container(
+      decoration: BoxDecoration(
+        color: details.region.color,
+        border: Border.all(color: Colors.green.withOpacity(0.1), width: 0.5),
+      ),
+      alignment: Alignment.topLeft,
+      padding: const EdgeInsets.all(4),
+      child: Text(
+        details.region.text ?? '',
+        style: TextStyle(
+          fontSize: 8,
+          color: Colors.green.withOpacity(0.5),
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    );
+  }
+
+  bool _isWithinWorkingHours(DateTime date) {
+    final day = date.weekday;
+    final hour = date.hour;
+    
+    // Mon-Fri
+    if (day >= 1 && day <= 5) {
+      return hour >= 9 && hour < 18;
+    }
+    // Sat
+    if (day == 6) {
+      return hour >= 9 && hour < 14;
+    }
+    // Sun
+    return false;
+  }
+
+  void _showNonWorkingHourWarning(BuildContext context) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Selected time is outside of working hours.'),
+        duration: Duration(seconds: 2),
+        backgroundColor: Colors.orange,
       ),
     );
   }
