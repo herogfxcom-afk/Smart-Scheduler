@@ -1452,19 +1452,23 @@ async def create_meeting(data: dict, background_tasks: BackgroundTasks, current_
                 mentions_str = "коллеги"
             
             # Group notification: use creator's timezone
+            user_tz_name = current_user.timezone or "UTC"
             try:
-                creator_tz = current_user.timezone or "UTC"
-                creator_local_time = start_time.astimezone(ZoneInfo(creator_tz))
-                time_str = creator_local_time.strftime("%d.%m %H:%M")
+                creator_tz = ZoneInfo(user_tz_name)
+                local_start = start_time.astimezone(creator_tz)
+                local_end = end_time.astimezone(creator_tz)
+                time_str = f"{local_start.strftime('%d.%m.%Y с %H:%M')} до {local_end.strftime('%H:%M')}"
             except Exception:
-                time_str = start_local.strftime("%d.%m %H:%M") # fallback to offset-based if zoneinfo fails
+                time_str = start_local.strftime("%d.%m %H:%M") # fallback
             
             # IMPORTANT: StartApp parameter CANNOT contain the minus (-) sign.
             app_chat_id = str(target_chat).replace("-", "n")
             web_app_url = f"https://t.me/{bot_username}/app?startapp=group_{app_chat_id}"
 
+            creator_name = current_user.first_name or current_user.username
             group_text = (
-                f"📅 **Новое приглашение на встречу от {current_user.first_name or current_user.username}!**\n\n"
+                f"Smart Scheduler\n"
+                f"📅 **Новое приглашение на встречу от {creator_name}!**\n\n"
                 f"📍 Тема: {summary}\n"
                 f"⏰ Время: **{time_str}**\n\n"
                 f"🔔 Участники: {mentions_str}\n\n"
@@ -1495,9 +1499,11 @@ async def create_meeting(data: dict, background_tasks: BackgroundTasks, current_
                     if u.telegram_id:
                         # Convert meeting time to target user's local timezone
                         try:
-                            user_tz = u.timezone or "UTC"
-                            local_time = start_time.astimezone(ZoneInfo(user_tz))
-                            u_time_str = local_time.strftime("%d.%m %H:%M")
+                            u_tz_name = u.timezone or "UTC"
+                            u_tz = ZoneInfo(u_tz_name)
+                            u_local_start = start_time.astimezone(u_tz)
+                            u_local_end = end_time.astimezone(u_tz)
+                            u_time_str = f"{u_local_start.strftime('%d.%m.%Y с %H:%M')} до {u_local_end.strftime('%H:%M')}"
                         except Exception:
                             u_time_str = time_str # Fallback to default
                             
@@ -1505,8 +1511,9 @@ async def create_meeting(data: dict, background_tasks: BackgroundTasks, current_
                             client.post(tg_url, json={
                                 "chat_id": u.telegram_id,
                                 "text": (
+                                    f"Smart Scheduler\n"
                                     f"🔔 У вас новое приглашение на встречу!\n\n"
-                                    f"👤 От: {current_user.first_name or current_user.username}\n"
+                                    f"👤 От: {creator_name}\n"
                                     f"📍 Тема: {summary}\n"
                                     f"⏰ Время: {u_time_str}\n\n"
                                     f"Откройте приложение, чтобы подтвердить."
