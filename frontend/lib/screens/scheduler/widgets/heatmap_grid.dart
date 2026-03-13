@@ -36,7 +36,6 @@ class HeatmapGrid extends StatefulWidget {
 
 class _HeatmapGridState extends State<HeatmapGrid> {
   final CalendarController _calendarController = CalendarController();
-  final GlobalKey _calendarKey = GlobalKey();
 
   @override
   void didChangeDependencies() {
@@ -71,7 +70,7 @@ class _HeatmapGridState extends State<HeatmapGrid> {
       children: [
         Expanded(
           child: SfCalendar(
-            key: _calendarKey,
+            key: ValueKey('sf_calendar_${widget.selectedDay.millisecondsSinceEpoch}_${widget.availability.hashCode}_${getUserTimezone()}'),
             controller: _calendarController,
             view: CalendarView.week,
             timeZone: getUserTimezone(),
@@ -97,7 +96,6 @@ class _HeatmapGridState extends State<HeatmapGrid> {
               if (details.targetElement == CalendarElement.calendarCell) {
                 final date = details.date;
                 if (date != null) {
-                  final local = toUserLocal(date);
                   // Only allow selection if the slot is in the future
                   if (date.isBefore(userNow())) return;
 
@@ -105,26 +103,6 @@ class _HeatmapGridState extends State<HeatmapGrid> {
                   if (!_isWithinWorkingHours(date)) {
                     _showNonWorkingHourWarning(context);
                     return;
-                  }
-
-                  // Optional dialog requested by user for Solo mode
-                  if (widget.calendarType == CalendarType.solo) {
-                    showDialog(
-                      context: context,
-                      builder: (context) => AlertDialog(
-                        backgroundColor: const Color(0xFF1E1E1E),
-                        content: Text(
-                          "Это время свободно ${local.hour}:00 - ${local.hour + 1}:00",
-                          style: const TextStyle(color: Colors.white),
-                        ),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(context),
-                            child: const Text("OK", style: TextStyle(color: Colors.blueAccent)),
-                          ),
-                        ],
-                      ),
-                    );
                   }
                   
                   // Construct a dummy TimeSlot for the selected cell
