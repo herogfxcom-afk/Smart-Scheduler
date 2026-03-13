@@ -191,12 +191,21 @@ class _HeatmapGridState extends State<HeatmapGrid> {
     }
 
     // 2. Add External Busy Slots (Outlook/Google)
-    // These are slots where the user is busy in their connected calendars
     for (final slot in widget.slots) {
       if (!slot.isMyBusy) continue;
 
       final startUtc = slot.start.isUtc ? slot.start : slot.start.toUtc();
       final endUtc = slot.end.isUtc ? slot.end : slot.end.toUtc();
+      
+      // FIX: If there is already a meeting covering this timeframe for THIS user, 
+      // skip adding the busy slot to prevent "creeping" (split narrow columns).
+      final isOverlappingWithMeeting = widget.myMeetings.any((m) {
+        final mStart = m.start.isUtc ? m.start : m.start.toUtc();
+        final mEnd = m.end.isUtc ? m.end : m.end.toUtc();
+        return startUtc.isBefore(mEnd) && endUtc.isAfter(mStart);
+      });
+      
+      if (isOverlappingWithMeeting) continue;
       
       appointments.add(ProcessedAppointment(
         startTime: startUtc,

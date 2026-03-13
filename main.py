@@ -1340,8 +1340,13 @@ async def create_meeting(data: dict, background_tasks: BackgroundTasks, current_
         ).first()
     
     if conflict:
-        print(f"DEBUG: Conflict detected for user {current_user.id} at {start_time}")
-        raise HTTPException(status_code=409, detail="Time slot already booked")
+        # If the conflict is with another GroupMeeting, we strictly block it.
+        # But if it's only a BusySlot (external sync), we allow it - the user might want to double-book their own calendar.
+        if isinstance(conflict, models.GroupMeeting):
+            print(f"DEBUG: Conflict detected for user {current_user.id} at {start_time} (Existing GroupMeeting)")
+            raise HTTPException(status_code=409, detail="Time slot already booked in this app")
+        else:
+            print(f"DEBUG: Soft conflict with external BusySlot for user {current_user.id} at {start_time}. Allowing.")
 
     results = {}
     google_event_id = None

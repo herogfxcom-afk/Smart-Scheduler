@@ -180,12 +180,6 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
         elevation: 0,
         leading: BackButton(onPressed: () => Navigator.of(context).pop()),
         actions: [
-          // Permanent "Book Meeting" button
-          IconButton(
-            icon: const Icon(Icons.event_available, color: Colors.blue),
-            tooltip: "Book a Meeting",
-            onPressed: () => _showManualBooking(context, scheduler),
-          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             tooltip: "Refresh sync",
@@ -351,16 +345,10 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
           child: ElevatedButton.icon(
-            onPressed: () {
-              if (scheduler.suggestedSlots.isNotEmpty) {
-                _showBookingOptions(context, scheduler, scheduler.suggestedSlots.first);
-              } else {
-                _showManualBooking(context, scheduler);
-              }
-            },
+            onPressed: () => _showManualBooking(context, scheduler),
             icon: const Icon(Icons.calendar_today, color: Colors.white),
             label: Text(
-              scheduler.suggestedSlots.isNotEmpty ? "Забронировать лучшее время" : "Назначить встречу",
+              "Забронировать лучшее время",
               style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
             ),
             style: ElevatedButton.styleFrom(
@@ -675,6 +663,50 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
                 const Text(
                   "Новая встреча",
                   style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 16),
+                // Date Selection
+                GestureDetector(
+                  onTap: () async {
+                    final picked = await showDatePicker(
+                      context: context,
+                      initialDate: startTime,
+                      firstDate: userNow(),
+                      lastDate: userNow().add(const Duration(days: 90)),
+                      builder: (ctx, child) => Theme(
+                        data: ThemeData.dark().copyWith(
+                          colorScheme: const ColorScheme.dark(primary: Colors.blue),
+                        ),
+                        child: child!,
+                      ),
+                    );
+                    if (picked != null) {
+                      setState(() {
+                        startTime = DateTime(picked.year, picked.month, picked.day, startTime.hour, startTime.minute);
+                        endTime = DateTime(picked.year, picked.month, picked.day, endTime.hour, endTime.minute);
+                      });
+                    }
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.05),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.white10),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.calendar_today, color: Colors.blue, size: 20),
+                        const SizedBox(width: 12),
+                        Text(
+                          DateFormat('EEEE, d MMMM').format(startTime),
+                          style: const TextStyle(color: Colors.white, fontSize: 16),
+                        ),
+                        const Spacer(),
+                        const Icon(Icons.arrow_drop_down, color: Colors.white54),
+                      ],
+                    ),
+                  ),
                 ),
                 const SizedBox(height: 24),
                 TextField(
