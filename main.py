@@ -738,14 +738,8 @@ async def get_solo_scheduler(
 ):
     """Returns 7-day busy/free segments for the current user's personal heatmap."""
     try:
-        if not (-12.0 <= tz_offset <= 14.0):
-            raise HTTPException(status_code=422, detail="Invalid timezone offset")
-            
-        from calendar_service import find_common_free_slots
-        from zoneinfo import ZoneInfo
-        
-        # Determine user's timezone (priority: DB field, fallback: UTC)
-        user_tz_name = current_user.timezone or "UTC"
+        # Use ZoneInfo from query param, then user profile, finally UTC
+        user_tz_name = timezone or current_user.timezone or "UTC"
         try:
             u_tz = ZoneInfo(user_tz_name)
         except:
@@ -761,16 +755,26 @@ async def get_solo_scheduler(
         # Get user's working hours in the format expected by find_common_free_slots
         avail = db.query(models.UserAvailability).filter(models.UserAvailability.user_id == current_user.id).all()
         
-        # Initialize with default 9-18 for all days (each day gets its own dict copy)
+        # Initialize with default 9-18 for all days
         user_avail = {i: {"start": 9, "end": 18, "enabled": True} for i in range(7)}
         
         # Override with user settings where available
         for a in avail:
-            user_avail[a.day_of_week] = {
-                "start": int(a.start_time.split(":")[0]),
-                "end": int(a.end_time.split(":")[0]),
-                "enabled": bool(a.is_enabled)
-            }
+            # Handle start/end time with minute precision (store as hour + minute/60.0)
+            try:
+                s_parts = a.start_time.split(":")
+                e_parts = a.end_time.split(":")
+                
+                h_start = int(s_parts[0]) + int(s_parts[1]) / 60.0
+                h_end = int(e_parts[0]) + int(e_parts[1]) / 60.0
+                
+                user_avail[a.day_of_week] = {
+                    "start": h_start,
+                    "end": h_end,
+                    "enabled": bool(a.is_enabled)
+                }
+            except:
+                continue
                 
         # Get busy slots from database (Internal + Synced from Google/etc.)
         db_slots = db.query(models.BusySlot).filter(models.BusySlot.user_id == current_user.id).all()
@@ -1168,10 +1172,13 @@ async def get_free_slots(data: dict, current_user: User = Depends(get_current_us
             else:
                 u_dict = {}
                 for a in avail:
-                    # Parse "HH:MM" to int hour
                     try:
-                        h_start = int(a.start_time.split(":")[0])
-                        h_end = int(a.end_time.split(":")[0])
+                        s_parts = a.start_time.split(":")
+                        e_parts = a.end_time.split(":")
+                        
+                        h_start = int(s_parts[0]) + int(s_parts[1]) / 60.0
+                        h_end = int(e_parts[0]) + int(e_parts[1]) / 60.0
+                        
                         u_dict[a.day_of_week] = {"start": h_start, "end": h_end, "enabled": bool(a.is_enabled)}
                     except:
                         u_dict[a.day_of_week] = {"start": 9, "end": 18, "enabled": True}
@@ -1182,7 +1189,9 @@ async def get_free_slots(data: dict, current_user: User = Depends(get_current_us
         
         user_timezones = [u.timezone or "UTC" for u in users]
         snap_to_local = not bool(chat_id)
-        viewer_tz = current_user.timezone or "UTC"
+        
+        # Use explicit timezone from body if present, fallback to current_user
+        viewer_tz = data.get("timezone") or current_user.timezone or "UTC"
 
         print(f"DEBUG: Finding slots | Group: {bool(chat_id)} | Snap: {snap_to_local}")
         

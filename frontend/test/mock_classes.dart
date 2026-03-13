@@ -14,3 +14,12 @@ List<Availability> mockMoscowAvailability() {
     isEnabled: i < 5, // Mon-Fri
   ));
 }
+
+List<Availability> mockFractionalAvailability() {
+  return List.generate(7, (i) => Availability(
+    dayOfWeek: i,
+    startTime: '09:30',
+    endTime: '17:45',
+    isEnabled: i < 5,
+  ));
+}

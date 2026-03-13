@@ -1,6 +1,6 @@
 # Smart Scheduler - AI Developer Guide
 
-*Current version: v8.1.0-stable (Final Ground Truth)*
+*Current version: v8.1.5-stable (Final Ground Truth)*
 
 ## 🌟 Project Overview
 Smart Scheduler is a group availability tracking application integrated deeply with Telegram Mini Apps and Google Calendar. It allows users to sync their personal calendars, share their working hours, and find common free slots among selected participants in a group chat to schedule meetings.

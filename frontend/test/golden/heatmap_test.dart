@@ -189,5 +189,39 @@ void main() {
       await tester.pump(); 
       await screenMatchesGolden(tester, 'heatmap_shift_tokyo');
     });
+
+    testGoldens('Fractional Working Hours - 09:30-17:45', (tester) async {
+      tz.setLocalLocation(tz.getLocation('Europe/Moscow'));
+      final baseDate = DateTime(2026, 3, 13, 0, 0, 0);
+      
+      when(() => mockAvailability.availability).thenReturn(mockFractionalAvailability());
+
+      final builder = DeviceBuilder()
+        ..overrideDevicesForAllScenarios(devices: [
+          const Device(name: 'web_view', size: Size(400, 800)),
+        ])
+        ..addScenario(
+          name: 'fractional_hours_view',
+          widget: MultiProvider(
+            providers: [
+              Provider<TelegramService>.value(value: mockTelegram),
+              ChangeNotifierProvider<AvailabilityProvider>.value(value: mockAvailability),
+            ],
+            child: Material(
+              child: HeatmapGrid(
+                slots: [], // Empty slots to focus on background alignment
+                selectedDay: baseDate,
+                onSlotSelected: (_) {},
+                availability: mockFractionalAvailability(),
+                myUserId: 'user_123',
+                calendarType: CalendarType.group,
+              ),
+            ),
+          ),
+        );
+
+      await tester.pumpDeviceBuilder(builder);
+      await screenMatchesGolden(tester, 'heatmap_grid_fractional');
+    });
   });
 }

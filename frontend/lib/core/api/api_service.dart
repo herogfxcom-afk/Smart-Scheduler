@@ -109,9 +109,10 @@ class ApiService {
   }
 
   // Solo Scheduler
-  Future<List<dynamic>> getSoloSlots(double tzOffset) async {
+  Future<List<dynamic>> getSoloSlots(double tzOffset, String timezone) async {
     final response = await _dio.get('/api/scheduler/solo', queryParameters: {
       'tz_offset': tzOffset,
+      'timezone': timezone,
     });
     return response.data as List<dynamic>;
   }

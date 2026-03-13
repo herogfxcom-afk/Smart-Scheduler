@@ -34,7 +34,8 @@ class SoloProvider with ChangeNotifier {
       notifyListeners();
 
       final tzOffset = getUserTzOffset();
-      final data = await _apiService.getSoloSlots(tzOffset);
+      final timezone = getUserTimezone();
+      final data = await _apiService.getSoloSlots(tzOffset, timezone);
       _slots = data.map((s) => TimeSlot.fromJson(s)).toList();
     } catch (e) {
       _error = _parseError(e);

@@ -80,9 +80,11 @@ class SchedulerProvider extends ChangeNotifier {
 
     try {
       final tzOffset = getUserTzOffset();
+      final timezone = getUserTimezone();
       final response = await _apiService.post('/calendar/free-slots', {
         'telegram_ids': telegramIds,
         'tz_offset': tzOffset,
+        'timezone': timezone,
         if (chatId != null) 'chat_id': chatId,
       });
       final List<dynamic> data = response.data['free_slots'] ?? [];

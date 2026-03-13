@@ -31,17 +31,22 @@ DateTime userNow() {
 /// Converts a locally selected wall-clock DateTime into a strict UTC DateTime 
 /// for sending to the backend
 DateTime fromUserLocal(DateTime localDateTime) {
-  // We treat the passed localDateTime as if it happened in tz.local
-  final localTzDateTime = tz.TZDateTime(
-    tz.local,
-    localDateTime.year,
-    localDateTime.month,
-    localDateTime.day,
-    localDateTime.hour,
-    localDateTime.minute,
-    localDateTime.second,
-  );
-  return localTzDateTime.toUtc();
+  try {
+    final location = tz.getLocation(getUserTimezone());
+    final localTzDateTime = tz.TZDateTime(
+      location,
+      localDateTime.year,
+      localDateTime.month,
+      localDateTime.day,
+      localDateTime.hour,
+      localDateTime.minute,
+      localDateTime.second,
+    );
+    return localTzDateTime.toUtc();
+  } catch (e) {
+    // Fallback if location not found
+    return localDateTime.toUtc();
+  }
 }
 
 String getUserTimezone() {
