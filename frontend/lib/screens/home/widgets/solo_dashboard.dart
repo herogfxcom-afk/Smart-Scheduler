@@ -7,6 +7,8 @@ import 'package:smart_scheduler_frontend/screens/scheduler/widgets/heatmap_grid.
 import 'package:smart_scheduler_frontend/models/time_slot.dart';
 import 'package:smart_scheduler_frontend/utils/timezone_utils.dart';
 import 'package:smart_scheduler_frontend/utils/calendar_processor.dart';
+import 'package:smart_scheduler_frontend/providers/auth_provider.dart';
+import 'package:smart_scheduler_frontend/providers/availability_provider.dart';
 
 class SoloDashboard extends StatefulWidget {
   const SoloDashboard({super.key});
