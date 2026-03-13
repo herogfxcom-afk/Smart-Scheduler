@@ -82,8 +82,6 @@ class _HeatmapGridState extends State<HeatmapGrid> {
               dayFormat: 'E',
               nonWorkingDays: [7], // Sunday
             ),
-            specialRegions: _getWorkingHoursRegions(),
-            timeRegionBuilder: _timeRegionBuilder,
             backgroundColor: Colors.transparent,
 
             headerHeight: 0, // We hide the default header to rely on the timeline week header
