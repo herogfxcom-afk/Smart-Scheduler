@@ -101,6 +101,7 @@ class _HeatmapGridState extends State<HeatmapGrid> {
               dayFormat: 'E',
               nonWorkingDays: [7], // Sunday
               timeIntervalHeight: 60,
+              appointmentPadding: EdgeInsets.zero,
             ),
             backgroundColor: Colors.transparent,
             headerHeight: 0,
@@ -190,6 +191,24 @@ class _HeatmapGridState extends State<HeatmapGrid> {
         originalSlot: TimeSlot(start: meeting.start, end: meeting.end, type: 'meeting'),
         isMeeting: true,
         customMeeting: meeting,
+      ));
+    }
+
+    // 2. Add External Busy Slots (Outlook/Google)
+    // These are slots where the user is busy in their connected calendars
+    for (final slot in widget.slots) {
+      if (!slot.isMyBusy) continue;
+
+      final startUtc = slot.start.isUtc ? slot.start : slot.start.toUtc();
+      final endUtc = slot.end.isUtc ? slot.end : slot.end.toUtc();
+      
+      appointments.add(ProcessedAppointment(
+        startTime: startUtc,
+        endTime: endUtc,
+        color: Colors.blue.withOpacity(0.7),
+        subject: 'Busy',
+        originalSlot: slot,
+        isPast: endUtc.isBefore(now.toUtc()),
       ));
     }
 
