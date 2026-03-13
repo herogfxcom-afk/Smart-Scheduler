@@ -78,9 +78,12 @@ class _HeatmapGridState extends State<HeatmapGrid> {
 
   @override
   Widget build(BuildContext context) {
-    final workingHoursNotifier = context.watch<WorkingHoursNotifier>();
-    return Column(
-      children: [
+    try {
+      final workingHoursNotifier = context.watch<WorkingHoursNotifier>();
+      final regions = workingHoursNotifier.buildRegions();
+
+      return Column(
+        children: [
         Expanded(
           child: SfCalendar(
             key: ValueKey('calendar_v\${workingHoursNotifier.version}'),
@@ -103,9 +106,7 @@ class _HeatmapGridState extends State<HeatmapGrid> {
             headerHeight: 0,
             dataSource: _MeetingDataSource(_buildAppointments()),
             appointmentBuilder: _appointmentBuilder,
-            specialRegions: workingHoursNotifier.buildRegions().isNotEmpty
-                ? workingHoursNotifier.buildRegions()
-                : [],
+            specialRegions: regions,
             timeRegionBuilder: (context, details) {
               return Container(
                 decoration: BoxDecoration(
@@ -147,6 +148,27 @@ class _HeatmapGridState extends State<HeatmapGrid> {
         _buildLegend(),
       ],
     );
+    } catch (e, stack) {
+      debugPrint("SfCalendar Build Error: $e\n$stack");
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline, color: Colors.orange, size: 48),
+              const SizedBox(height: 16),
+              const Text("Ошибка отображения", 
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              Text(e.toString(), 
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white70, fontSize: 10)),
+            ],
+          ),
+        ),
+      );
+    }
   }
 
 
