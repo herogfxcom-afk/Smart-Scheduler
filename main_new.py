@@ -656,8 +656,16 @@ async def sync_calendar(current_user: User = Depends(get_current_user), db: Sess
              print(f"DEBUG: No calendars connected for user {current_user.id}")
              raise HTTPException(status_code=400, detail="No calendars connected")
 
-        # Clear old slots for this user before re-syncing everything
-        db.query(BusySlot).filter(BusySlot.user_id == current_user.id).delete()
+        # Clear old slots for this user before re-syncing everything, but keep manual ones
+        db.query(BusySlot).filter(BusySlot.user_id == current_user.id, BusySlot.connection_id.isnot(None)).delete()
+        
+        # Track seen slots to prevent UniqueConstraint violations
+        seen_slots = set()
+        manual_slots = db.query(BusySlot).filter(BusySlot.user_id == current_user.id, BusySlot.connection_id.is_(None)).all()
+        for ms in manual_slots:
+            st = ms.start_time.replace(tzinfo=None) if ms.start_time.tzinfo else ms.start_time
+            et = ms.end_time.replace(tzinfo=None) if ms.end_time.tzinfo else ms.end_time
+            seen_slots.add((st, et))
         
         start = datetime.utcnow()
         end = start + timedelta(days=21) # Sync 3 weeks ahead
@@ -697,14 +705,23 @@ async def sync_calendar(current_user: User = Depends(get_current_user), db: Sess
                     try:
                         s_out = slot['start'].replace('Z', '+00:00')
                         e_out = slot['end'].replace('Z', '+00:00')
-                        new_slot = BusySlot(
-                            user_id=current_user.id,
-                            connection_id=conn.id,
-                            start_time=datetime.fromisoformat(s_out).astimezone(pytz.utc).replace(tzinfo=None),
-                            end_time=datetime.fromisoformat(e_out).astimezone(pytz.utc).replace(tzinfo=None)
-                        )
-                        db.add(new_slot)
-                        total_slots += 1
+                        
+                        st_aware = datetime.fromisoformat(s_out).astimezone(pytz.utc)
+                        et_aware = datetime.fromisoformat(e_out).astimezone(pytz.utc)
+                        st_naive = st_aware.replace(tzinfo=None)
+                        et_naive = et_aware.replace(tzinfo=None)
+                        
+                        slot_key = (st_naive, et_naive)
+                        if slot_key not in seen_slots:
+                            seen_slots.add(slot_key)
+                            new_slot = BusySlot(
+                                user_id=current_user.id,
+                                connection_id=conn.id,
+                                start_time=st_naive,
+                                end_time=et_naive
+                            )
+                            db.add(new_slot)
+                            total_slots += 1
                     except Exception as parse_e:
                         print(f"DEBUG: Error parsing slot {slot}: {parse_e}")
 
