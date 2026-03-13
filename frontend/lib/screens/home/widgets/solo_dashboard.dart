@@ -74,6 +74,8 @@ class _SoloDashboardState extends State<SoloDashboard> {
               },
               myMeetings: meetingProvider.meetings,
               calendarType: CalendarType.solo,
+              myUserId: context.read<AuthProvider>().user?.id.toString() ?? '',
+              availability: context.watch<AvailabilityProvider>().availability,
             ),
           ),
         ),

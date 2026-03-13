@@ -7,29 +7,20 @@ double getUserTzOffset() {
   try {
     final jsOffset = globalContext['userTzOffset'];
     if (jsOffset != null) {
-      return (jsOffset as JSNumber).toDartDouble;
+      if (jsOffset is JSNumber) return jsOffset.toDartDouble;
     }
   } catch (_) {}
   
-  // Also fallback to the formal location
-  final now = tz.TZDateTime.now(tz.local);
-  return now.timeZoneOffset.inMinutes / 60.0;
+  return DateTime.now().timeZoneOffset.inMinutes / 60.0;
 }
 
-/// Converts a UTC DateTime received from the backend into the user's local clock time representations
 DateTime toUserLocal(DateTime utcDateTime) {
   // Ensure we are working with UTC source
   final utc = utcDateTime.isUtc ? utcDateTime : utcDateTime.toUtc();
-  // We use TZDateTime to get the strict local representation
-  final localTzDateTime = tz.TZDateTime.from(utc, tz.local);
-  return DateTime(
-    localTzDateTime.year,
-    localTzDateTime.month,
-    localTzDateTime.day,
-    localTzDateTime.hour,
-    localTzDateTime.minute,
-    localTzDateTime.second,
-  );
+  
+  // For display purposes, toLocal() is the most robust way to get current browser time
+  // It handles DST and local offsets automatically without relying on external timezone data
+  return utc.toLocal();
 }
 
 /// The current time in user's local timeline (ignoring system UTC settings, purely local time representation)
@@ -55,7 +46,17 @@ DateTime fromUserLocal(DateTime localDateTime) {
 
 String getUserTimezone() {
   try {
-    return tz.local.name;
+    final jsTz = globalContext['userTimezone'];
+    if (jsTz != null && jsTz is JSString) {
+      final detected = jsTz.toDart;
+      if (detected.isNotEmpty) return detected;
+    }
+    
+    // Fallback to tz.local if initialized
+    final name = tz.local.name;
+    if (name != 'UTC' && name != 'local') return name;
+    
+    return 'UTC';
   } catch (_) {
     return 'UTC';
   }

@@ -1454,12 +1454,14 @@ async def create_meeting(data: dict, background_tasks: BackgroundTasks, current_
             # Group notification: use creator's timezone
             user_tz_name = current_user.timezone or "UTC"
             try:
-                creator_tz = ZoneInfo(user_tz_name)
-                local_start = start_time.astimezone(creator_tz)
-                local_end = end_time.astimezone(creator_tz)
-                time_str = f"{local_start.strftime('%d.%m.%Y с %H:%M')} до {local_end.strftime('%H:%M')}"
-            except Exception:
-                time_str = start_local.strftime("%d.%m %H:%M") # fallback
+                from zoneinfo import ZoneInfo
+                user_tz = ZoneInfo(user_tz_name)
+                from_time = start_time.astimezone(user_tz)
+                to_time = end_time.astimezone(user_tz)
+                time_str = f"{from_time.strftime('%d.%m.%Y с %H:%M')} до {to_time.strftime('%H:%M')}"
+            except Exception as e:
+                print(f"DEBUG: Failed to format time with {user_tz_name}: {e}")
+                time_str = start_time.strftime("%d.%m %H:%M") # fallback to UTC if fail
             
             # IMPORTANT: StartApp parameter CANNOT contain the minus (-) sign.
             app_chat_id = str(target_chat).replace("-", "n")
@@ -1499,13 +1501,15 @@ async def create_meeting(data: dict, background_tasks: BackgroundTasks, current_
                     if u.telegram_id:
                         # Convert meeting time to target user's local timezone
                         try:
+                            from zoneinfo import ZoneInfo
                             u_tz_name = u.timezone or "UTC"
                             u_tz = ZoneInfo(u_tz_name)
-                            u_local_start = start_time.astimezone(u_tz)
-                            u_local_end = end_time.astimezone(u_tz)
-                            u_time_str = f"{u_local_start.strftime('%d.%m.%Y с %H:%M')} до {u_local_end.strftime('%H:%M')}"
-                        except Exception:
-                            u_time_str = time_str # Fallback to default
+                            u_from_time = start_time.astimezone(u_tz)
+                            u_to_time = end_time.astimezone(u_tz)
+                            u_time_str = f"{u_from_time.strftime('%d.%m.%Y с %H:%M')} до {u_to_time.strftime('%H:%M')}"
+                        except Exception as e:
+                            print(f"DEBUG: Failed to format DM time for user {u.id}: {e}")
+                            u_time_str = time_str # Fallback to default (creator's or UTC)
                             
                         tasks.append(
                             client.post(tg_url, json={

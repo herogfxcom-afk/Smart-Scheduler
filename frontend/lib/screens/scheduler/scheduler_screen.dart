@@ -12,6 +12,8 @@ import '../../models/meeting.dart';
 import '../../utils/timezone_utils.dart';
 import '../../utils/calendar_processor.dart';
 import '../../utils/ics_exporter.dart';
+import '../../providers/availability_provider.dart';
+import '../../models/availability.dart';
 import 'widgets/heatmap_grid.dart';
 
 class SchedulerScreen extends StatefulWidget {
@@ -336,7 +338,7 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
                       availability: context.watch<AvailabilityProvider>().availability,
                       myMeetings: context.watch<MeetingProvider>().meetings,
                       onSlotSelected: (slot) => _handleSlotSelected(context, scheduler, slot),
-                      myUserId: context.read<TelegramService>().getUserId(),
+                      myUserId: context.read<GroupProvider>().participants.firstWhereOrNull((p) => p.isCurrentUser)?.id.toString() ?? '',
                       calendarType: CalendarType.group,
                     )
                   : _buildListSlots(slotsForDay, scheduler),
