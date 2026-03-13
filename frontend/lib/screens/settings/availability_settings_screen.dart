@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/availability_provider.dart';
+import '../../providers/working_hours_notifier.dart';
 import '../../models/availability.dart';
 
 class AvailabilitySettingsScreen extends StatefulWidget {
@@ -33,6 +34,7 @@ class _AvailabilitySettingsScreenState extends State<AvailabilitySettingsScreen>
               onPressed: () async {
                 await provider.saveAvailability();
                 if (mounted) {
+                  context.read<WorkingHoursNotifier>().refresh();
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Настройки сохранены')),
                   );

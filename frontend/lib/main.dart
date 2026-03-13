@@ -18,7 +18,8 @@ import 'providers/group_provider.dart';
 import 'providers/meeting_provider.dart';
 import 'providers/availability_provider.dart';
 import 'providers/language_provider.dart';
-import 'providers/solo_provider.dart'; // Added
+import 'providers/solo_provider.dart';
+import 'providers/working_hours_notifier.dart';
 import 'screens/settings/availability_settings_screen.dart';
 
 void main() async {
@@ -68,7 +69,10 @@ void main() async {
           create: (_) => AvailabilityProvider(apiService),
         ),
         ChangeNotifierProvider(
-          create: (_) => SoloProvider(apiService), // Added
+          create: (_) => SoloProvider(apiService),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => WorkingHoursNotifier(),
         ),
       ],
       child: const SmartSchedulerApp(),

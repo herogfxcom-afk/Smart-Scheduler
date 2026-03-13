@@ -7,6 +7,7 @@ import '../../../utils/timezone_utils.dart';
 import '../../../utils/calendar_processor.dart';
 import '../../../core/telegram/telegram_service.dart';
 import '../../../providers/availability_provider.dart';
+import '../../../providers/working_hours_notifier.dart';
 import '../../../models/availability.dart';
 import 'package:provider/provider.dart';
 
@@ -66,11 +67,13 @@ class _HeatmapGridState extends State<HeatmapGrid> {
 
   @override
   Widget build(BuildContext context) {
+    final workingHoursNotifier = context.watch<WorkingHoursNotifier>();
+
     return Column(
       children: [
         Expanded(
           child: SfCalendar(
-            key: ValueKey('sf_calendar_${widget.selectedDay.millisecondsSinceEpoch}_${widget.availability.hashCode}_${getUserTimezone()}'),
+            key: workingHoursNotifier.calendarKey,
             controller: _calendarController,
             view: CalendarView.week,
             timeZone: getUserTimezone(),
@@ -90,7 +93,7 @@ class _HeatmapGridState extends State<HeatmapGrid> {
             headerHeight: 0,
             dataSource: _MeetingDataSource(_buildAppointments()),
             appointmentBuilder: _appointmentBuilder,
-            specialRegions: _buildSpecialRegions(),
+            specialRegions: workingHoursNotifier.buildRegions(widget.availability),
             timeRegionBuilder: _timeRegionBuilder,
             onTap: (CalendarTapDetails details) {
               if (details.targetElement == CalendarElement.calendarCell) {
@@ -127,60 +130,7 @@ class _HeatmapGridState extends State<HeatmapGrid> {
     );
   }
 
-  List<TimeRegion> _buildSpecialRegions() {
-    if (widget.availability.isEmpty) return [];
-    
-    final List<TimeRegion> regions = [];
-    try {
-      final location = tz.getLocation(getUserTimezone());
-      
-      // Build regions for the visible week range
-      for (int i = -7; i <= 7; i++) {
-        final base = widget.selectedDay.add(Duration(days: i));
-        final dayOfWeek = (base.weekday - 1); // 0-6
-        
-        final dayData = widget.availability.firstWhere(
-          (a) => a.dayOfWeek == dayOfWeek,
-          orElse: () => widget.availability[0],
-        );
 
-        if (!dayData.isEnabled) continue;
-
-        final startParts = dayData.startTime.split(':');
-        final endParts = dayData.endTime.split(':');
-        
-        final start = tz.TZDateTime(
-          location,
-          base.year,
-          base.month,
-          base.day,
-          int.parse(startParts[0]),
-          int.parse(startParts[1]),
-        );
-        
-        final end = tz.TZDateTime(
-          location,
-          base.year,
-          base.month,
-          base.day,
-          int.parse(endParts[0]),
-          int.parse(endParts[1]),
-        );
-
-        regions.add(TimeRegion(
-          startTime: start,
-          endTime: end,
-          enablePointerInteraction: true,
-          color: Colors.green.withOpacity(0.12),
-          // We only show label in group mode, solo is cleaner
-          text: widget.calendarType == CalendarType.group ? 'Working' : null,
-        ));
-      }
-    } catch (e) {
-      debugPrint("Error building special regions: $e");
-    }
-    return regions;
-  }
 
   Widget _timeRegionBuilder(BuildContext context, TimeRegionDetails details) {
     // Fill the cell height completely as requested
