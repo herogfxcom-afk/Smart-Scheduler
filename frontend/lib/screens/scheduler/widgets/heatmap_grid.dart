@@ -226,6 +226,8 @@ class _HeatmapGridState extends State<HeatmapGrid> {
         : Colors.blue.withOpacity(0.8);
 
     return Container(
+      width: double.infinity,
+      height: double.infinity,
       decoration: BoxDecoration(
         color: color,
         border: hasBorder ? Border.all(color: borderColor, width: 1.0) : null,

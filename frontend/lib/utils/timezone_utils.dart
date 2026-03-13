@@ -15,12 +15,14 @@ double getUserTzOffset() {
 }
 
 DateTime toUserLocal(DateTime utcDateTime) {
-  // Ensure we are working with UTC source
-  final utc = utcDateTime.isUtc ? utcDateTime : utcDateTime.toUtc();
-  
-  // For display purposes, toLocal() is the most robust way to get current browser time
-  // It handles DST and local offsets automatically without relying on external timezone data
-  return utc.toLocal();
+  try {
+    final location = tz.getLocation(getUserTimezone());
+    return tz.TZDateTime.from(utcDateTime, location);
+  } catch (_) {
+    // Fallback if location not found
+    final utc = utcDateTime.isUtc ? utcDateTime : utcDateTime.toUtc();
+    return utc.toLocal();
+  }
 }
 
 /// The current time in user's local timeline (ignoring system UTC settings, purely local time representation)
