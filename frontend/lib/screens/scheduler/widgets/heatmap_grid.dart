@@ -69,11 +69,14 @@ class _HeatmapGridState extends State<HeatmapGrid> {
   Widget build(BuildContext context) {
     final workingHoursNotifier = context.watch<WorkingHoursNotifier>();
 
+    // Make sure notifier has access to the latest availability before building regions
+    workingHoursNotifier.update(widget.availability);
+
     return Column(
       children: [
         Expanded(
           child: SfCalendar(
-            key: workingHoursNotifier.calendarKey,
+            key: ValueKey('calendar_v\${workingHoursNotifier.version}'),
             controller: _calendarController,
             view: CalendarView.week,
             timeZone: getUserTimezone(),
@@ -91,10 +94,15 @@ class _HeatmapGridState extends State<HeatmapGrid> {
             ),
             backgroundColor: Colors.transparent,
             headerHeight: 0,
-            dataSource: _MeetingDataSource(_buildAppointments()),
+            dataSource: _MeetingDataSource(_buildMeetingsOnly()),
             appointmentBuilder: _appointmentBuilder,
-            specialRegions: workingHoursNotifier.buildRegions(widget.availability),
-            timeRegionBuilder: _timeRegionBuilder,
+            specialRegions: workingHoursNotifier.buildRegions(),
+            timeRegionBuilder: (context, details) {
+              return Container(
+                height: 60, // matches timeSlotViewSettings.timeIntervalHeight
+                color: details.region.color,
+              );
+            },
             onTap: (CalendarTapDetails details) {
               if (details.targetElement == CalendarElement.calendarCell) {
                 final date = details.date;
@@ -132,21 +140,7 @@ class _HeatmapGridState extends State<HeatmapGrid> {
 
 
 
-  Widget _timeRegionBuilder(BuildContext context, TimeRegionDetails details) {
-    // Fill the cell height completely as requested
-    const double height = 60.0; // Matches timeIntervalHeight
-    
-    return Container(
-      height: height,
-      width: details.bounds.width,
-      decoration: BoxDecoration(
-        color: Colors.green.withOpacity(0.25),
-        border: Border.all(color: Colors.green.withOpacity(0.1), width: 0.5),
-      ),
-    );
-  }
-
-  List<ProcessedAppointment> _buildAppointments() {
+  List<ProcessedAppointment> _buildMeetingsOnly() {
     final List<ProcessedAppointment> appointments = [];
     final now = userNow();
 
@@ -170,6 +164,13 @@ class _HeatmapGridState extends State<HeatmapGrid> {
     for (final slot in widget.slots) {
       if (slot.type == 'busy' || slot.type == 'others_busy') continue;
       if (slot.availability == 0.0) continue;
+      
+      // CRITICAL FIX: The user wants working hours handled ENTIRELY by specialRegions
+      // so they visually don't overlay. If this is Solo mode, we IGNORE the old "free slots"
+      // to avoid drawing double-green blocks which persist across settings changes.
+      if (widget.calendarType == CalendarType.solo && slot.availability == 1.0) {
+        continue;
+      }
 
       final startUtc = slot.start.isUtc ? slot.start : slot.start.toUtc();
       final endUtc = slot.end.isUtc ? slot.end : slot.end.toUtc();

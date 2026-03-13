@@ -5,79 +5,60 @@ import '../utils/timezone_utils.dart';
 import 'package:timezone/timezone.dart' as tz;
 
 class WorkingHoursNotifier extends ChangeNotifier {
-  // Syncfusion's SfCalendarState is private in recent versions, so GlobalKey<SfCalendarState> 
-  // throws a compilation error. To achieve the exact same "deep clean" effect and fix the overlay bug,
-  // we use a versioned ValueKey that completely destroys and recreates the calendar when settings change.
+  List<TimeRegion>? _cachedRegions;
+  List<Availability>? _lastAvailability;
   int _version = 0;
+  List<Availability> _availability = [];
 
-  Key get calendarKey => ValueKey('working_hours_calendar_v$_version');
+  int get version => _version;
 
-  List<TimeRegion> buildRegions(List<Availability> availability) {
-    if (availability.isEmpty) return [];
-    
-    // We strictly return a completely NEW list every time to avoid structural equality caching
-    final List<TimeRegion> regions = [];
-    try {
-      final location = tz.getLocation(getUserTimezone());
-      final now = userNow();
-      
-      for (int i = -7; i <= 14; i++) {
-        final base = now.add(Duration(days: i));
-        final dayOfWeek = (base.weekday - 1); // 0-6
-        
-        final dayData = availability.firstWhere(
-          (a) => a.dayOfWeek == dayOfWeek,
-          orElse: () => availability[0],
-        );
+  void update(List<Availability> newSettings) {
+    _availability = newSettings;
+  }
 
-        if (!dayData.isEnabled) continue;
-
-        final startParts = dayData.startTime.split(':');
-        final endParts = dayData.endTime.split(':');
-        
-        var currentStart = tz.TZDateTime(
-          location,
-          base.year,
-          base.month,
-          base.day,
-          int.parse(startParts[0]),
-          int.parse(startParts[1]),
-        );
-        
-        final finalEnd = tz.TZDateTime(
-          location,
-          base.year,
-          base.month,
-          base.day,
-          int.parse(endParts[0]),
-          int.parse(endParts[1]),
-        );
-
-        while (currentStart.isBefore(finalEnd)) {
-          var nextEnd = currentStart.add(const Duration(hours: 1));
-          if (nextEnd.isAfter(finalEnd)) {
-            nextEnd = finalEnd;
-          }
-          regions.add(TimeRegion(
-            startTime: currentStart,
-            endTime: nextEnd,
-            enablePointerInteraction: true,
-            color: Colors.green.withOpacity(0.12),
-          ));
-          currentStart = nextEnd;
-        }
-      }
-    } catch (e) {
-      debugPrint("Error building working regions: $e");
+  List<TimeRegion> buildRegions() {
+    if (_cachedRegions != null && _lastAvailability == _availability) {
+      return _cachedRegions!;
     }
-    
+
+    final regions = <TimeRegion>[];
+    final location = tz.getLocation(getUserTimezone());
+    final now = userNow();
+
+    // Один регион на весь день (без кусков) как просил пользователь
+    for (int i = -7; i <= 14; i++) {
+      final base = now.add(Duration(days: i));
+      final dayOfWeek = (base.weekday - 1); // 0-6
+      
+      final dayData = _availability.firstWhere(
+        (a) => a.dayOfWeek == dayOfWeek,
+        orElse: () => _availability.isNotEmpty ? _availability[0] : Availability(dayOfWeek: dayOfWeek, startTime: '09:00', endTime: '18:00', isEnabled: false),
+      );
+
+      if (!dayData.isEnabled) continue;
+
+      final startParts = dayData.startTime.split(':');
+      final endParts = dayData.endTime.split(':');
+
+      final start = tz.TZDateTime(location, base.year, base.month, base.day, int.parse(startParts[0]), int.parse(startParts[1]));
+      final end   = tz.TZDateTime(location, base.year, base.month, base.day, int.parse(endParts[0]), int.parse(endParts[1]));
+
+      regions.add(TimeRegion(
+        startTime: start,
+        endTime: end,
+        color: Colors.green.withOpacity(0.25),
+        enablePointerInteraction: false,
+      ));
+    }
+
+    _cachedRegions = regions;
+    _lastAvailability = _availability;
     return regions;
   }
 
-  void refresh() {
-    // Incrementing the version changes the calendarKey, forcing Flutter to unmount the buggy
-    // SfCalendar widget and build a fresh one, wiping all stale specialRegions from memory.
+  void forceRefresh() {
     _version++;
+    _cachedRegions = null;
     notifyListeners();
   }
 }

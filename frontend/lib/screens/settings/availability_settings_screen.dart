@@ -37,7 +37,7 @@ class _AvailabilitySettingsScreenState extends State<AvailabilitySettingsScreen>
               onPressed: () async {
                 await provider.saveAvailability();
                 if (mounted) {
-                  context.read<WorkingHoursNotifier>().refresh();
+                  context.read<WorkingHoursNotifier>().forceRefresh();
                   context.read<SoloProvider>().fetchSoloSlots();
                   context.read<MeetingProvider>().fetchMyMeetings();
                   if (context.read<GroupProvider>().chatId != null) {
