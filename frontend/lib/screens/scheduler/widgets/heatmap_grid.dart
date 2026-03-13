@@ -39,14 +39,14 @@ class _HeatmapGridState extends State<HeatmapGrid> {
   final CalendarController _calendarController = CalendarController();
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-  }
-
-  void _refreshCalendar() {
-    if (mounted) {
-      setState(() {});
-    }
+  void initState() {
+    super.initState();
+    // Update notifier in initState (NOT in build!) to avoid state mutation during render
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        context.read<WorkingHoursNotifier>().update(widget.availability);
+      }
+    });
   }
 
   @override
@@ -55,8 +55,19 @@ class _HeatmapGridState extends State<HeatmapGrid> {
     if (!DateUtils.isSameDay(oldWidget.selectedDay, widget.selectedDay)) {
       _calendarController.displayDate = widget.selectedDay;
     }
-    // Refresh if availability or timezone might have changed
+    // Update notifier safely after the frame, never during build
+    if (oldWidget.availability != widget.availability) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          context.read<WorkingHoursNotifier>().update(widget.availability);
+        }
+      });
+    }
     _refreshCalendar();
+  }
+
+  void _refreshCalendar() {
+    if (mounted) setState(() {});
   }
 
   @override
@@ -68,10 +79,6 @@ class _HeatmapGridState extends State<HeatmapGrid> {
   @override
   Widget build(BuildContext context) {
     final workingHoursNotifier = context.watch<WorkingHoursNotifier>();
-
-    // Make sure notifier has access to the latest availability before building regions
-    workingHoursNotifier.update(widget.availability);
-
     return Column(
       children: [
         Expanded(
