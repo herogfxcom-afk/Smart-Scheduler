@@ -36,7 +36,7 @@ class HeatmapGrid extends StatefulWidget {
 
 class _HeatmapGridState extends State<HeatmapGrid> {
   final CalendarController _calendarController = CalendarController();
-  final GlobalKey<SfCalendarState> _calendarKey = GlobalKey<SfCalendarState>();
+  final GlobalKey _calendarKey = GlobalKey();
 
   @override
   void didChangeDependencies() {
@@ -45,7 +45,6 @@ class _HeatmapGridState extends State<HeatmapGrid> {
 
   void _refreshCalendar() {
     if (mounted) {
-      _calendarKey.currentState?.refresh();
       setState(() {});
     }
   }

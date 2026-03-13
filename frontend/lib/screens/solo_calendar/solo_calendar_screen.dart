@@ -6,6 +6,7 @@ import '../../providers/meeting_provider.dart';
 import '../scheduler/widgets/heatmap_grid.dart';
 import '../../utils/calendar_processor.dart';
 import '../../utils/timezone_utils.dart';
+import '../../providers/availability_provider.dart';
 
 class SoloCalendarScreen extends StatelessWidget {
   const SoloCalendarScreen({super.key});
@@ -44,6 +45,7 @@ class SoloCalendarScreen extends StatelessWidget {
                   : HeatmapGrid(
                       slots: soloProvider.slots,
                       selectedDay: userNow(), // Or track in provider
+                      availability: context.watch<AvailabilityProvider>().availability,
                       onSlotSelected: (slot) {
                         // Handle solo slot tap
                       },
