@@ -143,15 +143,6 @@ class _HeatmapGridState extends State<HeatmapGrid> {
         color: Colors.green.withOpacity(0.25),
         border: Border.all(color: Colors.green.withOpacity(0.1), width: 0.5),
       ),
-      child: widget.calendarType == CalendarType.group 
-        ? const Center(
-            child: Text(
-              "Working Hours", 
-              style: TextStyle(color: Colors.white24, fontSize: 10, fontWeight: FontWeight.bold),
-              textAlign: TextAlign.center,
-            ),
-          )
-        : null,
     );
   }
 

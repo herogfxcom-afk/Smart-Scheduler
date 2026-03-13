@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/availability_provider.dart';
 import '../../providers/working_hours_notifier.dart';
+import '../../providers/solo_provider.dart';
+import '../../providers/group_provider.dart';
+import '../../providers/meeting_provider.dart';
 import '../../models/availability.dart';
 
 class AvailabilitySettingsScreen extends StatefulWidget {
@@ -35,6 +38,11 @@ class _AvailabilitySettingsScreenState extends State<AvailabilitySettingsScreen>
                 await provider.saveAvailability();
                 if (mounted) {
                   context.read<WorkingHoursNotifier>().refresh();
+                  context.read<SoloProvider>().fetchSoloSlots();
+                  context.read<MeetingProvider>().fetchMyMeetings();
+                  if (context.read<GroupProvider>().chatId != null) {
+                    context.read<GroupProvider>().syncWithGroup();
+                  }
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Настройки сохранены')),
                   );

@@ -35,7 +35,7 @@ class WorkingHoursNotifier extends ChangeNotifier {
         final startParts = dayData.startTime.split(':');
         final endParts = dayData.endTime.split(':');
         
-        final start = tz.TZDateTime(
+        var currentStart = tz.TZDateTime(
           location,
           base.year,
           base.month,
@@ -44,7 +44,7 @@ class WorkingHoursNotifier extends ChangeNotifier {
           int.parse(startParts[1]),
         );
         
-        final end = tz.TZDateTime(
+        final finalEnd = tz.TZDateTime(
           location,
           base.year,
           base.month,
@@ -53,12 +53,19 @@ class WorkingHoursNotifier extends ChangeNotifier {
           int.parse(endParts[1]),
         );
 
-        regions.add(TimeRegion(
-          startTime: start,
-          endTime: end,
-          enablePointerInteraction: true,
-          color: Colors.green.withOpacity(0.12),
-        ));
+        while (currentStart.isBefore(finalEnd)) {
+          var nextEnd = currentStart.add(const Duration(hours: 1));
+          if (nextEnd.isAfter(finalEnd)) {
+            nextEnd = finalEnd;
+          }
+          regions.add(TimeRegion(
+            startTime: currentStart,
+            endTime: nextEnd,
+            enablePointerInteraction: true,
+            color: Colors.green.withOpacity(0.12),
+          ));
+          currentStart = nextEnd;
+        }
       }
     } catch (e) {
       debugPrint("Error building working regions: $e");
