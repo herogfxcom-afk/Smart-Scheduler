@@ -295,66 +295,6 @@ class _HeatmapGridState extends State<HeatmapGrid> {
     );
   }
 
-  List<TimeRegion> _getWorkingHoursRegions() {
-    final availability = widget.availability;
-    if (availability.isEmpty) return [];
-
-    final List<TimeRegion> regions = [];
-    
-    // Map backend day format (0=Monday) to RRule (MO)
-    final rruleDays = ['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU'];
-
-    for (var a in availability) {
-      if (!a.isEnabled) continue;
-
-      try {
-        final startParts = a.startTime.split(':');
-        final endParts = a.endTime.split(':');
-        
-        final startHour = int.parse(startParts[0]);
-        final startMin = int.parse(startParts[1]);
-        final endHour = int.parse(endParts[0]);
-        final endMin = int.parse(endParts[1]);
-
-        // We use a fixed date for the baseline of the recurring rule
-        // Sunday Jan 5, 2025 was the start of a week
-        // Monday Jan 6, 2025 starts the MO rule
-        final baseDate = DateTime(2025, 1, 6 + a.dayOfWeek);
-
-        regions.add(TimeRegion(
-          // Use UTC to align with our visual "fake-UTC" grid which avoids TZ shifts
-          startTime: DateTime.utc(baseDate.year, baseDate.month, baseDate.day, startHour, startMin),
-          endTime: DateTime.utc(baseDate.year, baseDate.month, baseDate.day, endHour, endMin),
-          recurrenceRule: 'FREQ=WEEKLY;BYDAY=${rruleDays[a.dayOfWeek]}',
-          color: Colors.green.withOpacity(0.06), // Even more subtle
-          text: '', // Removed text to prevent overlaps and clutter
-          enablePointerInteraction: true,
-        ));
-      } catch (e) {
-        debugPrint("Error creating time region: $e");
-      }
-    }
-    return regions;
-  }
-
-  Widget _timeRegionBuilder(BuildContext context, TimeRegionDetails details) {
-    return Container(
-      decoration: BoxDecoration(
-        color: details.region.color,
-        border: Border.all(color: Colors.green.withOpacity(0.1), width: 0.5),
-      ),
-      alignment: Alignment.topLeft,
-      padding: const EdgeInsets.all(4),
-      child: Text(
-        details.region.text ?? '',
-        style: TextStyle(
-          fontSize: 8,
-          color: Colors.green.withOpacity(0.5),
-          fontWeight: FontWeight.bold,
-        ),
-      ),
-    );
-  }
 
   bool _isWithinWorkingHours(DateTime date) {
     final availability = widget.availability;
