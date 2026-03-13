@@ -99,8 +99,10 @@ class _HeatmapGridState extends State<HeatmapGrid> {
             specialRegions: workingHoursNotifier.buildRegions(),
             timeRegionBuilder: (context, details) {
               return Container(
-                height: 60, // matches timeSlotViewSettings.timeIntervalHeight
-                color: details.region.color,
+                decoration: BoxDecoration(
+                  color: details.region.color ?? Colors.green.withOpacity(0.25),
+                  border: Border.all(color: Colors.green.withOpacity(0.1), width: 0.5),
+                ),
               );
             },
             onTap: (CalendarTapDetails details) {

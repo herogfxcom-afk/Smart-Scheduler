@@ -16,6 +16,16 @@ class WorkingHoursNotifier extends ChangeNotifier {
     _availability = newSettings;
   }
 
+  Availability? _getAvailabilityForDay(int weekday) {
+    if (_availability.isEmpty) return null;
+    final targetDay = weekday - 1; // tz.TZDateTime weekday is 1-7, our Availability uses 0-6
+    try {
+      return _availability.firstWhere((a) => a.dayOfWeek == targetDay && a.isEnabled);
+    } catch (_) {
+      return null;
+    }
+  }
+
   List<TimeRegion> buildRegions() {
     if (_cachedRegions != null && _lastAvailability == _availability) {
       return _cachedRegions!;
@@ -28,17 +38,11 @@ class WorkingHoursNotifier extends ChangeNotifier {
     // Один регион на весь день (без кусков) как просил пользователь
     for (int i = -7; i <= 14; i++) {
       final base = now.add(Duration(days: i));
-      final dayOfWeek = (base.weekday - 1); // 0-6
-      
-      final dayData = _availability.firstWhere(
-        (a) => a.dayOfWeek == dayOfWeek,
-        orElse: () => _availability.isNotEmpty ? _availability[0] : Availability(dayOfWeek: dayOfWeek, startTime: '09:00', endTime: '18:00', isEnabled: false),
-      );
+      final day = _getAvailabilityForDay(base.weekday);
+      if (day == null) continue;
 
-      if (!dayData.isEnabled) continue;
-
-      final startParts = dayData.startTime.split(':');
-      final endParts = dayData.endTime.split(':');
+      final startParts = day.startTime.split(':');
+      final endParts = day.endTime.split(':');
 
       final start = tz.TZDateTime(location, base.year, base.month, base.day, int.parse(startParts[0]), int.parse(startParts[1]));
       final end   = tz.TZDateTime(location, base.year, base.month, base.day, int.parse(endParts[0]), int.parse(endParts[1]));
@@ -47,12 +51,16 @@ class WorkingHoursNotifier extends ChangeNotifier {
         startTime: start,
         endTime: end,
         color: Colors.green.withOpacity(0.25),
+        // Use exact user code
+        //text: 'Working Hours',  // User requested to remove text earlier, but let's see if this causes a render bug
+        //recurrenceRule: 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR', // if we loop days, we don't need recurrence, but we will add it if user explicitly asked
         enablePointerInteraction: false,
       ));
     }
 
     _cachedRegions = regions;
-    _lastAvailability = _availability;
+    // Copy the list to prevent reference holding
+    _lastAvailability = List.from(_availability);
     return regions;
   }
 
