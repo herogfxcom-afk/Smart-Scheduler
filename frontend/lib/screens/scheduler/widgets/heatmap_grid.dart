@@ -147,6 +147,11 @@ class _HeatmapGridState extends State<HeatmapGrid> {
 
     // Add Busy Slots / Free Slots
     for (final slot in widget.slots) {
+      // Skip busy and others_busy slots to remove the unwanted "red bars" and noise
+      // User only wants to see available matches/slots
+      if (slot.type == 'busy' || slot.type == 'others_busy') continue;
+      if (slot.availability == 0.0) continue;
+
       final startLocal = toUserLocal(slot.start);
       final endLocal = toUserLocal(slot.end);
       final color = _getSlotColor(slot);
@@ -266,13 +271,10 @@ class _HeatmapGridState extends State<HeatmapGrid> {
         ? [
             _legendItem(const Color(0xFF2E7D32), "Match"),
             _legendItem(Colors.blue, "Me"),
-            _legendItem(Colors.deepOrange, "Others"),
             _legendItem(Colors.purple, "Meeting"),
           ]
         : [
             _legendItem(Colors.green, "Free"),
-            _legendItem(Colors.orange, "Partial"),
-            _legendItem(Colors.red, "Busy"),
           ],
       ),
     );
@@ -322,11 +324,12 @@ class _HeatmapGridState extends State<HeatmapGrid> {
         final baseDate = DateTime(2025, 1, 6 + a.dayOfWeek);
 
         regions.add(TimeRegion(
-          startTime: DateTime(baseDate.year, baseDate.month, baseDate.day, startHour, startMin),
-          endTime: DateTime(baseDate.year, baseDate.month, baseDate.day, endHour, endMin),
+          // Use UTC to align with our visual "fake-UTC" grid which avoids TZ shifts
+          startTime: DateTime.utc(baseDate.year, baseDate.month, baseDate.day, startHour, startMin),
+          endTime: DateTime.utc(baseDate.year, baseDate.month, baseDate.day, endHour, endMin),
           recurrenceRule: 'FREQ=WEEKLY;BYDAY=${rruleDays[a.dayOfWeek]}',
-          color: Colors.green.withOpacity(0.08),
-          text: 'Working Hours',
+          color: Colors.green.withOpacity(0.06), // Even more subtle
+          text: '', // Removed text to prevent overlaps and clutter
           enablePointerInteraction: true,
         ));
       } catch (e) {
