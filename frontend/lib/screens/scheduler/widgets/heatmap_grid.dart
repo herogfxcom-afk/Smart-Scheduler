@@ -1,12 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:syncfusion_flutter_calendar/calendar.dart';
-import 'package:timezone/timezone.dart' as tz;
 import '../../../models/time_slot.dart';
 import '../../../models/meeting.dart';
 import '../../../utils/timezone_utils.dart';
 import '../../../utils/calendar_processor.dart';
-import '../../../core/telegram/telegram_service.dart';
-import '../../../providers/availability_provider.dart';
 import '../../../providers/working_hours_notifier.dart';
 import '../../../models/availability.dart';
 import 'package:provider/provider.dart';
@@ -101,7 +98,6 @@ class _HeatmapGridState extends State<HeatmapGrid> {
               dayFormat: 'E',
               nonWorkingDays: [7], // Sunday
               timeIntervalHeight: 60,
-              appointmentPadding: EdgeInsets.zero,
             ),
             backgroundColor: Colors.transparent,
             headerHeight: 0,
@@ -219,21 +215,7 @@ class _HeatmapGridState extends State<HeatmapGrid> {
     return appointments;
   }
 
-  Color _getSlotColor(TimeSlot timeSlot) {
-    if (widget.calendarType == CalendarType.solo) {
-      if (timeSlot.availability == 1.0) return Colors.green.withOpacity(0.35);
-      if (timeSlot.availability > 0.6) return Colors.green.withOpacity(0.2);
-      if (timeSlot.availability > 0.0) return Colors.orange.withOpacity(0.2);
-      return Colors.red.withOpacity(0.2);
-    }
-    
-    // Group Colors
-    if (timeSlot.isCommonSlot) return const Color(0xFF2E7D32).withOpacity(0.8);
-    if (timeSlot.isFromMe(widget.myUserId)) return Colors.blue.withOpacity(0.6);
-    if (timeSlot.isFromOthers(widget.myUserId)) return Colors.deepOrange.withOpacity(0.5);
-    
-    return Colors.white.withOpacity(0.05);
-  }
+
 
   Widget _appointmentBuilder(BuildContext context, CalendarAppointmentDetails details) {
     final ProcessedAppointment appt = details.appointments.first;

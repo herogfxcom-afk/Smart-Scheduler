@@ -11,7 +11,6 @@ import 'package:smart_scheduler_frontend/models/meeting.dart';
 import 'package:smart_scheduler_frontend/providers/availability_provider.dart';
 import 'package:smart_scheduler_frontend/providers/auth_provider.dart';
 import 'package:smart_scheduler_frontend/providers/meeting_provider.dart';
-import 'package:smart_scheduler_frontend/models/availability.dart';
 import 'package:smart_scheduler_frontend/core/telegram/telegram_service.dart';
 import 'package:smart_scheduler_frontend/utils/calendar_processor.dart';
 import 'package:smart_scheduler_frontend/providers/working_hours_notifier.dart';
