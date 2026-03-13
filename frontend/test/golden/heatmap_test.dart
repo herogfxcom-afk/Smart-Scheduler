@@ -14,6 +14,7 @@ import 'package:smart_scheduler_frontend/providers/meeting_provider.dart';
 import 'package:smart_scheduler_frontend/models/availability.dart';
 import 'package:smart_scheduler_frontend/core/telegram/telegram_service.dart';
 import 'package:smart_scheduler_frontend/utils/calendar_processor.dart';
+import 'package:smart_scheduler_frontend/providers/working_hours_notifier.dart';
 import '../mock_classes.dart';
 
 void main() {
@@ -25,10 +26,12 @@ void main() {
   group('HeatmapGrid Golden Tests', () {
     late MockTelegramService mockTelegram;
     late MockAvailabilityProvider mockAvailability;
+    late WorkingHoursNotifier workingHoursNotifier;
 
     setUp(() {
       mockTelegram = MockTelegramService();
       mockAvailability = MockAvailabilityProvider();
+      workingHoursNotifier = WorkingHoursNotifier();
 
       when(() => mockTelegram.getUserId()).thenReturn('user_123');
       when(() => mockAvailability.availability).thenReturn(mockMoscowAvailability());
@@ -70,6 +73,7 @@ void main() {
             providers: [
               Provider<TelegramService>.value(value: mockTelegram),
               ChangeNotifierProvider<AvailabilityProvider>.value(value: mockAvailability),
+              ChangeNotifierProvider<WorkingHoursNotifier>.value(value: workingHoursNotifier),
             ],
             child: Material(
               child: HeatmapGrid(
@@ -124,6 +128,7 @@ void main() {
             providers: [
               Provider<TelegramService>.value(value: mockTelegram),
               ChangeNotifierProvider<AvailabilityProvider>.value(value: mockAvailability),
+              ChangeNotifierProvider<WorkingHoursNotifier>.value(value: workingHoursNotifier),
             ],
             child: Material(
               child: HeatmapGrid(
@@ -164,6 +169,7 @@ void main() {
             providers: [
               Provider<TelegramService>.value(value: mockTelegram),
               ChangeNotifierProvider<AvailabilityProvider>.value(value: mockAvailability),
+              ChangeNotifierProvider<WorkingHoursNotifier>.value(value: workingHoursNotifier),
             ],
             child: Material(
               child: HeatmapGrid(
@@ -208,6 +214,7 @@ void main() {
             providers: [
               Provider<TelegramService>.value(value: mockTelegram),
               ChangeNotifierProvider<AvailabilityProvider>.value(value: mockAvailability),
+              ChangeNotifierProvider<WorkingHoursNotifier>.value(value: workingHoursNotifier),
             ],
             child: Material(
               child: HeatmapGrid(
@@ -224,6 +231,42 @@ void main() {
 
       await tester.pumpDeviceBuilder(builder);
       await screenMatchesGolden(tester, 'heatmap_grid_fractional');
+    });
+
+    testGoldens('Unified UI Check - No redundant green slots', (tester) async {
+      tz.setLocalLocation(tz.getLocation('Europe/Moscow'));
+      final baseDate = DateTime(2026, 3, 13, 0, 0, 0);
+      
+      // Provide Moscow availability but 0 actual slots to ensure background is the focus
+      final availability = mockMoscowAvailability();
+      workingHoursNotifier.update(availability);
+
+      final builder = DeviceBuilder()
+        ..overrideDevicesForAllScenarios(devices: [
+          const Device(name: 'web_view', size: Size(400, 800)),
+        ])
+        ..addScenario(
+          name: 'unified_solo_ui',
+          widget: MultiProvider(
+            providers: [
+              Provider<TelegramService>.value(value: mockTelegram),
+              ChangeNotifierProvider<AvailabilityProvider>.value(value: mockAvailability),
+              ChangeNotifierProvider<WorkingHoursNotifier>.value(value: workingHoursNotifier),
+            ],
+            child: Material(
+              child: HeatmapGrid(
+                slots: const [], // No slots, just background
+                selectedDay: baseDate,
+                onSlotSelected: (_) {},
+                availability: availability,
+                calendarType: CalendarType.solo,
+              ),
+            ),
+          ),
+        );
+
+      await tester.pumpDeviceBuilder(builder);
+      await screenMatchesGolden(tester, 'heatmap_unified_solo');
     });
   });
 }
