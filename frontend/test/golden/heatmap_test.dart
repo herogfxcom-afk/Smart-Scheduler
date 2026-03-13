@@ -267,5 +267,55 @@ void main() {
       await tester.pumpDeviceBuilder(builder);
       await screenMatchesGolden(tester, 'heatmap_unified_solo');
     });
+
+    testGoldens('External Busy Highlighting - Blue Blocks', (tester) async {
+      tz.setLocalLocation(tz.getLocation('Europe/Moscow'));
+      final baseDate = DateTime(2026, 3, 13, 0, 0, 0);
+      
+      final slots = [
+        // External busy slot (from Google/Outlook)
+        TimeSlot(
+          start: DateTime.parse('2026-03-13T08:00:00Z'),
+          end: DateTime.parse('2026-03-13T10:00:00Z'),
+          type: 'my_busy',
+          availability: 0.0,
+        ),
+        // Internal App Meeting (should be purple)
+        TimeSlot(
+          start: DateTime.parse('2026-03-13T12:00:00Z'),
+          end: DateTime.parse('2026-03-13T14:00:00Z'),
+          type: 'meeting',
+          availability: 0.0,
+        ),
+      ];
+
+      final builder = DeviceBuilder()
+        ..overrideDevicesForAllScenarios(devices: [
+          const Device(name: 'web_view', size: Size(400, 800)),
+        ])
+        ..addScenario(
+          name: 'external_busy_blue_blocks',
+          widget: MultiProvider(
+            providers: [
+              Provider<TelegramService>.value(value: mockTelegram),
+              ChangeNotifierProvider<AvailabilityProvider>.value(value: mockAvailability),
+              ChangeNotifierProvider<WorkingHoursNotifier>.value(value: workingHoursNotifier),
+            ],
+            child: Material(
+              child: HeatmapGrid(
+                slots: slots,
+                selectedDay: baseDate,
+                onSlotSelected: (_) {},
+                availability: mockMoscowAvailability(),
+                myUserId: 'user_123',
+                calendarType: CalendarType.solo,
+              ),
+            ),
+          ),
+        );
+
+      await tester.pumpDeviceBuilder(builder);
+      await screenMatchesGolden(tester, 'heatmap_external_busy');
+    });
   });
 }
