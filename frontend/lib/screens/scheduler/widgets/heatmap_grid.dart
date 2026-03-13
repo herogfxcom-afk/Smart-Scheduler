@@ -95,6 +95,23 @@ class _HeatmapGridState extends State<HeatmapGrid> {
         ));
       }
 
+      // Add Other Participants' Busy Slots as background regions (Only in Group mode)
+      if (widget.calendarType == CalendarType.group) {
+        for (final slot in widget.slots) {
+          if (!slot.isOthersBusy) continue;
+
+          final startUtc = slot.start.isUtc ? slot.start : slot.start.toUtc();
+          final endUtc = slot.end.isUtc ? slot.end : slot.end.toUtc();
+          
+          regions.add(TimeRegion(
+            startTime: startUtc,
+            endTime: endUtc,
+            color: Colors.orange.withOpacity(0.3), // Slightly more transparent orange
+            enablePointerInteraction: true,
+          ));
+        }
+      }
+
       return Column(
         children: [
         Expanded(
@@ -299,6 +316,7 @@ class _HeatmapGridState extends State<HeatmapGrid> {
         ? [
             _legendItem(const Color(0xFF2E7D32), "Match"),
             _legendItem(Colors.blue, "Me"),
+            _legendItem(Colors.orange, "Others"),
             _legendItem(Colors.purple, "Meeting"),
           ]
         : [
