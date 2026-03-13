@@ -30,7 +30,7 @@ migrate_working_dir/
 .flutter-plugins-dependencies
 .pub-cache/
 .pub/
-# /build/ (Uncommented for Railway Nixpacks deployment)
+/build/
 /coverage/
 
 # Symbolication related
