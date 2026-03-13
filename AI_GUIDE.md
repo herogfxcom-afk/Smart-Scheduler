@@ -1,6 +1,6 @@
 # Smart Scheduler - AI Developer Guide
 
-*Current version: v7.0.0-stable (Ground Truth Edition)*
+*Current version: v8.1.0-stable (Final Ground Truth)*
 
 ## 🌟 Project Overview
 Smart Scheduler is a group availability tracking application integrated deeply with Telegram Mini Apps and Google Calendar. It allows users to sync their personal calendars, share their working hours, and find common free slots among selected participants in a group chat to schedule meetings.
@@ -10,37 +10,42 @@ Smart Scheduler is a group availability tracking application integrated deeply w
 - **Framework:** Flutter (Web).
 - **Hosting:** Vercel.
 - **Calendar:** Syncfusion `SfCalendar`.
-- **Timezone Management:** Uses the `timezone` package and `flutter_timezone`. `SfCalendar` is configured with `timeZone: 'UTC'` to ensure alignment with manual local conversions.
+- **Timezone Management:** Sources truth from `window.userTimezone` and `window.userTzOffset` injected via `index.html`. Uses `timezone` package for conversions.
+- **WASM/CanvasKit:** Build uses `--no-tree-shake-icons --verbose` to ensure compatibility and debugging depth.
 
 **Backend:**
 - **Framework:** Python / FastAPI.
-- **Hosting:** Railway (cloud platform).
-- **Database:** PostgreSQL (Neon) or SQLite (local development).
-- **Timezone Management:** **`zoneinfo` (Python 3.9+)** for DST-aware calculations. NO longer uses `pytz` or naive datetimes for logic.
+- **Hosting:** Railway.
+- **Database:** PostgreSQL (Neon) or SQLite (dev).
+- **Timezone Management:** **`zoneinfo` (Python 3.9+)** for all logic. Notifications are personalized—the bot sends messages formatted in the recipient's local TZ.
 
 ## 🚀 Key Architectural Truths (READ THIS)
 
-### 1. The Timezone Manifesto
-- **Storage:** All meetings and busy slots are stored in **UTC** without timezone offsets in the database.
-- **Backend Logic:** `calendar_service.py` uses `ZoneInfo(user.timezone)` to convert UTC intervals into the user's local time ONLY for checking working hours. All intersections and group results are returned in **UTC**.
-- **Frontend Logic:** The app receives UTC from the API. It converts it to the viewer's local time using `toUserLocal()` (which uses `tz.local`). 
-- **SfCalendar Alignment:** `SfCalendar` MUST have `timeZone: 'UTC'` so that it doesn't apply internal shifts to the already-converted `toUserLocal` times.
+### 1. The Timezone Manifesto (Updated)
+- **Detection (Web):** `index.html` captures `Intl.DateTimeFormat().resolvedOptions().timeZone` at runtime. Dart accesses this via `JS Interop` in `timezone_utils.dart`.
+- **Storage:** All meetings and busy slots are stored in **UTC**.
+- **Backend Notifications:** When sending Telegram messages, `main.py` fetches the user's `timezone` from the DB and uses `ZoneInfo` to format the display time.
+- **Frontend Display:** `toUserLocal()` in Dart uses the native browser environment to handle shifts. `SfCalendar` remains in `UTC` to avoid double-shaping issues.
 
-### 2. Group Multi-TZ Intersection
-- When calculating group availability (`snap_to_local=False`), the backend does not snap to any midnight. It calculates a continuous UTC timeline.
-- A slot is a `match` only if **ALL** participants are free AND within their local working hours simultaneously.
-- **Fractional Availability:** Slots where only some people are free are marked as `others_busy` with an `availability` percentage (e.g., "1/2 free").
+### 2. UI Stability (Golden Tests)
+- **Package:** `golden_toolkit`.
+- **Location:** `test/golden/`.
+- **Command:** `flutter test --update-goldens` to refresh snapshots.
+- **Purpose:** Prevents layout shifts and timezone-related rendering bugs (e.g., blocks shifting by 2 hours).
 
-### 3. Google OAuth & Production Proxies
-- The `google_oauth.py` dynamically builds the `redirect_uri` by checking `X-Forwarded-Proto` and `X-Forwarded-Host` headers to handle Railway/Vercel proxies correctly.
+### 3. Build & Deployment
+- **Critical File:** `build.sh` handles Flutter SDK installation and build on Vercel.
+- **Avoid:** Never commit the `frontend/build/` directory; it is ignored via `.gitignore` to keep the repo clean.
+- **Compilation:** Always ensure `AvailabilityProvider` and `AuthProvider` are imported in screen widgets to prevent "Type not found" errors in release mode.
 
 ## ⚠️ Critical Implementation Rules
-1. **Never use naive `utcnow()`**: Use `datetime.now(timezone.utc)`.
-2. **Never use `replace(tzinfo=None)`** for logic: Keep timezones attached until the final DB write.
-3. **Flutter SfCalendar**: If the purple meeting bar is shifted by 2-3 hours, check if `timeZone: 'UTC'` is still set in `heatmap_grid.dart`.
-4. **Idempotency**: Meetings use an `idempotency_key` (usually `group_CHATID_TIMESTAMP`) to prevent double-posts from Telegram.
+1. **Timezone Utility**: Always use `toUserLocal(dateTime)` for display and `userNow()` instead of `DateTime.now()`.
+2. **Safe Imports**: When adding screens, check for `provider` and `auth_provider` imports. Vercel's build is stricter than local debug.
+3. **Git Hygiene**: Keep large binary blobs (like builds) out of the repo.
+4. **Golden Tests**: Run them before any major UI refactor.
 
 ## 🛠️ Commands
-- **Backend Run:** `cmd /c uvicorn main:app --reload`
-- **Frontend Build:** `cmd /c flutter build web --release --dart-define=API_URL=https://your-backend.url`
-- **Git Release:** `git tag -a v7.0-stable -m "Stable multi-TZ version"; git push origin v7.0-stable`
+- **Backend Run:** `uvicorn main:app --reload`
+- **Frontend Build:** `cd frontend && bash build.sh`
+- **Update Vercel Environment:** Set `API_URL` to point to the Railway backend.
+- **Git Freeze:** `git tag -a v8.1-stable -m "Final stable version with perfect TZ and build fixes"; git push origin v8.1-stable`

@@ -4,7 +4,7 @@ A production-ready Telegram Mini App for group scheduling across multiple timezo
 
 ## 🚀 Quick Start
 - **Telegram Bot:** [Smart Scheduler Bot](https://t.me/your_bot_user)
-- **Status:** Stable v7.0.0
+- **Status:** Stable v8.1.0
 
 ## 📂 Project Structure
 - `/` - FastAPI Backend (Railway)
