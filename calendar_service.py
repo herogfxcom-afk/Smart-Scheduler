@@ -55,9 +55,12 @@ class GoogleCalendarService:
             calendar_ids = ['primary']
 
         # 2. Query FreeBusy
+        time_min_str = start_time.strftime('%Y-%m-%dT%H:%M:%SZ') if start_time.tzinfo else start_time.isoformat() + 'Z'
+        time_max_str = end_time.strftime('%Y-%m-%dT%H:%M:%SZ') if end_time.tzinfo else end_time.isoformat() + 'Z'
+        
         body = {
-            "timeMin": start_time.isoformat() + 'Z',
-            "timeMax": end_time.isoformat() + 'Z',
+            "timeMin": time_min_str,
+            "timeMax": time_max_str,
             "items": [{"id": cid} for cid in calendar_ids]
         }
         
