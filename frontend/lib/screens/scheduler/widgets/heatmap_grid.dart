@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:syncfusion_flutter_calendar/calendar.dart';
+import 'package:timezone/timezone.dart' as tz;
 import '../../../models/time_slot.dart';
 import '../../../models/meeting.dart';
 import '../../../utils/timezone_utils.dart';
@@ -35,6 +36,7 @@ class HeatmapGrid extends StatefulWidget {
 
 class _HeatmapGridState extends State<HeatmapGrid> {
   final CalendarController _calendarController = CalendarController();
+  final GlobalKey<SfCalendarState> _calendarKey = GlobalKey<SfCalendarState>();
 
   @override
   void didChangeDependencies() {
@@ -43,6 +45,7 @@ class _HeatmapGridState extends State<HeatmapGrid> {
 
   void _refreshCalendar() {
     if (mounted) {
+      _calendarKey.currentState?.refresh();
       setState(() {});
     }
   }
@@ -53,6 +56,8 @@ class _HeatmapGridState extends State<HeatmapGrid> {
     if (!DateUtils.isSameDay(oldWidget.selectedDay, widget.selectedDay)) {
       _calendarController.displayDate = widget.selectedDay;
     }
+    // Refresh if availability or timezone might have changed
+    _refreshCalendar();
   }
 
   @override
@@ -67,10 +72,10 @@ class _HeatmapGridState extends State<HeatmapGrid> {
       children: [
         Expanded(
           child: SfCalendar(
-            key: ValueKey('sf_calendar_${widget.selectedDay.millisecondsSinceEpoch}_${widget.availability.length}_${getUserTimezone()}'),
+            key: _calendarKey,
             controller: _calendarController,
             view: CalendarView.week,
-            timeZone: getUserTimezone(), // Sync with browser's IANA TZ instead of hardcoded UTC
+            timeZone: getUserTimezone(),
             initialDisplayDate: widget.selectedDay,
             firstDayOfWeek: 1, // Monday
             timeSlotViewSettings: const TimeSlotViewSettings(
@@ -81,23 +86,46 @@ class _HeatmapGridState extends State<HeatmapGrid> {
               dateFormat: 'd',
               dayFormat: 'E',
               nonWorkingDays: [7], // Sunday
+              timeIntervalHeight: 60,
             ),
             backgroundColor: Colors.transparent,
-
-            headerHeight: 0, // We hide the default header to rely on the timeline week header
+            headerHeight: 0,
             dataSource: _MeetingDataSource(_buildAppointments()),
             appointmentBuilder: _appointmentBuilder,
+            specialRegions: _buildSpecialRegions(),
+            timeRegionBuilder: _timeRegionBuilder,
             onTap: (CalendarTapDetails details) {
               if (details.targetElement == CalendarElement.calendarCell) {
                 final date = details.date;
                 if (date != null) {
+                  final local = toUserLocal(date);
                   // Only allow selection if the slot is in the future
                   if (date.isBefore(userNow())) return;
 
-                  // Validate working hours
+                  // Validate working hours using local time
                   if (!_isWithinWorkingHours(date)) {
                     _showNonWorkingHourWarning(context);
                     return;
+                  }
+
+                  // Optional dialog requested by user for Solo mode
+                  if (widget.calendarType == CalendarType.solo) {
+                    showDialog(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        backgroundColor: const Color(0xFF1E1E1E),
+                        content: Text(
+                          "Это время свободно ${local.hour}:00 - ${local.hour + 1}:00",
+                          style: const TextStyle(color: Colors.white),
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text("OK", style: TextStyle(color: Colors.blueAccent)),
+                          ),
+                        ],
+                      ),
+                    );
                   }
                   
                   // Construct a dummy TimeSlot for the selected cell
@@ -111,7 +139,6 @@ class _HeatmapGridState extends State<HeatmapGrid> {
                 }
               } else if (details.targetElement == CalendarElement.appointment) {
                 final ProcessedAppointment appt = details.appointments!.first;
-                // Don't allow selecting past slots
                 if (appt.startTime.isBefore(userNow())) return;
                 widget.onSlotSelected(appt.originalSlot);
               }
@@ -120,6 +147,84 @@ class _HeatmapGridState extends State<HeatmapGrid> {
         ),
         _buildLegend(),
       ],
+    );
+  }
+
+  List<TimeRegion> _buildSpecialRegions() {
+    if (widget.availability.isEmpty) return [];
+    
+    final List<TimeRegion> regions = [];
+    try {
+      final location = tz.getLocation(getUserTimezone());
+      
+      // Build regions for the visible week range
+      for (int i = -7; i <= 7; i++) {
+        final base = widget.selectedDay.add(Duration(days: i));
+        final dayOfWeek = (base.weekday - 1); // 0-6
+        
+        final dayData = widget.availability.firstWhere(
+          (a) => a.dayOfWeek == dayOfWeek,
+          orElse: () => widget.availability[0],
+        );
+
+        if (!dayData.isEnabled) continue;
+
+        final startParts = dayData.startTime.split(':');
+        final endParts = dayData.endTime.split(':');
+        
+        final start = tz.TZDateTime(
+          location,
+          base.year,
+          base.month,
+          base.day,
+          int.parse(startParts[0]),
+          int.parse(startParts[1]),
+        );
+        
+        final end = tz.TZDateTime(
+          location,
+          base.year,
+          base.month,
+          base.day,
+          int.parse(endParts[0]),
+          int.parse(endParts[1]),
+        );
+
+        regions.add(TimeRegion(
+          startTime: start,
+          endTime: end,
+          enablePointerInteraction: true,
+          color: Colors.green.withOpacity(0.12),
+          // We only show label in group mode, solo is cleaner
+          text: widget.calendarType == CalendarType.group ? 'Working' : null,
+        ));
+      }
+    } catch (e) {
+      debugPrint("Error building special regions: $e");
+    }
+    return regions;
+  }
+
+  Widget _timeRegionBuilder(BuildContext context, TimeRegionDetails details) {
+    // Fill the cell height completely as requested
+    const double height = 60.0; // Matches timeIntervalHeight
+    
+    return Container(
+      height: height,
+      width: details.bounds.width,
+      decoration: BoxDecoration(
+        color: Colors.green.withOpacity(0.25),
+        border: Border.all(color: Colors.green.withOpacity(0.1), width: 0.5),
+      ),
+      child: widget.calendarType == CalendarType.group 
+        ? const Center(
+            child: Text(
+              "Working Hours", 
+              style: TextStyle(color: Colors.white24, fontSize: 10, fontWeight: FontWeight.bold),
+              textAlign: TextAlign.center,
+            ),
+          )
+        : null,
     );
   }
 
@@ -145,8 +250,6 @@ class _HeatmapGridState extends State<HeatmapGrid> {
 
     // Add Busy Slots / Free Slots
     for (final slot in widget.slots) {
-      // Skip busy and others_busy slots to remove the unwanted "red bars" and noise
-      // User only wants to see available matches/slots
       if (slot.type == 'busy' || slot.type == 'others_busy') continue;
       if (slot.availability == 0.0) continue;
 
@@ -186,12 +289,8 @@ class _HeatmapGridState extends State<HeatmapGrid> {
 
   Widget _appointmentBuilder(BuildContext context, CalendarAppointmentDetails details) {
     final ProcessedAppointment appt = details.appointments.first;
-    
-    // Past events are darkened/grayed
     final isPast = appt.isPast;
     final color = isPast ? Colors.grey.withOpacity(0.4) : appt.color;
-    
-    // Border for meetings or my busy slots
     final hasBorder = appt.isMeeting || (appt.originalSlot.isFromMe(widget.myUserId));
     final borderColor = appt.isMeeting 
         ? Colors.white.withOpacity(0.4) 
@@ -231,7 +330,6 @@ class _HeatmapGridState extends State<HeatmapGrid> {
       );
     }
 
-    // Show percentage for solo calendar non-busy slots
     if (widget.calendarType == CalendarType.solo && appt.availability > 0) {
       return Text(
         "${(appt.availability * 100).toInt()}%",
@@ -243,7 +341,6 @@ class _HeatmapGridState extends State<HeatmapGrid> {
       );
     }
 
-    // Show fractional availability for group partial matches
     if (widget.calendarType == CalendarType.group && 
         appt.originalSlot.type == 'others_busy' && 
         appt.originalSlot.freeCount != null) {
@@ -297,14 +394,12 @@ class _HeatmapGridState extends State<HeatmapGrid> {
 
   bool _isWithinWorkingHours(DateTime date) {
     final availability = widget.availability;
-    if (availability.isEmpty) return true; // Default to open if not loaded
+    if (availability.isEmpty) return true;
 
-    // Use local time for boundary check (User wants 09:00 in their clock)
     final localDate = toUserLocal(date);
-    
     final dayData = availability.firstWhere(
-      (a) => a.dayOfWeek == (localDate.weekday - 1), // DateTime weekday is 1-7, backend 0-6
-      orElse: () => availability[0], // fallback
+      (a) => a.dayOfWeek == (localDate.weekday - 1),
+      orElse: () => availability[0],
     );
 
     if (!dayData.isEnabled) return false;
