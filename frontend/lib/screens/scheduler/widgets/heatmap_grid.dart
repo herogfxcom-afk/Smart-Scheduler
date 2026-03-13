@@ -177,7 +177,7 @@ class _HeatmapGridState extends State<HeatmapGrid> {
     final List<ProcessedAppointment> appointments = [];
     final now = userNow();
 
-    // Add Meetings
+    // 1. Add Meetings (Always visible in both solo and group)
     for (final meeting in widget.myMeetings) {
       final startUtc = meeting.start.isUtc ? meeting.start : meeting.start.toUtc();
       final endUtc = meeting.end.isUtc ? meeting.end : meeting.end.toUtc();
@@ -193,25 +193,33 @@ class _HeatmapGridState extends State<HeatmapGrid> {
       ));
     }
 
-    // Add Busy Slots / Free Slots (restored full list)
-    for (final slot in widget.slots) {
-      if (slot.type == 'busy' || slot.type == 'others_busy') continue;
-      if (slot.availability == 0.0) continue;
+    // 2. Add Group Slots (Only for group view)
+    // In Group view, we still want to see the merged Common Free Time blocks
+    if (widget.calendarType == CalendarType.group) {
+      for (final slot in widget.slots) {
+        if (slot.type == 'busy' || slot.type == 'others_busy') continue;
+        if (slot.availability == 0.0) continue;
+        // Only show Common Free Time as solid blocks in group view
+        if (!slot.isCommonSlot && !slot.isFromMe(widget.myUserId)) continue;
 
-      final startUtc = slot.start.isUtc ? slot.start : slot.start.toUtc();
-      final endUtc = slot.end.isUtc ? slot.end : slot.end.toUtc();
-      final color = _getSlotColor(slot);
-      
-      appointments.add(ProcessedAppointment(
-        startTime: startUtc,
-        endTime: endUtc,
-        color: color,
-        subject: '',
-        originalSlot: slot,
-        availability: slot.availability,
-        isPast: endUtc.isBefore(now.toUtc()),
-      ));
+        final startUtc = slot.start.isUtc ? slot.start : slot.start.toUtc();
+        final endUtc = slot.end.isUtc ? slot.end : slot.end.toUtc();
+        final color = _getSlotColor(slot);
+        
+        appointments.add(ProcessedAppointment(
+          startTime: startUtc,
+          endTime: endUtc,
+          color: color,
+          subject: '',
+          originalSlot: slot,
+          availability: slot.availability,
+          isPast: endUtc.isBefore(now.toUtc()),
+        ));
+      }
     }
+
+    // NOTE: For Solo mode, we no longer add individual "green" slots.
+    // The clickable area is now handled by cell taps against the background working hours.
 
     return appointments;
   }
@@ -244,7 +252,6 @@ class _HeatmapGridState extends State<HeatmapGrid> {
     return Container(
       decoration: BoxDecoration(
         color: color,
-        borderRadius: BorderRadius.circular(2),
         border: hasBorder ? Border.all(color: borderColor, width: 1.0) : null,
       ),
       child: Center(

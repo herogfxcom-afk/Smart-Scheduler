@@ -77,7 +77,7 @@ class WorkingHoursNotifier extends ChangeNotifier {
             startTime: start,
             endTime: end,
             color: Colors.green.withOpacity(0.25),
-            enablePointerInteraction: false,
+            enablePointerInteraction: true,
           ));
         } catch (e) {
           debugPrint("Error parsing time for region: $e");
