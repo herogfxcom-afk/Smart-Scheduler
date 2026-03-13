@@ -193,33 +193,9 @@ class _HeatmapGridState extends State<HeatmapGrid> {
       ));
     }
 
-    // 2. Add Group Slots (Only for group view)
-    // In Group view, we still want to see the merged Common Free Time blocks
-    if (widget.calendarType == CalendarType.group) {
-      for (final slot in widget.slots) {
-        if (slot.type == 'busy' || slot.type == 'others_busy') continue;
-        if (slot.availability == 0.0) continue;
-        // Only show Common Free Time as solid blocks in group view
-        if (!slot.isCommonSlot && !slot.isFromMe(widget.myUserId)) continue;
-
-        final startUtc = slot.start.isUtc ? slot.start : slot.start.toUtc();
-        final endUtc = slot.end.isUtc ? slot.end : slot.end.toUtc();
-        final color = _getSlotColor(slot);
-        
-        appointments.add(ProcessedAppointment(
-          startTime: startUtc,
-          endTime: endUtc,
-          color: color,
-          subject: '',
-          originalSlot: slot,
-          availability: slot.availability,
-          isPast: endUtc.isBefore(now.toUtc()),
-        ));
-      }
-    }
-
-    // NOTE: For Solo mode, we no longer add individual "green" slots.
-    // The clickable area is now handled by cell taps against the background working hours.
+    // NOTE: We no longer add green "availability" or "common" slots as appointments.
+    // The clickable area is handled by cell taps against the background working hours (specialRegions).
+    // This ensures a clean UI without overlapping grid layers.
 
     return appointments;
   }
