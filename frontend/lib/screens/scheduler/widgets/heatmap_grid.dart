@@ -94,9 +94,11 @@ class _HeatmapGridState extends State<HeatmapGrid> {
             ),
             backgroundColor: Colors.transparent,
             headerHeight: 0,
-            dataSource: _MeetingDataSource(_buildMeetingsOnly()),
+            dataSource: _MeetingDataSource(_buildAppointments()),
             appointmentBuilder: _appointmentBuilder,
-            specialRegions: workingHoursNotifier.buildRegions(),
+            specialRegions: workingHoursNotifier.buildRegions().isNotEmpty
+                ? workingHoursNotifier.buildRegions()
+                : [],
             timeRegionBuilder: (context, details) {
               return Container(
                 decoration: BoxDecoration(
@@ -142,7 +144,7 @@ class _HeatmapGridState extends State<HeatmapGrid> {
 
 
 
-  List<ProcessedAppointment> _buildMeetingsOnly() {
+  List<ProcessedAppointment> _buildAppointments() {
     final List<ProcessedAppointment> appointments = [];
     final now = userNow();
 
@@ -162,17 +164,10 @@ class _HeatmapGridState extends State<HeatmapGrid> {
       ));
     }
 
-    // Add Busy Slots / Free Slots
+    // Add Busy Slots / Free Slots (restored full list)
     for (final slot in widget.slots) {
       if (slot.type == 'busy' || slot.type == 'others_busy') continue;
       if (slot.availability == 0.0) continue;
-      
-      // CRITICAL FIX: The user wants working hours handled ENTIRELY by specialRegions
-      // so they visually don't overlay. If this is Solo mode, we IGNORE the old "free slots"
-      // to avoid drawing double-green blocks which persist across settings changes.
-      if (widget.calendarType == CalendarType.solo && slot.availability == 1.0) {
-        continue;
-      }
 
       final startUtc = slot.start.isUtc ? slot.start : slot.start.toUtc();
       final endUtc = slot.end.isUtc ? slot.end : slot.end.toUtc();
