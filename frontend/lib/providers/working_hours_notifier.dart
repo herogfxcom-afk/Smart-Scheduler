@@ -5,18 +5,22 @@ import '../utils/timezone_utils.dart';
 import 'package:timezone/timezone.dart' as tz;
 
 class WorkingHoursNotifier extends ChangeNotifier {
-  // Use a generic GlobalKey to avoid potential SfCalendarState type errors during build
-  final GlobalKey calendarKey = GlobalKey();
+  // Syncfusion's SfCalendarState is private in recent versions, so GlobalKey<SfCalendarState> 
+  // throws a compilation error. To achieve the exact same "deep clean" effect and fix the overlay bug,
+  // we use a versioned ValueKey that completely destroys and recreates the calendar when settings change.
+  int _version = 0;
+
+  Key get calendarKey => ValueKey('working_hours_calendar_v$_version');
 
   List<TimeRegion> buildRegions(List<Availability> availability) {
     if (availability.isEmpty) return [];
     
+    // We strictly return a completely NEW list every time to avoid structural equality caching
     final List<TimeRegion> regions = [];
     try {
       final location = tz.getLocation(getUserTimezone());
       final now = userNow();
       
-      // Build regions for a reasonable range around today
       for (int i = -7; i <= 14; i++) {
         final base = now.add(Duration(days: i));
         final dayOfWeek = (base.weekday - 1); // 0-6
@@ -59,16 +63,14 @@ class WorkingHoursNotifier extends ChangeNotifier {
     } catch (e) {
       debugPrint("Error building working regions: $e");
     }
+    
     return regions;
   }
 
   void refresh() {
-    // Dynamic cast to access refresh() if available on the state
-    try {
-      (calendarKey.currentState as dynamic)?.refresh();
-    } catch (e) {
-      debugPrint("Could not call refresh on calendar: $e");
-    }
+    // Incrementing the version changes the calendarKey, forcing Flutter to unmount the buggy
+    // SfCalendar widget and build a fresh one, wiping all stale specialRegions from memory.
+    _version++;
     notifyListeners();
   }
 }
