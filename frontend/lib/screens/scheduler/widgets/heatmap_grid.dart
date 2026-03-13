@@ -77,7 +77,23 @@ class _HeatmapGridState extends State<HeatmapGrid> {
   Widget build(BuildContext context) {
     try {
       final workingHoursNotifier = context.watch<WorkingHoursNotifier>();
-      final regions = workingHoursNotifier.buildRegions();
+      final regions = workingHoursNotifier.buildRegions().toList(); // copy to editable list
+
+      // Add External Busy Slots (Outlook/Google) as background regions
+      // This prevents "creeping" (split columns) while maintaining visibility.
+      for (final slot in widget.slots) {
+        if (!slot.isMyBusy) continue;
+
+        final startUtc = slot.start.isUtc ? slot.start : slot.start.toUtc();
+        final endUtc = slot.end.isUtc ? slot.end : slot.end.toUtc();
+        
+        regions.add(TimeRegion(
+          startTime: startUtc,
+          endTime: endUtc,
+          color: Colors.blue.withOpacity(0.4),
+          enablePointerInteraction: true,
+        ));
+      }
 
       return Column(
         children: [
@@ -190,32 +206,9 @@ class _HeatmapGridState extends State<HeatmapGrid> {
       ));
     }
 
-    // 2. Add External Busy Slots (Outlook/Google)
-    for (final slot in widget.slots) {
-      if (!slot.isMyBusy) continue;
-
-      final startUtc = slot.start.isUtc ? slot.start : slot.start.toUtc();
-      final endUtc = slot.end.isUtc ? slot.end : slot.end.toUtc();
-      
-      // FIX: If there is already a meeting covering this timeframe for THIS user, 
-      // skip adding the busy slot to prevent "creeping" (split narrow columns).
-      final isOverlappingWithMeeting = widget.myMeetings.any((m) {
-        final mStart = m.start.isUtc ? m.start : m.start.toUtc();
-        final mEnd = m.end.isUtc ? m.end : m.end.toUtc();
-        return startUtc.isBefore(mEnd) && endUtc.isAfter(mStart);
-      });
-      
-      if (isOverlappingWithMeeting) continue;
-      
-      appointments.add(ProcessedAppointment(
-        startTime: startUtc,
-        endTime: endUtc,
-        color: Colors.blue.withOpacity(0.7),
-        subject: 'Busy',
-        originalSlot: slot,
-        isPast: endUtc.isBefore(now.toUtc()),
-      ));
-    }
+    // 2. External Busy Slots (Outlook/Google) are now handled via specialRegions (TimeRegions)
+    // in the build() method to avoid "creeping" (split narrow columns).
+    // We only keep app-created meetings in the foreground appointments list.
 
     // NOTE: We no longer add green "availability" or "common" slots as appointments.
     // The clickable area is handled by cell taps against the background working hours (specialRegions).
