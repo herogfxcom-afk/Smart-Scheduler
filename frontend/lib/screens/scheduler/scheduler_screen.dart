@@ -801,11 +801,19 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
                         availability: slot.availability,
                       );
 
+                      // FIX: Collect all participants for invitation (excluding self)
+                      final groupProvider = context.read<GroupProvider>();
+                      final List<int> invitedTelegramIds = groupProvider.participants
+                          .map((p) => p.telegramId)
+                          .where((id) => id != context.read<AuthProvider>().user?.telegramId)
+                          .toList();
+
                       final success = await scheduler.createMeeting(
                         title: titleController.text.trim(),
                         description: descriptionController.text.trim(),
                         slot: finalSlot,
-                        chatId: context.read<GroupProvider>().chatId,
+                        chatId: groupProvider.chatId,
+                        invitedTelegramIds: invitedTelegramIds,
                       );
 
                       if (context.mounted) {

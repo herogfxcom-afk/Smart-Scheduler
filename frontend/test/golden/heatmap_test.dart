@@ -3,15 +3,17 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:golden_toolkit/golden_toolkit.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:provider/provider.dart';
+import 'package:timezone/timezone.dart' as tz;
+import 'package:timezone/data/latest.dart' as tz;
 import 'package:smart_scheduler_frontend/screens/scheduler/widgets/heatmap_grid.dart';
 import 'package:smart_scheduler_frontend/models/time_slot.dart';
+import 'package:smart_scheduler_frontend/models/meeting.dart';
 import 'package:smart_scheduler_frontend/providers/availability_provider.dart';
+import 'package:smart_scheduler_frontend/providers/auth_provider.dart';
+import 'package:smart_scheduler_frontend/providers/meeting_provider.dart';
+import 'package:smart_scheduler_frontend/models/availability.dart';
 import 'package:smart_scheduler_frontend/core/telegram/telegram_service.dart';
 import 'package:smart_scheduler_frontend/utils/calendar_processor.dart';
-import 'package:smart_scheduler_frontend/models/availability.dart';
-import 'package:timezone/data/latest.dart' as tz;
-import 'package:timezone/timezone.dart' as tz;
-
 import '../mock_classes.dart';
 
 void main() {

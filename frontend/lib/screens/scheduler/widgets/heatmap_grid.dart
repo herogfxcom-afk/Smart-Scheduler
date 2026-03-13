@@ -67,10 +67,10 @@ class _HeatmapGridState extends State<HeatmapGrid> {
       children: [
         Expanded(
           child: SfCalendar(
-            key: ValueKey('sf_calendar_${widget.selectedDay.millisecondsSinceEpoch}_${widget.availability.length}'),
+            key: ValueKey('sf_calendar_${widget.selectedDay.millisecondsSinceEpoch}_${widget.availability.length}_${getUserTimezone()}'),
             controller: _calendarController,
             view: CalendarView.week,
-            timeZone: 'UTC', // We handle local conversion ourselves via toUserLocal in _buildAppointments
+            timeZone: getUserTimezone(), // Sync with browser's IANA TZ instead of hardcoded UTC
             initialDisplayDate: widget.selectedDay,
             firstDayOfWeek: 1, // Monday
             timeSlotViewSettings: const TimeSlotViewSettings(
@@ -129,12 +129,12 @@ class _HeatmapGridState extends State<HeatmapGrid> {
 
     // Add Meetings
     for (final meeting in widget.myMeetings) {
-      final startLocal = toUserLocal(meeting.start);
-      final endLocal = toUserLocal(meeting.end);
+      final startUtc = meeting.start.isUtc ? meeting.start : meeting.start.toUtc();
+      final endUtc = meeting.end.isUtc ? meeting.end : meeting.end.toUtc();
       
       appointments.add(ProcessedAppointment(
-        startTime: startLocal,
-        endTime: endLocal,
+        startTime: startUtc,
+        endTime: endUtc,
         color: Colors.purple.withOpacity(0.85),
         subject: meeting.title,
         originalSlot: TimeSlot(start: meeting.start, end: meeting.end, type: 'meeting'),
@@ -150,18 +150,18 @@ class _HeatmapGridState extends State<HeatmapGrid> {
       if (slot.type == 'busy' || slot.type == 'others_busy') continue;
       if (slot.availability == 0.0) continue;
 
-      final startLocal = toUserLocal(slot.start);
-      final endLocal = toUserLocal(slot.end);
+      final startUtc = slot.start.isUtc ? slot.start : slot.start.toUtc();
+      final endUtc = slot.end.isUtc ? slot.end : slot.end.toUtc();
       final color = _getSlotColor(slot);
       
       appointments.add(ProcessedAppointment(
-        startTime: startLocal,
-        endTime: endLocal,
+        startTime: startUtc,
+        endTime: endUtc,
         color: color,
         subject: '',
         originalSlot: slot,
         availability: slot.availability,
-        isPast: endLocal.isBefore(now),
+        isPast: endUtc.isBefore(now.toUtc()),
       ));
     }
 
@@ -295,13 +295,15 @@ class _HeatmapGridState extends State<HeatmapGrid> {
     );
   }
 
-
   bool _isWithinWorkingHours(DateTime date) {
     final availability = widget.availability;
     if (availability.isEmpty) return true; // Default to open if not loaded
 
+    // Use local time for boundary check (User wants 09:00 in their clock)
+    final localDate = toUserLocal(date);
+    
     final dayData = availability.firstWhere(
-      (a) => a.dayOfWeek == (date.weekday - 1), // DateTime weekday is 1-7, backend 0-6
+      (a) => a.dayOfWeek == (localDate.weekday - 1), // DateTime weekday is 1-7, backend 0-6
       orElse: () => availability[0], // fallback
     );
 
@@ -313,7 +315,7 @@ class _HeatmapGridState extends State<HeatmapGrid> {
     final endParts = dayData.endTime.split(':');
     final endVal = int.parse(endParts[0]) * 60 + int.parse(endParts[1]);
 
-    final currentVal = date.hour * 60 + date.minute;
+    final currentVal = localDate.hour * 60 + localDate.minute;
     return currentVal >= startVal && currentVal < endVal;
   }
 
