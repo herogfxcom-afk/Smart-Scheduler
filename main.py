@@ -18,7 +18,7 @@ from outlook_oauth import router as outlook_auth_router
 from models import User, BusySlot
 from database import get_db
 from encryption import decrypt_token, encrypt_token
-from calendar_service import GoogleCalendarService
+from calendar_service import GoogleCalendarService, find_common_free_slots
 from caldav_service import AppleCalendarService
 import os
 import httpx
@@ -1068,6 +1068,19 @@ async def delete_meeting(meeting_id: int, current_user: User = Depends(get_curre
                     await o_service.delete_event(invite.outlook_event_id)
             except Exception as e:
                 print(f"DEBUG: Failed to delete invitee external Event: {e}")
+
+    # Delete matching BusySlots to provide immediate UI feedback (Heatmap "Black Gap" fix)
+    # We clear slots for ALL participants that match the meeting time exactly
+    # because these are likely ghost records synced from external calendars
+    all_uids = [invite.user_id for invite in invites if invite.user_id]
+    if meeting.user_id: all_uids.append(meeting.user_id)
+    
+    if all_uids:
+        db.query(models.BusySlot).filter(
+            models.BusySlot.user_id.in_(all_uids),
+            models.BusySlot.start_time == meeting.start_time,
+            models.BusySlot.end_time == meeting.end_time
+        ).delete(synchronize_session=False)
 
     db.delete(meeting)
     db.commit()
