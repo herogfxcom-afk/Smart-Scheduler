@@ -6,6 +6,7 @@ import '../../../utils/timezone_utils.dart';
 import '../../../utils/calendar_processor.dart';
 import '../../../core/telegram/telegram_service.dart';
 import '../../../providers/availability_provider.dart';
+import '../../../models/availability.dart';
 import 'package:provider/provider.dart';
 
 class HeatmapGrid extends StatefulWidget {
@@ -13,6 +14,8 @@ class HeatmapGrid extends StatefulWidget {
   final DateTime selectedDay;
   final Function(TimeSlot) onSlotSelected;
   final List<Meeting> myMeetings;
+  final List<Availability> availability;
+  final String? myUserId;
   final CalendarType calendarType;
 
   const HeatmapGrid({
@@ -20,6 +23,8 @@ class HeatmapGrid extends StatefulWidget {
     required this.slots,
     required this.selectedDay,
     required this.onSlotSelected,
+    required this.availability,
+    this.myUserId,
     this.myMeetings = const [],
     this.calendarType = CalendarType.group,
   });
@@ -30,12 +35,10 @@ class HeatmapGrid extends StatefulWidget {
 
 class _HeatmapGridState extends State<HeatmapGrid> {
   final CalendarController _calendarController = CalendarController();
-  late String? myUserId;
 
   @override
-  void initState() {
-    super.initState();
-    // We'll init myUserId in build or didChangeDependencies to safely use Provider
+  void didChangeDependencies() {
+    super.didChangeDependencies();
   }
 
   void _refreshCalendar() {
@@ -54,19 +57,17 @@ class _HeatmapGridState extends State<HeatmapGrid> {
 
   @override
   void dispose() {
-    context.read<AvailabilityProvider>().removeListener(_refreshCalendar);
     _calendarController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    myUserId = context.read<TelegramService>().getUserId();
     return Column(
       children: [
         Expanded(
           child: SfCalendar(
-            key: ValueKey('sf_calendar_${context.watch<AvailabilityProvider>().lastUpdated.millisecondsSinceEpoch}'),
+            key: ValueKey('sf_calendar_${widget.selectedDay.millisecondsSinceEpoch}_${widget.availability.length}'),
             controller: _calendarController,
             view: CalendarView.week,
             timeZone: 'UTC', // We handle local conversion ourselves via toUserLocal in _buildAppointments
@@ -81,7 +82,7 @@ class _HeatmapGridState extends State<HeatmapGrid> {
               dayFormat: 'E',
               nonWorkingDays: [7], // Sunday
             ),
-            specialRegions: _getWorkingHoursRegions(context),
+            specialRegions: _getWorkingHoursRegions(),
             timeRegionBuilder: _timeRegionBuilder,
             backgroundColor: Colors.transparent,
 
@@ -174,8 +175,8 @@ class _HeatmapGridState extends State<HeatmapGrid> {
     
     // Group Colors
     if (timeSlot.isCommonSlot) return const Color(0xFF2E7D32).withOpacity(0.8);
-    if (timeSlot.isFromMe(myUserId)) return Colors.blue.withOpacity(0.6);
-    if (timeSlot.isFromOthers(myUserId)) return Colors.deepOrange.withOpacity(0.5);
+    if (timeSlot.isFromMe(widget.myUserId)) return Colors.blue.withOpacity(0.6);
+    if (timeSlot.isFromOthers(widget.myUserId)) return Colors.deepOrange.withOpacity(0.5);
     
     return Colors.white.withOpacity(0.05);
   }
@@ -188,7 +189,7 @@ class _HeatmapGridState extends State<HeatmapGrid> {
     final color = isPast ? Colors.grey.withOpacity(0.4) : appt.color;
     
     // Border for meetings or my busy slots
-    final hasBorder = appt.isMeeting || (appt.originalSlot.isFromMe(myUserId));
+    final hasBorder = appt.isMeeting || (appt.originalSlot.isFromMe(widget.myUserId));
     final borderColor = appt.isMeeting 
         ? Colors.white.withOpacity(0.4) 
         : Colors.blue.withOpacity(0.8);
@@ -294,8 +295,8 @@ class _HeatmapGridState extends State<HeatmapGrid> {
     );
   }
 
-  List<TimeRegion> _getWorkingHoursRegions(BuildContext context) {
-    final availability = context.watch<AvailabilityProvider>().availability;
+  List<TimeRegion> _getWorkingHoursRegions() {
+    final availability = widget.availability;
     if (availability.isEmpty) return [];
 
     final List<TimeRegion> regions = [];
@@ -355,7 +356,7 @@ class _HeatmapGridState extends State<HeatmapGrid> {
   }
 
   bool _isWithinWorkingHours(DateTime date) {
-    final availability = context.read<AvailabilityProvider>().availability;
+    final availability = widget.availability;
     if (availability.isEmpty) return true; // Default to open if not loaded
 
     final dayData = availability.firstWhere(

@@ -333,8 +333,10 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
                   ? HeatmapGrid(
                       slots: scheduler.suggestedSlots,
                       selectedDay: _selectedDay,
+                      availability: context.watch<AvailabilityProvider>().availability,
                       myMeetings: context.watch<MeetingProvider>().meetings,
                       onSlotSelected: (slot) => _handleSlotSelected(context, scheduler, slot),
+                      myUserId: context.read<TelegramService>().getUserId(),
                       calendarType: CalendarType.group,
                     )
                   : _buildListSlots(slotsForDay, scheduler),
