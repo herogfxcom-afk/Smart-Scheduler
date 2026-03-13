@@ -1,8 +1,9 @@
-import 'dart:js_interop';
-import 'dart:js_interop_unsafe';
+import '../../utils/js_stub.dart' if (dart.library.js_interop) 'dart:js_interop';
+import '../../utils/js_stub.dart' if (dart.library.js_interop) 'dart:js_interop_unsafe';
 
-@JS('window.Telegram.WebApp')
-external JSObject? get _webApp;
+import '../../utils/js_stub.dart' if (dart.library.js_interop) '../../utils/web_interop.dart';
+
+JSObject? get _webApp => webApp;
 
 class TelegramService {
   static final TelegramService _instance = TelegramService._internal();

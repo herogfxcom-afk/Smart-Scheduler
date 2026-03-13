@@ -1,6 +1,6 @@
 import 'package:timezone/timezone.dart' as tz;
-import 'dart:js_interop';
-import 'dart:js_interop_unsafe';
+import 'js_stub.dart' if (dart.library.js_interop) 'dart:js_interop';
+import 'js_stub.dart' if (dart.library.js_interop) 'dart:js_interop_unsafe';
 
 /// Returns the user's timezone offset in hours
 double getUserTzOffset() {

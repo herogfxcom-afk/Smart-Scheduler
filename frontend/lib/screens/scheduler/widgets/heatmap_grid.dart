@@ -35,10 +35,7 @@ class _HeatmapGridState extends State<HeatmapGrid> {
   @override
   void initState() {
     super.initState();
-    myUserId = TelegramService().getUserId();
-    
-    // We don't need an explicit listener because context.watch handles it,
-    // but just in case we need to trigger something else, we keep it simple.
+    // We'll init myUserId in build or didChangeDependencies to safely use Provider
   }
 
   void _refreshCalendar() {
@@ -64,6 +61,7 @@ class _HeatmapGridState extends State<HeatmapGrid> {
 
   @override
   Widget build(BuildContext context) {
+    myUserId = context.read<TelegramService>().getUserId();
     return Column(
       children: [
         Expanded(
