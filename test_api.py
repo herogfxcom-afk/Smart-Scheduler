@@ -175,8 +175,7 @@ if __name__ == "__main__":
     test_auth_me()
     test_apple_connect()
     
-    # Run async lifecycle test
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(test_meeting_lifecycle())
+    # Run async lifecycle test using modern asyncio.run()
+    asyncio.run(test_meeting_lifecycle())
     
     report.show_summary()
