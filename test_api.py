@@ -38,6 +38,7 @@ def generate_mock_init_data(bot_token, user_id=12345, username="testuser"):
 from main import app
 from database import engine, get_db
 import models
+from encryption import encrypt_token
 from sqlalchemy.orm import sessionmaker
 
 # Setup test DB
@@ -201,11 +202,17 @@ async def test_meeting_lifecycle():
         db = next(override_get_db())
         user = db.query(models.User).filter(models.User.telegram_id == 12345).first()
         
+        # Cleanup any leftover meetings/slots from previous failed test runs
+        db.query(models.MeetingInvite).filter(models.MeetingInvite.user_id == user.id).delete()
+        db.query(models.GroupMeeting).filter(models.GroupMeeting.user_id == user.id).delete()
+        db.query(models.BusySlot).filter(models.BusySlot.user_id == user.id).delete()
+        db.commit()
+        
         # Add a mock Apple connection to trigger that logic
         apple_conn = models.CalendarConnection(
             user_id=user.id,
             provider="apple",
-            auth_data=json.dumps({"email": "test@apple.com", "password": "pass"}),
+            auth_data=encrypt_token(json.dumps({"email": "test@apple.com", "password": "pass"})),
             is_active=1
         )
         db.add(apple_conn)
@@ -214,54 +221,71 @@ async def test_meeting_lifecycle():
         # 2. Mock external services
         with patch("caldav_service.AppleCalendarService.create_event", return_value="https://icloud.com/event/123"):
             with patch("caldav_service.AppleCalendarService.delete_event", return_value=True):
-                
-                # A. CREATE MEETING
-                print("DEBUG: Starting meeting creation...")
-                # Use a time that is within working hours (9-18)
-                # Setting to 12 PM tomorrow
-                tomorrow = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=1)
-                start_dt = tomorrow.replace(hour=12, minute=0, second=0, microsecond=0)
-                end_dt = start_dt + datetime.timedelta(hours=1)
-                
-                start = start_dt.strftime("%Y-%m-%dT%H:%M:%S.000Z")
-                end = end_dt.strftime("%Y-%m-%dT%H:%M:%S.000Z")
-                
-                payload = {
-                    "title": "Lifecycle Test",
-                    "start": start,
-                    "end": end,
-                    "attendee_emails": [],
-                    "idempotency_key": f"test_{int(time.time())}",
-                    "tz_offset": 0
-                }
-                
-                response = client.post("/meeting/create", headers={"init-data": valid_init_data}, json=payload)
-                if response.status_code != 200:
-                    print(f"DEBUG: Create meeting failed: {response.status_code} - {response.text}")
-                assert response.status_code == 200
-                meeting_id = response.json().get("id")
-                assert meeting_id is not None
-                
-                # Create a simulate persistent BusySlot for this meeting
-                # This simulates what happens after a sync or manual entry
-                busy_sim = models.BusySlot(
-                    user_id=user.id,
-                    start_time=start_dt,
-                    end_time=end_dt,
-                    summary="Lifecycle Test",
-                    is_external=False
-                )
-                db.add(busy_sim)
-                db.commit()
-                
-                report.add("Lifecycle: Create Meeting (Backend + Apple Sync)", True)
+                from unittest.mock import AsyncMock
+                with patch("calendar_service.GoogleCalendarService.create_event", new_callable=AsyncMock) as mock_google_create:
+                    mock_google_create.return_value = "g_event_456"
+                    with patch("calendar_service.GoogleCalendarService.delete_event", return_value=True):
+                        # A. CREATE MEETING
+                        print("DEBUG: Starting meeting creation...")
+                        # Use a time that is within working hours (9-18)
+                        # Setting to a highly unique future date to avoid any 409 Conflicts in SQLite
+                        import random
+                        future_days_offset = random.randint(100, 500)
+                        future = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=future_days_offset)
+                        start_dt = future.replace(hour=12, minute=0, second=0, microsecond=0)
+                        end_dt = start_dt + datetime.timedelta(hours=1)
+                        
+                        start = start_dt.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+                        end = end_dt.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+                        
+                        payload = {
+                            "title": "Lifecycle Test",
+                            "start": start,
+                            "end": end,
+                            "attendee_emails": [],
+                            "idempotency_key": f"test_{int(time.time())}_{random.randint(100,999)}",
+                            "tz_offset": 0
+                        }
+                        
+                        # Add a mock Google connection too
+                        google_conn = models.CalendarConnection(
+                            user_id=user.id,
+                            provider="google",
+                            auth_data=encrypt_token(json.dumps({"email": "test@gmail.com", "token": "abc"})),
+                            is_active=1
+                        )
+                        db.add(google_conn)
+                        db.commit()
+                        
+                        with patch("httpx.AsyncClient.post", return_value=MagicMock(status_code=200)):
+                            response = client.post("/meeting/create", headers={"init-data": valid_init_data}, json=payload)
+                            if response.status_code != 200:
+                                print(f"DEBUG: Create meeting failed: {response.status_code} - {response.text}")
+                            assert response.status_code == 200
+                        meeting_id = response.json().get("id")
+                        assert meeting_id is not None
+                        
+                        # Create a simulate persistent BusySlot for this meeting
+                        # This simulates what happens after a sync or manual entry
+                        busy_sim = models.BusySlot(
+                            user_id=user.id,
+                            start_time=start_dt,
+                            end_time=end_dt,
+                            summary="Lifecycle Test",
+                            is_external=False
+                        )
+                        db.add(busy_sim)
+                        db.commit()
+                        
+                        report.add("Lifecycle: Create Meeting (Backend + Sync)", True)
 
-                # B. VERIFY DB RECORD & IDs
-                print("DEBUG: Verifying database record...")
-                db.expire_all()
-                meeting = db.query(models.GroupMeeting).get(meeting_id)
-                assert meeting.apple_event_id == "https://icloud.com/event/123"
-                report.add("Lifecycle: Database ID Verification (apple_event_id stored)", True)
+                        # B. VERIFY DB RECORD & IDs
+                        print("DEBUG: Verifying database record...")
+                        db.expire_all()
+                        meeting = db.query(models.GroupMeeting).get(meeting_id)
+                        assert meeting.apple_event_id == "https://icloud.com/event/123"
+                        assert meeting.google_event_id == "g_event_456"
+                        report.add("Lifecycle: Database ID Verification (apple and google IDs stored)", True)
 
                 # C. SOFT DELETE (Creator)
                 print("DEBUG: Starting soft delete...")
@@ -272,6 +296,7 @@ async def test_meeting_lifecycle():
                 meeting = db.query(models.GroupMeeting).get(meeting_id)
                 assert meeting.is_cancelled is True
                 assert meeting.apple_event_id is None
+                assert meeting.google_event_id is None
                 
                 # VERIFY BusySlot is PURGED
                 busy_check = db.query(models.BusySlot).filter_by(user_id=user.id, start_time=start_dt, end_time=end_dt).first()
@@ -289,6 +314,8 @@ async def test_meeting_lifecycle():
                 report.add("Lifecycle: Hard Delete from Database", True)
 
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         report.add("Lifecycle: Full meeting flow", False, str(e))
 
 async def test_cancellation_interactive():
