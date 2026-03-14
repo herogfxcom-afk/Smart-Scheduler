@@ -28,7 +28,6 @@ class SoloProvider with ChangeNotifier {
   }
 
   Future<void> fetchSoloSlots({bool force = false}) async {
-    print("DEBUG: SoloProvider.fetchSoloSlots - force: $force");
     try {
       _isLoading = true;
       _error = null;

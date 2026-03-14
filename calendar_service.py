@@ -1,4 +1,5 @@
 import os
+import datetime as dt_module
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
 import googleapiclient.discovery
@@ -200,11 +201,11 @@ def find_common_free_slots(
         
         local_now = start_date.astimezone(v_tz)
         local_midnight = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
-        current_utc = local_midnight.astimezone(datetime.timezone.utc)
+        current_utc = local_midnight.astimezone(dt_module.timezone.utc)
     else:
-        current_utc = start_date.astimezone(datetime.timezone.utc)
+        current_utc = start_date.astimezone(dt_module.timezone.utc)
     
-    end_utc_limit = end_date.astimezone(datetime.timezone.utc)
+    end_utc_limit = end_date.astimezone(dt_module.timezone.utc)
 
     while current_utc < end_utc_limit:
         segment_start = current_utc
@@ -247,8 +248,8 @@ def find_common_free_slots(
                     summary = None
                     is_ext = False
 
-                b_s = b_start if b_start.tzinfo else b_start.replace(tzinfo=datetime.timezone.utc)
-                b_e = b_end if b_end.tzinfo else b_end.replace(tzinfo=datetime.timezone.utc)
+                b_s = b_start if b_start.tzinfo else b_start.replace(tzinfo=dt_module.timezone.utc)
+                b_e = b_end if b_end.tzinfo else b_end.replace(tzinfo=dt_module.timezone.utc)
                 
                 if max(segment_start, b_s) < min(segment_end, b_e):
                     is_busy_with_event = True

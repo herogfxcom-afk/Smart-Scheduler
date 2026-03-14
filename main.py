@@ -11,7 +11,7 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from sqlalchemy import text
 from sqlalchemy.orm import Session
-import datetime
+import datetime as dt_module
 from datetime import datetime, timedelta, timezone
 import pytz
 import os
@@ -758,7 +758,6 @@ async def perform_calendar_sync(current_user: User, db: Session):
     """Internal helper to sync busy slots from all connected calendars to the database."""
     total_slots = 0
     active_connections = [c for c in current_user.connections if c.is_active]
-    print(f"DEBUG: perform_calendar_sync for user {current_user.id} - found {len(active_connections)} active connections")
     
     if not active_connections:
         print(f"DEBUG: No calendars connected for user {current_user.id}")
@@ -776,7 +775,7 @@ async def perform_calendar_sync(current_user: User, db: Session):
         seen_slots.add((st, et))
     
     # Start looking 2 days in the past so we don't miss manual events created today or yesterday
-    start = datetime.now(datetime.timezone.utc) - timedelta(days=2)
+    start = datetime.now(dt_module.timezone.utc) - timedelta(days=2)
     end = start + timedelta(days=21) # Sync 3 weeks ahead
 
     for conn in active_connections:
@@ -822,7 +821,7 @@ async def perform_calendar_sync(current_user: User, db: Session):
                 if i.outlook_event_id: known_external_ids.add(i.outlook_event_id)
 
             # Update last sync time
-            conn.last_sync_at = datetime.now(datetime.timezone.utc)
+            conn.last_sync_at = datetime.now(dt_module.timezone.utc)
             conn.last_sync_status = "success"
             conn.status = "active"
             conn.last_error = None
@@ -868,7 +867,7 @@ async def perform_calendar_sync(current_user: User, db: Session):
         except Exception as conn_e:
             print(f"DEBUG: Connection {conn.id} ({conn.provider}) sync failed: {conn_e}")
             conn.status = "error"
-            conn.last_sync_at = datetime.now(datetime.timezone.utc)
+            conn.last_sync_at = datetime.now(dt_module.timezone.utc)
             err_str = str(conn_e)
             if "401" in err_str or "unauthorized" in err_str.lower():
                 conn.last_sync_status = "401_unauthorized"
@@ -898,7 +897,7 @@ async def sync_calendar(request: Request, current_user: User = Depends(get_curre
 @app.get("/calendar/busy-slots")
 async def get_busy_slots(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Returns a list of all busy slots for the current user, filtered to recent/upcoming to improve performance."""
-    now = datetime.now(datetime.timezone.utc)
+    now = datetime.now(dt_module.timezone.utc)
     # Filter to 1 day ago and 30 days ahead
     recent_limit = now - timedelta(days=1)
     
@@ -939,10 +938,10 @@ async def get_solo_scheduler(
             u_tz = ZoneInfo("UTC")
 
         # Range: from user's local midnight (today 00:00 in user TZ) to 7 days later.
-        utc_now = datetime.now(datetime.timezone.utc)
+        utc_now = datetime.now(dt_module.timezone.utc)
         user_local_now = utc_now.astimezone(u_tz)
         user_local_midnight = user_local_now.replace(hour=0, minute=0, second=0, microsecond=0)
-        start_date = user_local_midnight.astimezone(datetime.timezone.utc)
+        start_date = user_local_midnight.astimezone(dt_module.timezone.utc)
         end_date = start_date + timedelta(days=7)
         
         # Get user's working hours in the format expected by find_common_free_slots
@@ -1498,7 +1497,7 @@ async def get_free_slots(data: dict, current_user: User = Depends(get_current_us
             return {"free_slots": [], "debug": f"no_users_found_for_ids_{tg_ids}"}
 
         # 3. Fetch all cached busy slots for these users for next 14 days
-        start = datetime.now(datetime.timezone.utc)
+        start = datetime.now(dt_module.timezone.utc)
         end = start + timedelta(days=30)
         
         busy_slots_per_user = []
