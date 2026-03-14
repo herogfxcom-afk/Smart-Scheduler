@@ -839,13 +839,13 @@ async def get_busy_slots(current_user: User = Depends(get_current_user), db: Ses
 async def get_solo_scheduler(
     current_user: User = Depends(get_current_user), 
     db: Session = Depends(get_db),
-    timezone: str = Query(None),
+    user_tz: str = Query(None, alias="timezone"),
     tz_offset: float = Query(default=0.0)
 ):
     """Returns 7-day busy/free segments for the current user's personal heatmap."""
     try:
         # Use timezone from query param, then user profile, finally UTC
-        user_tz_name = timezone or current_user.timezone or "UTC"
+        user_tz_name = user_tz or current_user.timezone or "UTC"
         try:
             u_tz = ZoneInfo(user_tz_name)
         except:
