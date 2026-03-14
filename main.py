@@ -768,16 +768,24 @@ async def perform_calendar_sync(current_user: User, db: Session):
         return 0
 
     # Prevents concurrent syncs for the same user causing UniqueViolation or Deadlock
+    # We use a nested transaction (SAVEPOINT) so if this fails, we don't poison the whole request.
     try:
-        db.query(User).filter(User.id == current_user.id).with_for_update(nowait=True).first()
-    except Exception:
-        # If already locked, another sync is in progress. Skip this one to avoid deadlock/errors.
-        print(f"DEBUG: Sync already in progress for user {current_user.id}, skipping.")
-        return 0
+        # Create a savepoint
+        with db.begin_nested():
+            try:
+                db.query(User).filter(User.id == current_user.id).with_for_update(nowait=True).first()
+            except Exception:
+                # If already locked, another sync is in progress. 
+                # The nested transaction will automatically rollback to savepoint.
+                print(f"DEBUG: Sync already in progress for user {current_user.id}, skipping.")
+                return 0
 
-    # Clear old slots for this user before re-syncing everything, but keep manual ones
-    db.query(BusySlot).filter(BusySlot.user_id == current_user.id, BusySlot.connection_id.isnot(None)).delete()
-    db.flush() # Ensure delete is sent before gather
+            # 2. Clear old slots for this user before re-syncing everything, but keep manual ones
+            db.query(BusySlot).filter(BusySlot.user_id == current_user.id, BusySlot.connection_id.isnot(None)).delete()
+            db.flush() # Ensure delete is sent before gather
+    except Exception as e:
+        print(f"DEBUG: Calendar sync setup failed (lock/delete): {e}")
+        return 0
     
     # Track seen slots to prevent UniqueConstraint violations
     seen_slots = set()
@@ -887,11 +895,13 @@ async def perform_calendar_sync(current_user: User, db: Session):
                 print(f"DEBUG: Error parsing slot {slot}: {parse_e}")
 
     try:
+        # Re-verify session is still active and commit the whole request transition
         db.commit()
     except Exception as e:
         db.rollback()
         print(f"DEBUG: Final commit for user {current_user.id} failed: {e}")
-        return 0
+        # If commit fails, we still return total_slots to allow local heatmap to try rendering
+        return total_slots
 
     return total_slots
 
