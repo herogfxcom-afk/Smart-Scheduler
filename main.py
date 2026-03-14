@@ -5,13 +5,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 import sentry_sdk
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
-from slowapi.errors import RateLimitExceeded
-from sqlalchemy import text
-from sqlalchemy.orm import Session
-from datetime import datetime, timedelta, timezone
-import pytz
+from sentry_sdk.integrations.fastapi import FastApiIntegration
+
+sentry_sdk.init(
+    dsn="https://1d3822a0030e5c1168dc452cb8036176@o4511041169391616.ingest.de.sentry.io/4511041177256016",
+    integrations=[FastApiIntegration()],
+    traces_sample_rate=1.0,
+)
+
 from auth import get_current_user
 from google_oauth import router as google_auth_router
 from outlook_oauth import router as outlook_auth_router
