@@ -1444,6 +1444,7 @@ async def create_meeting(data: dict, background_tasks: BackgroundTasks, current_
     results = {}
     google_event_id = None
     outlook_event_id = None
+    apple_event_id = None
     
     for conn in current_user.connections:
         if not conn.is_active: continue
