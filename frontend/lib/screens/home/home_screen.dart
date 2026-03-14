@@ -9,7 +9,8 @@ import '../../providers/group_provider.dart';
 import '../../providers/meeting_provider.dart';
 import '../../providers/availability_provider.dart';
 import '../../providers/language_provider.dart';
-import '../../providers/solo_provider.dart'; // Added
+import '../../providers/solo_provider.dart';
+import '../../providers/scheduler_provider.dart';
 import '../../models/meeting.dart';
 import '../../utils/timezone_utils.dart';
 import '../../utils/ics_exporter.dart';
@@ -357,7 +358,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                               child: Text(lang.translate('accept')),
                             ),
                           ],
-                        Switch(value: false, onChanged: (v) {}),
                         ],
                       ),
                     ],
@@ -600,35 +600,33 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   children: [
                     Expanded(
                       child: Text(
-                        meeting.isCancelled ? "ОТМЕНЕНА: ${meeting.title}" : meeting.title, 
+                        meeting.isCancelled ? "ОТМЕНЕНА: ${meeting.title}" : meeting.title,
                         style: TextStyle(
-                          fontSize: 20, 
+                          fontSize: 20,
                           fontWeight: FontWeight.bold,
                           color: meeting.isCancelled ? Colors.redAccent : Colors.white,
                           decoration: meeting.isCancelled ? TextDecoration.lineThrough : null,
-                        )
+                        ),
                       ),
                     ),
                     IconButton(
                       icon: Icon(meeting.isCancelled ? Icons.close : Icons.delete, color: Colors.redAccent),
                       onPressed: isProcessing ? null : () async {
                         setState(() => isProcessing = true);
-                        
                         final bool success;
                         if (meeting.isCancelled) {
                           success = await context.read<SchedulerProvider>().confirmCancelMeeting(meeting.id);
                         } else {
                           success = await context.read<SchedulerProvider>().deleteMeeting(meeting.id);
                         }
-                        
                         if (context.mounted) {
                           Navigator.pop(context);
                           if (success) {
                             context.read<MeetingProvider>().fetchMyMeetings();
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
-                                content: Text(meeting.isCancelled ? 'Встреча удалена' : 'Встреча отменена'), 
-                                backgroundColor: Colors.green
+                                content: Text(meeting.isCancelled ? 'Встреча удалена' : 'Встреча отменена'),
+                                backgroundColor: Colors.green,
                               ),
                             );
                           }
@@ -655,43 +653,45 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     ),
                   ],
                 ),
-            if (meeting.location != null) ...[
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  const Icon(Icons.location_on, size: 18, color: Colors.blue),
-                  const SizedBox(width: 8),
-                  Text(meeting.location!),
+                if (meeting.location != null) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      const Icon(Icons.location_on, size: 18, color: Colors.blue),
+                      const SizedBox(width: 8),
+                      Text(meeting.location!, style: const TextStyle(color: Colors.white)),
+                    ],
+                  ),
                 ],
-              ),
-            ],
-            const SizedBox(height: 32),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                icon: const Icon(Icons.apple),
-                label: const Text("Добавить в Apple Calendar"),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: Colors.black,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
+                const SizedBox(height: 32),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    icon: const Icon(Icons.apple),
+                    label: const Text("Добавить в Apple Calendar"),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: Colors.black,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    onPressed: () {
+                      IcsExporter.exportMeeting(meeting);
+                    },
+                  ),
                 ),
-                onPressed: () {
-                  IcsExporter.exportMeeting(meeting);
-                },
-              ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: Text(lang.translate('close')),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton(
-                onPressed: () => Navigator.pop(context),
-                child: Text(lang.translate('close')),
-              ),
-            ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 }
