@@ -286,7 +286,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
 
     final pending = provider.meetings.where((m) => m.status == 'pending').toList();
-    final confirmed = provider.meetings.where((m) => m.status == 'accepted' || m.isCreator).toList();
+    final confirmed = provider.meetings.where((m) => m.status == 'accepted' || m.status == 'cancelled' || m.isCreator).toList();
 
     return Column(
       // Show error if meetings failed to load
