@@ -349,12 +349,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                             onPressed: () => provider.respondToInvite(m.inviteId!, 'declined'),
                             child: Text(lang.translate('decline'), style: const TextStyle(color: Colors.redAccent)),
                           ),
-                          const SizedBox(width: 8),
-                          ElevatedButton(
-                            onPressed: () => provider.respondToInvite(m.inviteId!, 'accepted'),
-                            style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
-                            child: Text(lang.translate('accept')),
-                          ),
+                          if (!m.isCancelled) ...[
+                            const SizedBox(width: 8),
+                            ElevatedButton(
+                              onPressed: () => provider.respondToInvite(m.inviteId!, 'accepted'),
+                              style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
+                              child: Text(lang.translate('accept')),
+                            ),
+                          ],
+                        Switch(value: false, onChanged: (v) {}),
                         ],
                       ),
                     ],
@@ -389,10 +392,22 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             separatorBuilder: (context, index) => const SizedBox(height: 8),
             itemBuilder: (context, index) {
               final m = confirmed[index];
+              final isCancelled = m.isCancelled;
               return Card(
+                color: isCancelled ? Colors.red.withOpacity(0.05) : null,
                 child: ListTile(
-                  leading: const CircleAvatar(backgroundColor: Colors.blue, child: Icon(Icons.event, color: Colors.white)),
-                  title: Text(m.title, style: const TextStyle(fontWeight: FontWeight.bold)),
+                  leading: CircleAvatar(
+                    backgroundColor: isCancelled ? Colors.redAccent.withOpacity(0.2) : Colors.blue, 
+                    child: Icon(isCancelled ? Icons.event_busy : Icons.event, color: isCancelled ? Colors.redAccent : Colors.white)
+                  ),
+                  title: Text(
+                    isCancelled ? "ОТМЕНЕНА: ${m.title}" : m.title, 
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      decoration: isCancelled ? TextDecoration.lineThrough : null,
+                      color: isCancelled ? Colors.redAccent : null,
+                    )
+                  ),
                   subtitle: Text("${_formatDate(m.start)} • ${_formatTime(m.start)}"),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => _showMeetingDetails(context, m, lang),
@@ -569,35 +584,77 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void _showMeetingDetails(BuildContext context, Meeting meeting, LanguageProvider lang) {
     showModalBottomSheet(
       context: context,
-      builder: (context) => Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      backgroundColor: const Color(0xFF1E1E1E),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (context) {
+        bool isProcessing = false;
+        return StatefulBuilder(
+          builder: (context, setState) => Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: Text(meeting.title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        meeting.isCancelled ? "ОТМЕНЕНА: ${meeting.title}" : meeting.title, 
+                        style: TextStyle(
+                          fontSize: 20, 
+                          fontWeight: FontWeight.bold,
+                          color: meeting.isCancelled ? Colors.redAccent : Colors.white,
+                          decoration: meeting.isCancelled ? TextDecoration.lineThrough : null,
+                        )
+                      ),
+                    ),
+                    IconButton(
+                      icon: Icon(meeting.isCancelled ? Icons.close : Icons.delete, color: Colors.redAccent),
+                      onPressed: isProcessing ? null : () async {
+                        setState(() => isProcessing = true);
+                        
+                        final bool success;
+                        if (meeting.isCancelled) {
+                          success = await context.read<SchedulerProvider>().confirmCancelMeeting(meeting.id);
+                        } else {
+                          success = await context.read<SchedulerProvider>().deleteMeeting(meeting.id);
+                        }
+                        
+                        if (context.mounted) {
+                          Navigator.pop(context);
+                          if (success) {
+                            context.read<MeetingProvider>().fetchMyMeetings();
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(meeting.isCancelled ? 'Встреча удалена' : 'Встреча отменена'), 
+                                backgroundColor: Colors.green
+                              ),
+                            );
+                          }
+                        }
+                      },
+                    ),
+                  ],
                 ),
-                IconButton(
-                  icon: const Icon(Icons.delete, color: Colors.red),
-                  onPressed: () {
-                    context.read<MeetingProvider>().deleteMeeting(meeting.id);
-                    Navigator.pop(context);
-                  },
+                if (meeting.isCancelled) ...[
+                  const SizedBox(height: 8),
+                  const Text(
+                    "Организатор отменил встречу. Подтвердите удаление для очистки календаря.",
+                    style: TextStyle(color: Colors.white70, fontSize: 13),
+                  ),
+                ],
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    const Icon(Icons.calendar_today, size: 18, color: Colors.blue),
+                    const SizedBox(width: 8),
+                    Text(
+                      "${_formatDate(meeting.start)} с ${_formatTime(meeting.start)} до ${_formatTime(meeting.end)}",
+                      style: const TextStyle(color: Colors.white),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                const Icon(Icons.calendar_today, size: 18, color: Colors.blue),
-                const SizedBox(width: 8),
-                Text("${_formatDate(meeting.start)} с ${_formatTime(meeting.start)} до ${_formatTime(meeting.end)}"),
-              ],
-            ),
             if (meeting.location != null) ...[
               const SizedBox(height: 8),
               Row(

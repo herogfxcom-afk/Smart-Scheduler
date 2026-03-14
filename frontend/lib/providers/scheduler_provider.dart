@@ -69,6 +69,22 @@ class SchedulerProvider extends ChangeNotifier {
     }
   }
 
+  Future<bool> confirmCancelMeeting(int meetingId) async {
+    try {
+      _isLoading = true;
+      notifyListeners();
+      await _apiService.confirmCancelMeeting(meetingId);
+      await fetchCommonSlots(_lastTelegramIds, chatId: _currentChatId);
+      return true;
+    } catch (e) {
+      print("Confirm Cancel Error: $e");
+      _error = e.toString();
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
   Future<void> fetchCommonSlots(List<int> telegramIds, {String? chatId}) async {
     _isLoading = true;
     _error = null;

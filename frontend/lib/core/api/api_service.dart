@@ -90,6 +90,10 @@ class ApiService {
     await _dio.delete('/api/meetings/$id');
   }
 
+  Future<void> confirmCancelMeeting(int id) async {
+    await _dio.post('/api/meetings/$id/confirm-cancel', data: null);
+  }
+
   Future<void> updateMeeting(int id, Map<String, dynamic> data) async {
     await _dio.patch('/api/meetings/$id', data: data);
   }

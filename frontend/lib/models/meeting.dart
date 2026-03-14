@@ -29,6 +29,7 @@ class Meeting {
   final String status; // 'pending', 'accepted', 'declined'
   final int? inviteId;
   final bool isCreator;
+  final bool isCancelled;
 
   Meeting({
     required this.id,
@@ -41,6 +42,7 @@ class Meeting {
     required this.status,
     this.inviteId,
     required this.isCreator,
+    this.isCancelled = false,
   });
 
   factory Meeting.fromJson(Map<String, dynamic> json) {
@@ -55,6 +57,7 @@ class Meeting {
       status: json['status'] as String? ?? 'accepted',
       inviteId: json['invite_id'] as int?,
       isCreator: json['is_creator'] as bool? ?? false,
+      isCancelled: json['is_cancelled'] as bool? ?? false,
     );
   }
 
@@ -70,6 +73,7 @@ class Meeting {
       'status': status,
       'invite_id': inviteId,
       'is_creator': isCreator,
+      'is_cancelled': isCancelled,
     };
   }
 }

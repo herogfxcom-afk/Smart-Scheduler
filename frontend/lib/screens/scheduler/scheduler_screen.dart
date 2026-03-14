@@ -531,12 +531,14 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
   void _showMeetingDetailsOptions(BuildContext context, SchedulerProvider scheduler, Map<String, dynamic> meetingData) {
     final title = meetingData['title'] ?? 'Встреча';
     final meetingId = meetingData['id'];
+    final isCancelled = meetingData['is_cancelled'] == true;
+    final isCreator = meetingData['is_creator'] == true;
 
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       builder: (context) {
-        bool isDeleting = false;
+        bool isProcessing = false;
         return StatefulBuilder(
           builder: (context, setState) => Container(
             margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -548,56 +550,90 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.event_note, color: Colors.blue, size: 48),
+                Icon(
+                  isCancelled ? Icons.event_busy : Icons.event_note, 
+                  color: isCancelled ? Colors.redAccent : Colors.blue, 
+                  size: 48
+                ),
                 const SizedBox(height: 16),
                 Text(
-                  title,
-                  style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                  isCancelled ? "ОТМЕНЕНА: $title" : title,
+                  style: TextStyle(
+                    color: isCancelled ? Colors.redAccent : Colors.white, 
+                    fontSize: 20, 
+                    fontWeight: FontWeight.bold,
+                    decoration: isCancelled ? TextDecoration.lineThrough : null,
+                  ),
                   textAlign: TextAlign.center,
                 ),
+                if (isCancelled) ...[
+                  const SizedBox(height: 8),
+                  const Text(
+                    "Организатор отменил эту встречу. Подтвердите удаление, чтобы очистить ваш календарь.",
+                    style: TextStyle(color: Colors.white70, fontSize: 13),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
                 const SizedBox(height: 24),
                 SizedBox(
                   width: double.infinity,
                   height: 52,
                   child: ElevatedButton(
-                    onPressed: isDeleting ? null : () async {
-                      setState(() => isDeleting = true);
-                      final success = await scheduler.deleteMeeting(meetingId);
+                    onPressed: isProcessing ? null : () async {
+                      setState(() => isProcessing = true);
+                      
+                      final bool success;
+                      if (isCancelled) {
+                        success = await scheduler.confirmCancelMeeting(meetingId);
+                      } else {
+                        success = await scheduler.deleteMeeting(meetingId);
+                      }
+                      
                       if (context.mounted) {
                         Navigator.pop(context);
                         if (success) {
                           context.read<MeetingProvider>().fetchMyMeetings();
-                          context.read<SoloProvider>().fetchSoloSlots(); // Keep Solo slots visually synced
+                          context.read<SoloProvider>().fetchSoloSlots();
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Встреча успешно удалена'), backgroundColor: Colors.green),
+                            SnackBar(
+                              content: Text(isCancelled ? 'Встреча удалена из списка' : 'Встреча успешно отменена'), 
+                              backgroundColor: Colors.green
+                            ),
                           );
                         } else {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Ошибка удаления встречи'), backgroundColor: Colors.red),
+                            SnackBar(
+                              content: Text(isCancelled ? 'Ошибка удаления' : 'Ошибка отмены встречи'), 
+                              backgroundColor: Colors.red
+                            ),
                           );
                         }
                       }
                     },
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red.withOpacity(0.2),
-                      foregroundColor: Colors.redAccent,
+                      backgroundColor: isCancelled ? Colors.orange.withOpacity(0.2) : Colors.red.withOpacity(0.2),
+                      foregroundColor: isCancelled ? Colors.orangeAccent : Colors.redAccent,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                      side: const BorderSide(color: Colors.redAccent, width: 1),
+                      side: BorderSide(color: isCancelled ? Colors.orangeAccent : Colors.redAccent, width: 1),
                     ),
-                    child: isDeleting
-                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.redAccent, strokeWidth: 2))
-                      : const Text('Отменить встречу', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    child: isProcessing
+                      ? SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: isCancelled ? Colors.orangeAccent : Colors.redAccent, strokeWidth: 2))
+                      : Text(
+                          isCancelled ? 'Подтвердить удаление' : (isCreator ? 'Отменить встречу' : 'Покинуть встречу'), 
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)
+                        ),
                   ),
                 ),
                 const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  height: 52,
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      final m = Meeting.fromJson(meetingData);
-                      IcsExporter.exportMeeting(m);
-                    },
+                if (!isCancelled)
+                  SizedBox(
+                    width: double.infinity,
+                    height: 52,
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        final m = Meeting.fromJson(meetingData);
+                        IcsExporter.exportMeeting(m);
+                      },
                     icon: const Icon(Icons.apple),
                     label: const Text('Добавить в Apple Calendar', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                     style: ElevatedButton.styleFrom(

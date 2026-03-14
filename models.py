@@ -79,6 +79,7 @@ class GroupMeeting(Base):
     title = Column(String(255))
     location = Column(Text, nullable=True)
     description = Column(Text, nullable=True)
+    is_cancelled = Column(Boolean, default=False)
     idempotency_key = Column(String(255), unique=True)
     google_event_id = Column(String(255), nullable=True)
     outlook_event_id = Column(String(255), nullable=True)

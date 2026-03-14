@@ -138,10 +138,16 @@ class _HeatmapGridState extends State<HeatmapGrid> {
             appointmentBuilder: _appointmentBuilder,
             specialRegions: regions,
             timeRegionBuilder: (context, details) {
+              final color = details.region.color ?? Colors.green;
+              final isMatch = color.value == Colors.green.withOpacity(0.25).value || 
+                             color.value == const Color(0xFF2E7D32).withOpacity(0.25).value;
+              
               return Container(
                 decoration: BoxDecoration(
-                  color: details.region.color ?? Colors.green.withOpacity(0.25),
-                  border: Border.all(color: Colors.green.withOpacity(0.1), width: 0.5),
+                  color: color,
+                  border: isMatch 
+                    ? Border.all(color: Colors.green.withOpacity(0.1), width: 0.5)
+                    : null,
                 ),
               );
             },
