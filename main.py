@@ -8,7 +8,7 @@ import sentry_sdk
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 
 sentry_sdk.init(
-    dsn="https://1d3822a0030e5c1168dc452cb8036176@o4511041169391616.ingest.de.sentry.io/4511041177256016",
+    dsn="https://c4f2ee07b69a9b590d740d35220ef5a0@o4511041169391616.ingest.de.sentry.io/4511041208123472",
     integrations=[FastApiIntegration()],
     traces_sample_rate=1.0,
 )
