@@ -774,111 +774,106 @@ async def perform_calendar_sync(current_user: User, db: Session):
         et = ms.end_time.replace(tzinfo=None) if ms.end_time.tzinfo else ms.end_time
         seen_slots.add((st, et))
     
-    # Start looking 2 days in the past so we don't miss manual events created today or yesterday
-    start = datetime.now(dt_module.timezone.utc) - timedelta(days=2)
-    end = start + timedelta(days=21) # Sync 3 weeks ahead
+    # Start looking 2 days in the past
+    sync_start = datetime.now(dt_module.timezone.utc) - timedelta(days=2)
+    sync_end = sync_start + timedelta(days=21)
 
-    for conn in active_connections:
-        all_busy_slots = []
+    # Fetch ACTIVE invites to skip
+    known_external_ids = set()
+    meetings = db.query(models.GroupMeeting).filter(
+        models.GroupMeeting.user_id == current_user.id,
+        models.GroupMeeting.is_cancelled == False
+    ).all()
+    for m in meetings:
+        if m.google_event_id: known_external_ids.add(m.google_event_id)
+        if m.outlook_event_id: known_external_ids.add(m.outlook_event_id)
+    invites = db.query(models.MeetingInvite).filter(
+        models.MeetingInvite.user_id == current_user.id,
+        models.MeetingInvite.status.in_(['accepted', 'pending'])
+    ).all()
+    for i in invites:
+        if i.google_event_id: known_external_ids.add(i.google_event_id)
+        if i.outlook_event_id: known_external_ids.add(i.outlook_event_id)
+
+    async def fetch_one(conn):
         try:
-            # 1. Sync Google
+            slots = []
             if conn.provider == 'google':
                 refresh_token = decrypt_token(conn.auth_data)
                 g_service = GoogleCalendarService(refresh_token)
-                google_busy = await g_service.get_busy_slots(start, end)
-                all_busy_slots.extend(google_busy)
-                
-            # 2. Sync Apple
+                slots = await g_service.get_busy_slots(sync_start, sync_end)
             elif conn.provider == 'apple':
                 apple_data = json.loads(decrypt_token(conn.auth_data))
                 a_service = AppleCalendarService(apple_data['email'], apple_data['password'])
-                apple_busy = a_service.get_busy_slots(start, end)
-                all_busy_slots.extend(apple_busy)
-
-            # 3. Sync Outlook (Microsoft Graph)
+                # Apple service is synchronous, but we can run it in executor if needed.
+                # For now just call it, it's usually fast enough compared to Google/Outlook APIs.
+                slots = a_service.get_busy_slots(sync_start, sync_end)
             elif conn.provider == 'outlook':
                 from outlook_service import OutlookCalendarService
                 refresh_token = decrypt_token(conn.auth_data)
                 o_service = OutlookCalendarService(refresh_token)
-                outlook_busy = await o_service.get_busy_slots(start, end)
-                all_busy_slots.extend(outlook_busy)
-            
-            # Fetch ACTIVE (non-cancelled) app meetings/invites to skip during sync.
-            known_external_ids = set()
-            meetings = db.query(models.GroupMeeting).filter(
-                models.GroupMeeting.user_id == current_user.id,
-                models.GroupMeeting.is_cancelled == False
-            ).all()
-            for m in meetings:
-                if m.google_event_id: known_external_ids.add(m.google_event_id)
-                if m.outlook_event_id: known_external_ids.add(m.outlook_event_id)
-            invites = db.query(models.MeetingInvite).filter(
-                models.MeetingInvite.user_id == current_user.id,
-                models.MeetingInvite.status.in_(['accepted', 'pending'])
-            ).all()
-            for i in invites:
-                if i.google_event_id: known_external_ids.add(i.google_event_id)
-                if i.outlook_event_id: known_external_ids.add(i.outlook_event_id)
+                slots = await o_service.get_busy_slots(sync_start, sync_end)
+            return conn.id, slots, None
+        except Exception as e:
+            return conn.id, [], str(e)
 
-            # Update last sync time
-            conn.last_sync_at = datetime.now(dt_module.timezone.utc)
-            conn.last_sync_status = "success"
-            conn.status = "active"
-            conn.last_error = None
-            
-            # Save slots with connection_id
-            for slot in all_busy_slots:
-                try:
-                    ext_id = slot.get('id')
-                    if ext_id and ext_id in known_external_ids:
-                        continue
+    # Parallel fetch!
+    results = await asyncio.gather(*[fetch_one(c) for c in active_connections])
 
-                    s_out = slot['start'].replace('Z', '+00:00')
-                    e_out = slot['end'].replace('Z', '+00:00')
-                    
-                    st_aware = parse_ms_datetime(s_out).astimezone(pytz.utc)
-                    et_aware = parse_ms_datetime(e_out).astimezone(pytz.utc)
-                    st_naive = st_aware.replace(tzinfo=None)
-                    et_naive = et_aware.replace(tzinfo=None)
-                    
-                    slot_key = (st_naive, et_naive)
-                    if slot_key not in seen_slots:
-                        seen_slots.add(slot_key)
-                        new_slot = BusySlot(
-                            user_id=current_user.id,
-                            connection_id=conn.id,
-                            start_time=st_aware,
-                            end_time=et_aware,
-                            summary=slot.get('summary'),
-                            external_id=ext_id,
-                            is_external=True
-                        )
-                        db.add(new_slot)
-                        total_slots += 1
-                    else:
-                        existing = db.query(BusySlot).filter_by(user_id=current_user.id, start_time=st_aware, end_time=et_aware).first()
-                        if existing and not existing.summary:
-                            existing.summary = slot.get('summary')
-                            existing.external_id = ext_id
-                            existing.is_external = True
-                except Exception as parse_e:
-                    print(f"DEBUG: Error parsing slot {slot}: {parse_e}")
-
-        except Exception as conn_e:
-            print(f"DEBUG: Connection {conn.id} ({conn.provider}) sync failed: {conn_e}")
+    for conn_id, slots, error in results:
+        conn = next(c for c in active_connections if c.id == conn_id)
+        if error:
+            print(f"DEBUG: Connection {conn.id} ({conn.provider}) sync failed: {error}")
             conn.status = "error"
             conn.last_sync_at = datetime.now(dt_module.timezone.utc)
-            err_str = str(conn_e)
-            if "401" in err_str or "unauthorized" in err_str.lower():
-                conn.last_sync_status = "401_unauthorized"
-            elif "403" in err_str or "forbidden" in err_str.lower():
-                conn.last_sync_status = "403_forbidden"
-            else:
-                conn.last_sync_status = "500_api_error"
-            conn.last_error = err_str
-    
+            conn.last_sync_status = "500_api_error"
+            conn.last_error = error
+            continue
+
+        # Success - process slots
+        conn.last_sync_at = datetime.now(dt_module.timezone.utc)
+        conn.last_sync_status = "success"
+        conn.status = "active"
+        conn.last_error = None
+
+        for slot in slots:
+            try:
+                ext_id = slot.get('id')
+                if ext_id and ext_id in known_external_ids:
+                    continue
+
+                s_out = slot['start'].replace('Z', '+00:00')
+                e_out = slot['end'].replace('Z', '+00:00')
+                
+                st_aware = parse_ms_datetime(s_out).astimezone(pytz.utc)
+                et_aware = parse_ms_datetime(e_out).astimezone(pytz.utc)
+                st_naive = st_aware.replace(tzinfo=None)
+                et_naive = et_aware.replace(tzinfo=None)
+                
+                slot_key = (st_naive, et_naive)
+                if slot_key not in seen_slots:
+                    seen_slots.add(slot_key)
+                    new_slot = BusySlot(
+                        user_id=current_user.id,
+                        connection_id=conn.id,
+                        start_time=st_aware,
+                        end_time=et_aware,
+                        summary=slot.get('summary'),
+                        external_id=ext_id,
+                        is_external=True
+                    )
+                    db.add(new_slot)
+                    total_slots += 1
+                else:
+                    existing = db.query(BusySlot).filter_by(user_id=current_user.id, start_time=st_aware, end_time=et_aware).first()
+                    if existing and not existing.summary:
+                        existing.summary = slot.get('summary')
+                        existing.external_id = ext_id
+                        existing.is_external = True
+            except Exception as parse_e:
+                print(f"DEBUG: Error parsing slot {slot}: {parse_e}")
+
     db.commit()
-    print(f"DEBUG: Successfully synced {total_slots} slots for user {current_user.id}")
     return total_slots
 
 @app.get("/calendar/sync")

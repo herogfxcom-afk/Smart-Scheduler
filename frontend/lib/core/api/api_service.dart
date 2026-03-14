@@ -9,8 +9,8 @@ class ApiService {
   ApiService(this._telegramService)
       : _dio = Dio(BaseOptions(
           baseUrl: const String.fromEnvironment('API_URL', defaultValue: ''),
-          connectTimeout: const Duration(seconds: 30),
-          receiveTimeout: const Duration(seconds: 30),
+          connectTimeout: const Duration(seconds: 60),
+          receiveTimeout: const Duration(seconds: 60),
         )) {
     // If baseUrl is empty, Dio will use the current origin on Web,
     // which is exactly what we want for Vercel rewrites to work.
