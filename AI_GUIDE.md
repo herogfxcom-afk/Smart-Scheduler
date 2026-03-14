@@ -43,4 +43,4 @@ Smart Scheduler is a group availability tracking application integrated deeply w
 4. **Imports**: `find_common_free_slots` in Python must be a global import in `main.py` to avoid `NameError` in `get_solo_scheduler`.
 
 ## 🛠️ Commands
-- **Git Freeze (Current Stable):** `git tag -a v10.0-stable -m "Timezone fixed, invitations fixed, deletion purge implemented"; git push origin v10.0-stable`
+- **Git Freeze (Current Stable):** `git tag -a v10.0-stable -m "Timezone fixed, invitations fixed, deletion purge implemented"; git push origin v10.0-stable`...
