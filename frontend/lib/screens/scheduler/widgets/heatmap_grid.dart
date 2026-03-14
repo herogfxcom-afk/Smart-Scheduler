@@ -79,20 +79,29 @@ class _HeatmapGridState extends State<HeatmapGrid> {
       final workingHoursNotifier = context.watch<WorkingHoursNotifier>();
       final regions = workingHoursNotifier.buildRegions().toList(); // copy to editable list
 
+      // De-duplication set to prevent overlapping background regions
+      final Set<String> addedRegions = {};
+
+      // Helper to add region safely
+      void addSafeRegion(DateTime start, DateTime end, Color color) {
+        final key = "${start.toIso8601String()}_${end.toIso8601String()}_${color.value}";
+        if (addedRegions.contains(key)) return;
+        addedRegions.add(key);
+        regions.add(TimeRegion(
+          startTime: start,
+          endTime: end,
+          color: color,
+          enablePointerInteraction: true,
+        ));
+      }
+
       // Add External Busy Slots (Outlook/Google) as background regions
-      // This prevents "creeping" (split columns) while maintaining visibility.
       for (final slot in widget.slots) {
         if (!slot.isMyBusy) continue;
 
         final startUtc = slot.start.isUtc ? slot.start : slot.start.toUtc();
         final endUtc = slot.end.isUtc ? slot.end : slot.end.toUtc();
-        
-        regions.add(TimeRegion(
-          startTime: startUtc,
-          endTime: endUtc,
-          color: Colors.blue.withOpacity(0.4),
-          enablePointerInteraction: true,
-        ));
+        addSafeRegion(startUtc, endUtc, Colors.blue.withOpacity(0.4));
       }
 
       // Add Other Participants' Busy Slots as background regions (Only in Group mode)
@@ -102,13 +111,7 @@ class _HeatmapGridState extends State<HeatmapGrid> {
 
           final startUtc = slot.start.isUtc ? slot.start : slot.start.toUtc();
           final endUtc = slot.end.isUtc ? slot.end : slot.end.toUtc();
-          
-          regions.add(TimeRegion(
-            startTime: startUtc,
-            endTime: endUtc,
-            color: Colors.orange.withOpacity(0.3), // Slightly more transparent orange
-            enablePointerInteraction: true,
-          ));
+          addSafeRegion(startUtc, endUtc, Colors.orange.withOpacity(0.3));
         }
       }
 
@@ -139,14 +142,14 @@ class _HeatmapGridState extends State<HeatmapGrid> {
             specialRegions: regions,
             timeRegionBuilder: (context, details) {
               final color = details.region.color ?? Colors.green;
-              final isMatch = color.value == Colors.green.withOpacity(0.25).value || 
-                             color.value == const Color(0xFF2E7D32).withOpacity(0.25).value;
+              // Add a border to almost all regions to keep them contained within grid cells
+              final bool needsBorder = color.value != Colors.transparent.value;
               
               return Container(
                 decoration: BoxDecoration(
                   color: color,
-                  border: isMatch 
-                    ? Border.all(color: Colors.green.withOpacity(0.1), width: 0.5)
+                  border: needsBorder 
+                    ? Border.all(color: Colors.white.withOpacity(0.05), width: 0.5)
                     : null,
                 ),
               );
