@@ -1699,8 +1699,8 @@ async def create_meeting(data: dict, background_tasks: BackgroundTasks, current_
                 refresh_token = decrypt_token(conn.auth_data)
                 g_service = GoogleCalendarService(refresh_token)
                 g_event = await g_service.create_event(summary, start_time, end_time, attendees=attendee_emails, location=location, meeting_type=meeting_type, description=description)
-                # Store the last successful google event ID (or we might need to store multiple in the future)
-                google_event_id = g_event.get('id')
+                # create_event returns the event ID string directly (not a dict)
+                google_event_id = g_event  # g_event is already the string ID
                 results[f"google_{conn.id}"] = "success"
                 conn.last_sync_status = "success"
                 conn.last_sync_at = datetime.now(timezone.utc)
