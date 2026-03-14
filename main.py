@@ -64,8 +64,27 @@ def migrate_db():
     try:
         models.Base.metadata.create_all(bind=engine)
         print("Database tables ensured.")
+        
+        # Manual migration for is_cancelled column
+        with engine.connect() as conn:
+            # Note: For SQLite, table_info is best; for Postgres, we use information_schema
+            if engine.url.drivername.startswith('sqlite'):
+                info = conn.execute(text("PRAGMA table_info(group_meetings)")).fetchall()
+                if 'is_cancelled' not in [i[1] for i in info]:
+                    print("Adding is_cancelled to group_meetings (SQLite)...")
+                    conn.execute(text("ALTER TABLE group_meetings ADD COLUMN is_cancelled BOOLEAN DEFAULT 0"))
+                    conn.commit()
+            else:
+                res = conn.execute(text("""
+                    SELECT 1 FROM information_schema.columns 
+                    WHERE table_name='group_meetings' AND column_name='is_cancelled'
+                """)).fetchone()
+                if not res:
+                    print("Adding is_cancelled to group_meetings (Postgres)...")
+                    conn.execute(text("ALTER TABLE group_meetings ADD COLUMN is_cancelled BOOLEAN DEFAULT FALSE"))
+                    conn.commit()
     except Exception as e:
-        print(f"Table Creation Error: {e}")
+        print(f"Database Initialization Error: {e}")
 
 FRONTEND_URL = os.getenv("FRONTEND_URL", "https://frontend-five-gules-5u3aqd6fzp.vercel.app")
 BOT_USERNAME_FALLBACK = os.getenv("BOT_USERNAME", "smartschedulertime_bot")
