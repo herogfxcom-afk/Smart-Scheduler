@@ -236,15 +236,19 @@ class _HeatmapGridState extends State<HeatmapGrid> {
       final startUtc = meeting.start.isUtc ? meeting.start : meeting.start.toUtc();
       final endUtc = meeting.end.isUtc ? meeting.end : meeting.end.toUtc();
       
-      final color = meeting.provider == 'app'
-          ? Colors.purple.withOpacity(0.85)
-          : Colors.blue.withOpacity(0.65); // external meetings are blue
+      final isCancelled = meeting.isCancelled || meeting.status == 'cancelled';
+      
+      final color = isCancelled
+          ? Colors.redAccent.withOpacity(0.7)
+          : (meeting.provider == 'app'
+              ? Colors.purple.withOpacity(0.85)
+              : Colors.blue.withOpacity(0.65)); // external meetings are blue
 
       appointments.add(ProcessedAppointment(
         startTime: startUtc,
         endTime: endUtc,
         color: color,
-        subject: meeting.title,
+        subject: isCancelled ? "ОТМЕНЕНА: ${meeting.title}" : meeting.title,
         originalSlot: TimeSlot(start: meeting.start, end: meeting.end, type: 'meeting'),
         isMeeting: true,
         customMeeting: meeting,

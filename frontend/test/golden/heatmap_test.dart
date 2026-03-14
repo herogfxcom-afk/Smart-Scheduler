@@ -365,6 +365,53 @@ void main() {
       await tester.pumpDeviceBuilder(builder);
       await screenMatchesGolden(tester, 'heatmap_external_busy');
     });
+
+    testGoldens('Cancelled Meeting - Red Line UI', (tester) async {
+      tz.setLocalLocation(tz.getLocation('Europe/Moscow'));
+      final baseDate = DateTime(2026, 3, 13, 0, 0, 0);
+      
+      final builder = DeviceBuilder()
+        ..overrideDevicesForAllScenarios(devices: [
+          const Device(name: 'web_view', size: Size(400, 800)),
+        ])
+        ..addScenario(
+          name: 'cancelled_meeting_view',
+          widget: MultiProvider(
+            providers: [
+              Provider<TelegramService>.value(value: mockTelegram),
+              ChangeNotifierProvider<AvailabilityProvider>.value(value: mockAvailability),
+              ChangeNotifierProvider<WorkingHoursNotifier>.value(value: workingHoursNotifier),
+              ChangeNotifierProvider<SoloProvider>.value(value: mockSolo),
+              ChangeNotifierProvider<AuthProvider>.value(value: mockAuth),
+              ChangeNotifierProvider<MeetingProvider>.value(value: mockMeeting),
+            ],
+            child: Material(
+              child: HeatmapGrid(
+                slots: [],
+                myMeetings: [
+                  Meeting(
+                    id: 99,
+                    title: 'Cancelled Brainstorm',
+                    start: DateTime.parse('2026-03-13T14:00:00Z'),
+                    end: DateTime.parse('2026-03-13T15:00:00Z'),
+                    status: 'cancelled',
+                    isCreator: false,
+                    provider: 'app',
+                  ),
+                ],
+                selectedDay: baseDate,
+                onSlotSelected: (_) {},
+                availability: mockMoscowAvailability(),
+                myUserId: 'user_123',
+                calendarType: CalendarType.solo,
+              ),
+            ),
+          ),
+        );
+
+      await tester.pumpDeviceBuilder(builder);
+      await screenMatchesGolden(tester, 'heatmap_cancelled_meeting');
+    });
     testGoldens('DST Transition - London (March 29, 2026)', (tester) async {
       // London jumps from 01:00 to 02:00
       tz.setLocalLocation(tz.getLocation('Europe/London'));

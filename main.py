@@ -20,6 +20,11 @@ import json
 import asyncio
 import re
 from zoneinfo import ZoneInfo
+import logging
+
+# Configure Logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("smart-scheduler")
 
 # Sentry initialization
 SENTRY_DSN = os.getenv("SENTRY_DSN", "https://c4f2ee07b69a9b590d740d35220ef5a0@o4511041169391616.ingest.de.sentry.io/4511041208123472")
@@ -52,6 +57,38 @@ app = FastAPI(title="Smart Scheduler API")
 limiter = Limiter(key_func=lambda request: request.headers.get("init-data", "anon"))
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# Transaction Health Middleware (FastAPI Adaptation)
+@app.middleware("http")
+async def db_transaction_health_middleware(request: FastAPIRequest, call_next):
+    from database import SessionLocal
+    
+    # 1. BEFORE REQUEST: Check if we got a poisoned connection from the pool
+    with SessionLocal() as db:
+        try:
+            db.execute(text("SELECT 1"))
+        except Exception as e:
+            logger.error(
+                f"🔴 POISONED CONNECTION FROM POOL DETECTED before {request.url.path}\n"
+                f"Error: {e}"
+            )
+            db.rollback()
+            
+    # 2. EXECUTE REQUEST
+    response = await call_next(request)
+    
+    # 3. AFTER REQUEST: Check if the request left the connection poisoned
+    with SessionLocal() as db:
+        try:
+            db.execute(text("SELECT 1"))
+        except Exception as e:
+            logger.error(
+                f"🔴 REQUEST {request.url.path} LEFT BROKEN TRANSACTION\n"
+                f"Error: {e}"
+            )
+            db.rollback()
+            
+    return response
 
 # Create database tables
 from database import engine
@@ -767,32 +804,35 @@ async def connect_apple(data: dict, current_user: User = Depends(get_current_use
     return {"status": "success"}
 
 async def perform_calendar_sync(current_user: User, db: Session):
-    """Internal helper to sync busy slots from all connected calendars to the database."""
+    """
+    Internal helper to sync busy slots from all connected calendars to the database.
+    NOTE: Calling code should ideally use an isolated Session for this to prevent 
+    transaction poisoning in the main request handler on systems like Neon.
+    """
     total_slots = 0
     active_connections = [c for c in current_user.connections if c.is_active]
     
     if not active_connections:
-        print(f"DEBUG: No calendars connected for user {current_user.id}")
+        logger.info(f"Sync skipped: No active connections for user {current_user.id}")
         return 0
 
-    # Prevents concurrent syncs for the same user causing UniqueViolation or Deadlock
-    # We use a nested transaction (SAVEPOINT) so if this fails, we don't poison the whole request.
+    # No more begin_nested()! We rely on the caller providing an isolated session.
     try:
-        # Create a savepoint
-        with db.begin_nested():
-            try:
-                db.query(User).filter(User.id == current_user.id).with_for_update(nowait=True).first()
-            except Exception:
-                # If already locked, another sync is in progress. 
-                # The nested transaction will automatically rollback to savepoint.
-                print(f"DEBUG: Sync already in progress for user {current_user.id}, skipping.")
-                return 0
-
-            # 2. Clear old slots for this user before re-syncing everything, but keep manual ones
-            db.query(BusySlot).filter(BusySlot.user_id == current_user.id, BusySlot.connection_id.isnot(None)).delete()
-            db.flush() # Ensure delete is sent before gather
+        # Use a Postgres advisory lock instead of FOR UPDATE NOWAIT.
+        # Advisory locks return False on collision instead of raising an exception,
+        # which prevents the transaction from being "aborted" on Neon/PgBouncer.
+        lock_id = 9991000 + current_user.id
+        lock_result = db.execute(text("SELECT pg_try_advisory_xact_lock(:id)"), {"id": lock_id}).scalar()
+        
+        if not lock_result:
+            logger.info(f"Sync skipped: Advisory lock held for user {current_user.id}")
+            return 0
+            
+        # If we have the lock, proceed to clear old external slots.
+        db.query(BusySlot).filter(BusySlot.user_id == current_user.id, BusySlot.connection_id.isnot(None)).delete()
+        db.flush()
     except Exception as e:
-        print(f"DEBUG: Calendar sync setup failed (lock/delete): {e}")
+        logger.warning(f"Sync setup failed for user {current_user.id}: {e}")
         return 0
     
     # Track seen slots to prevent UniqueConstraint violations
@@ -804,7 +844,7 @@ async def perform_calendar_sync(current_user: User, db: Session):
         seen_slots.add((st, et))
     
     # Start looking 2 days in the past
-    sync_start = datetime.now(dt_module.timezone.utc) - timedelta(days=2)
+    sync_start = datetime.now(timezone.utc) - timedelta(days=2)
     sync_end = sync_start + timedelta(days=21)
 
     # Fetch ACTIVE invites to skip
@@ -902,34 +942,39 @@ async def perform_calendar_sync(current_user: User, db: Session):
             except Exception as parse_e:
                 print(f"DEBUG: Error parsing slot {slot}: {parse_e}")
 
-    try:
-        # Re-verify session is still active and commit the whole request transition
-        db.commit()
-    except Exception as e:
-        db.rollback()
-        print(f"DEBUG: Final commit for user {current_user.id} failed: {e}")
-        # If commit fails, we still return total_slots to allow local heatmap to try rendering
-        return total_slots
+    # Re-verify session is still active and commit the whole request transition
+    # Let it raise to the caller if commit fails.
+    db.commit()
 
     return total_slots
 
 @app.get("/calendar/sync")
 @limiter.limit("5/minute")
-async def sync_calendar(request: Request, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+async def sync_calendar(request: Request, current_user: User = Depends(get_current_user)):
     """Syncs busy slots from all connected calendars to the database."""
-    try:
-        total_slots = await perform_calendar_sync(current_user, db)
-        return {"status": "success", "synced_count": total_slots}
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"Sync failed: {str(e)}")
+    from database import SessionLocal
+    # Use isolated session for sync
+    with SessionLocal() as sync_db:
+        try:
+            # Re-fetch user in the new session
+            user_in_sync = sync_db.query(User).filter(User.id == current_user.id).first()
+            if not user_in_sync:
+                raise HTTPException(status_code=404, detail="User not found in sync session")
+                
+            total_slots = await perform_calendar_sync(user_in_sync, sync_db)
+            sync_db.commit() # Explicitly commit the isolated sync
+            return {"status": "success", "synced_count": total_slots}
+        except Exception as e:
+            logger.error(f"Isolated sync_calendar fail: {e}")
+            sync_db.rollback()
+            raise HTTPException(status_code=500, detail=f"Sync failed: {str(e)}")
 
 # Removed duplicate finalize_meeting to prevent conflicts
 
 @app.get("/calendar/busy-slots")
 async def get_busy_slots(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Returns a list of all busy slots for the current user, filtered to recent/upcoming to improve performance."""
-    now = datetime.now(dt_module.timezone.utc)
+    now = datetime.now(timezone.utc)
     # Filter to 1 day ago and 30 days ahead
     recent_limit = now - timedelta(days=1)
     
@@ -957,14 +1002,27 @@ async def get_solo_scheduler(
     force_sync: bool = Query(default=False)
 ):
     """Returns 7-day busy/free segments for the current user's personal heatmap."""
+    # Defensive rollback to ensure the session is not in a failed state from a previous connection pool reuse
+    try:
+        db.rollback()
+    except:
+        pass
+        
     try:
         if force_sync:
-            print(f"DEBUG: Forced sync for user {current_user.id}")
-            try:
-                await perform_calendar_sync(current_user, db)
-            except Exception as sync_e:
-                print(f"DEBUG: perform_calendar_sync failed top-level: {sync_e}")
-                # Don't crash the whole heatmap if sync fails, just log it.
+            logger.info(f"Forced sync triggered for user {current_user.id}")
+            from database import SessionLocal
+            with SessionLocal() as sync_db:
+                try:
+                    # Sync in isolated context
+                    user_in_sync = sync_db.query(User).filter(User.id == current_user.id).first()
+                    if user_in_sync:
+                        await perform_calendar_sync(user_in_sync, sync_db)
+                    else:
+                        logger.error(f"User {current_user.id} not found in isolated sync_db")
+                except Exception as sync_e:
+                    logger.error(f"Isolated sync fail (solo_scheduler): {sync_e}")
+                    sync_db.rollback()
 
         # Use timezone from query param, then user profile, finally UTC
         user_tz_name = user_tz or current_user.timezone or "UTC"
@@ -974,10 +1032,10 @@ async def get_solo_scheduler(
             u_tz = ZoneInfo("UTC")
 
         # Range: from user's local midnight (today 00:00 in user TZ) to 7 days later.
-        utc_now = datetime.now(dt_module.timezone.utc)
+        utc_now = datetime.now(timezone.utc)
         user_local_now = utc_now.astimezone(u_tz)
         user_local_midnight = user_local_now.replace(hour=0, minute=0, second=0, microsecond=0)
-        start_date = user_local_midnight.astimezone(dt_module.timezone.utc)
+        start_date = user_local_midnight.astimezone(timezone.utc)
         end_date = start_date + timedelta(days=7)
         
         # Get user's working hours in the format expected by find_common_free_slots
