@@ -246,7 +246,11 @@ async def _setup_bot_ui():
         async with httpx.AsyncClient(timeout=5) as client:
             # 1. Webhook with Secret Token
             webhook_secret = os.getenv("WEBHOOK_SECRET")
-            webhook_payload = {"url": webhook_url, "drop_pending_updates": True}
+            webhook_payload = {
+                "url": webhook_url, 
+                "drop_pending_updates": True,
+                "allowed_updates": ["message", "callback_query", "inline_query", "my_chat_member", "chat_member"]
+            }
             if webhook_secret:
                 webhook_payload["secret_token"] = webhook_secret
                 
@@ -294,6 +298,7 @@ async def telegram_webhook(
     
     try:
         update = await request.json()
+        print(f"BOT UPDATE: {json.dumps(update, ensure_ascii=False)}")
     except Exception:
         return {"ok": False}
     
@@ -315,29 +320,28 @@ async def telegram_webhook(
     if inline_query:
         query_id = inline_query.get("id")
         
-        # Get bot's username  
+        # Get bot's username (cached)
+        bot_username = await get_bot_username()
+        
+        # We offer a button to launch the app (generic since we don't know the chat_id here)
+        results = [{
+            "type": "article",
+            "id": "magic_sync",
+            "title": "📊 Поделиться Magic Sync",
+            "description": "Позволяет всем участникам синхронизировать календари.",
+            "input_message_content": {
+                "message_text": "📊 *Magic Sync: Синхронизация календарей*\n\nНажмите кнопку ниже, чтобы начать!",
+                "parse_mode": "Markdown"
+            },
+            "reply_markup": {
+                "inline_keyboard": [[{
+                    "text": "📊 Magic Sync",
+                    "url": f"https://t.me/{bot_username}/app" # Generic launch
+                }]]
+            }
+        }]
+        
         async with httpx.AsyncClient(timeout=5) as client:
-            bot_info_resp = (await client.get(f"https://api.telegram.org/bot{bot_token}/getMe")).json()
-            bot_username = bot_info_resp.get("result", {}).get("username", BOT_USERNAME_FALLBACK)
-            
-            # We offer a button to launch the app (generic since we don't know the chat_id here)
-            results = [{
-                "type": "article",
-                "id": "magic_sync",
-                "title": "📊 Поделиться Magic Sync",
-                "description": "Позволяет всем участникам синхронизировать календари.",
-                "input_message_content": {
-                    "message_text": "📊 *Magic Sync: Синхронизация календарей*\n\nНажмите кнопку ниже, чтобы начать!",
-                    "parse_mode": "Markdown"
-                },
-                "reply_markup": {
-                    "inline_keyboard": [[{
-                        "text": "📊 Magic Sync",
-                        "url": f"https://t.me/{bot_username}/app" # Generic launch
-                    }]]
-                }
-            }]
-            
             await client.post(f"https://api.telegram.org/bot{bot_token}/answerInlineQuery", json={
                 "inline_query_id": query_id,
                 "results": results,
