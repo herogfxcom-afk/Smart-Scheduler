@@ -291,6 +291,60 @@ async def test_meeting_lifecycle():
     except Exception as e:
         report.add("Lifecycle: Full meeting flow", False, str(e))
 
+async def test_cancellation_interactive():
+    """Verifies that the new _handle_callback_query parses cancellation keeping/removing."""
+    try:
+        db = next(override_get_db())
+        user = db.query(models.User).filter(models.User.telegram_id == 12345).first()
+        
+        # 1. Create a dummy meeting and invite for this user
+        dummy_meeting = models.GroupMeeting(
+            group_id=None,
+            user_id=user.id,
+            title="Interactive Cancel Test",
+            start_time=datetime.datetime.now(datetime.timezone.utc),
+            end_time=datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=1),
+            location="Remote",
+            idempotency_key=f"ic_{int(time.time())}"
+        )
+        db.add(dummy_meeting)
+        db.commit()
+        
+        dummy_invite = models.MeetingInvite(
+            meeting_id=dummy_meeting.id,
+            user_id=user.id,
+            status="pending"
+        )
+        db.add(dummy_invite)
+        db.commit()
+
+        # 2. Mock a callback query from Telegram
+        from main import _handle_callback_query
+        
+        mock_cb = {
+            "id": "123456",
+            "from": {"id": 12345},
+            "message": {"chat": {"id": 12345}, "message_id": 999},
+            "data": f"delmtg_keep_{dummy_meeting.id}"
+        }
+        
+        # We need to mock httpx.AsyncClient to prevent actual HTTP calls to Telegram API during test
+        with patch("httpx.AsyncClient.post", return_value=MagicMock(status_code=200)):
+            await _handle_callback_query(mock_cb, "fake_token", db)
+        
+        db.expire_all()
+        check_invite = db.query(models.MeetingInvite).get(dummy_invite.id)
+        assert check_invite.status == "cancelled_kept"
+        report.add("Webhook: Interactive Telegram Cancellation (Keep)", True)
+        
+        # 3. Clean up
+        db.delete(check_invite)
+        db.delete(dummy_meeting)
+        db.commit()
+        
+    except Exception as e:
+        report.add("Webhook: Interactive Telegram Cancellation", False, str(e))
+
 if __name__ == "__main__":
     import asyncio
     print("Starting Advanced Backend Lifecycle Tests...\n")
@@ -301,6 +355,7 @@ if __name__ == "__main__":
     async def run_async_tests():
         await test_dst_transition()
         await test_meeting_lifecycle()
+        await test_cancellation_interactive()
         
     asyncio.run(run_async_tests())
     
