@@ -996,36 +996,37 @@ async def get_busy_slots(current_user: User = Depends(get_current_user), db: Ses
 @app.get("/api/scheduler/solo")
 async def get_solo_scheduler(
     current_user: User = Depends(get_current_user), 
-    db: Session = Depends(get_db),
     user_tz: str = Query(None, alias="timezone"),
     tz_offset: float = Query(default=0.0),
     force_sync: bool = Query(default=False)
 ):
     """Returns 7-day busy/free segments for the current user's personal heatmap."""
-    # Defensive rollback to ensure the session is not in a failed state from a previous connection pool reuse
-    try:
-        db.rollback()
-    except:
-        pass
-        
-    try:
-        if force_sync:
-            logger.info(f"Forced sync triggered for user {current_user.id}")
-            from database import SessionLocal
-            with SessionLocal() as sync_db:
+    from database import SessionLocal
+    
+    # Fully isolated session for the entire request
+    with SessionLocal() as db:
+        try:
+            # Re-fetch user in the local session context
+            current_user = db.query(User).filter(User.id == current_user.id).first()
+            if not current_user:
+                raise HTTPException(status_code=404, detail="User not found")
+            
+            # Defensive rollback
+            db.rollback()
+            
+            if force_sync:
+                logger.info(f"Forced sync triggered for user {current_user.id}")
+                # perform_calendar_sync uses its own internal isolated session if called correctly, 
+                # but we can also use our 'db' here since it IS isolated from the pool.
                 try:
-                    # Sync in isolated context
-                    user_in_sync = sync_db.query(User).filter(User.id == current_user.id).first()
-                    if user_in_sync:
-                        await perform_calendar_sync(user_in_sync, sync_db)
-                    else:
-                        logger.error(f"User {current_user.id} not found in isolated sync_db")
+                    await perform_calendar_sync(current_user, db)
+                    db.commit() # Ensure sync is committed
                 except Exception as sync_e:
-                    logger.error(f"Isolated sync fail (solo_scheduler): {sync_e}")
-                    sync_db.rollback()
+                    logger.error(f"Sync fail in solo_scheduler: {sync_e}")
+                    db.rollback()
 
-        # Use timezone from query param, then user profile, finally UTC
-        user_tz_name = user_tz or current_user.timezone or "UTC"
+            # The rest of the logic remains the same, but using our local 'db'
+            user_tz_name = user_tz or current_user.timezone or "UTC"
         try:
             u_tz = ZoneInfo(user_tz_name)
         except:
