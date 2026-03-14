@@ -806,16 +806,25 @@ async def sync_calendar(request: Request, current_user: User = Depends(get_curre
                     outlook_busy = await o_service.get_busy_slots(start, end)
                     all_busy_slots.extend(outlook_busy)
                 
-                # Fetch app-created meetings/invites to skip them in sync
+                # Fetch ACTIVE (non-cancelled) app meetings/invites to skip during sync.
+                # NOTE: We do NOT skip events from cancelled meetings/invites so that if the
+                # user still has those events in their calendar, they still show up as busy.
                 known_external_ids = set()
-                meetings = db.query(models.GroupMeeting).filter(models.GroupMeeting.user_id == current_user.id).all()
+                meetings = db.query(models.GroupMeeting).filter(
+                    models.GroupMeeting.user_id == current_user.id,
+                    models.GroupMeeting.is_cancelled == False
+                ).all()
                 for m in meetings:
                     if m.google_event_id: known_external_ids.add(m.google_event_id)
                     if m.outlook_event_id: known_external_ids.add(m.outlook_event_id)
-                invites = db.query(models.MeetingInvite).filter(models.MeetingInvite.user_id == current_user.id).all()
+                invites = db.query(models.MeetingInvite).filter(
+                    models.MeetingInvite.user_id == current_user.id,
+                    models.MeetingInvite.status.in_(['accepted', 'pending'])
+                ).all()
                 for i in invites:
                     if i.google_event_id: known_external_ids.add(i.google_event_id)
                     if i.outlook_event_id: known_external_ids.add(i.outlook_event_id)
+
 
                 # Update last sync time
                 conn.last_sync_at = datetime.now(timezone.utc)

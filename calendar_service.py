@@ -70,6 +70,7 @@ class GoogleCalendarService:
                 events_result = await loop.run_in_executor(None, self._list_events, cid, time_min_str, time_max_str)
                 events = events_result.get('items', [])
                 
+
                 for event in events:
                     # Skip 'free' events
                     if event.get('transparency') == 'transparent':
@@ -133,15 +134,35 @@ class GoogleCalendarService:
             return None
 
     async def delete_event(self, event_id: str):
-        """Deletes a specific calendar event by ID."""
+        """Deletes a specific calendar event by ID, searching all user's calendars."""
         loop = asyncio.get_event_loop()
+        
+        # Try primary calendar first (fast path)
         try:
             await loop.run_in_executor(None, self._delete_event_sync, 'primary', event_id)
-            print(f"DEBUG: Deleted Google Event {event_id}")
+            print(f"DEBUG: Deleted Google Event {event_id} from primary calendar")
             return True
         except Exception as e:
-            print(f"DEBUG: Error deleting Google Event {event_id}: {e}")
-            return False
+            # 404 means it's not in primary, try other calendars
+            if '404' not in str(e) and 'notFound' not in str(e):
+                print(f"DEBUG: Non-404 error deleting from primary: {e}")
+
+        # Search all other calendars
+        try:
+            calendar_list = await loop.run_in_executor(None, self._get_calendar_list)
+            calendar_ids = [entry['id'] for entry in calendar_list.get('items', []) if entry['id'] != 'primary']
+            for cid in calendar_ids:
+                try:
+                    await loop.run_in_executor(None, self._delete_event_sync, cid, event_id)
+                    print(f"DEBUG: Deleted Google Event {event_id} from calendar {cid}")
+                    return True
+                except Exception:
+                    pass  # Not in this calendar, try next
+        except Exception as e:
+            print(f"DEBUG: Error fetching calendar list for deletion: {e}")
+        
+        print(f"DEBUG: Could not delete Google Event {event_id} from any calendar")
+        return False
 
 def find_common_free_slots(
     busy_slots_per_user: list[list[dict]], 
