@@ -96,8 +96,10 @@ class _HeatmapGridState extends State<HeatmapGrid> {
       }
 
       // Add External Busy Slots (Outlook/Google) as background regions
+      // ONLY if they don't have a summary to show in the foreground.
       for (final slot in widget.slots) {
         if (!slot.isMyBusy) continue;
+        if (slot.summary != null && slot.summary!.isNotEmpty) continue;
 
         final startUtc = slot.start.isUtc ? slot.start : slot.start.toUtc();
         final endUtc = slot.end.isUtc ? slot.end : slot.end.toUtc();
@@ -244,13 +246,25 @@ class _HeatmapGridState extends State<HeatmapGrid> {
       ));
     }
 
-    // 2. External Busy Slots (Outlook/Google) are now handled via specialRegions (TimeRegions)
-    // in the build() method to avoid "creeping" (split narrow columns).
-    // We only keep app-created meetings in the foreground appointments list.
+    // 2. External Busy Slots (Outlook/Google) with summaries
+    // We add these as foreground appointments to show the title.
+    for (final slot in widget.slots) {
+      if (!slot.isMyBusy) continue;
+      if (slot.summary == null || slot.summary!.isEmpty) continue;
 
-    // NOTE: We no longer add green "availability" or "common" slots as appointments.
-    // The clickable area is handled by cell taps against the background working hours (specialRegions).
-    // This ensures a clean UI without overlapping grid layers.
+      final startUtc = slot.start.isUtc ? slot.start : slot.start.toUtc();
+      final endUtc = slot.end.isUtc ? slot.end : slot.end.toUtc();
+
+      appointments.add(ProcessedAppointment(
+        startTime: startUtc,
+        endTime: endUtc,
+        color: Colors.blue.withOpacity(0.55), // Slightly darker for contrast
+        subject: slot.summary ?? "Busy",
+        originalSlot: slot,
+        isMeeting: false,
+        isPast: startUtc.isBefore(now),
+      ));
+    }
 
     return appointments;
   }
@@ -322,6 +336,14 @@ class _HeatmapGridState extends State<HeatmapGrid> {
           fontWeight: FontWeight.bold, 
           color: Colors.white70,
         ),
+      );
+    }
+
+    if (!appt.isMeeting && appt.originalSlot.type == 'my_busy' && appt.originalSlot.summary != null) {
+      return Text(
+        appt.originalSlot.summary!,
+        style: const TextStyle(fontSize: 9, color: Colors.white, fontWeight: FontWeight.normal),
+        overflow: TextOverflow.ellipsis,
       );
     }
 

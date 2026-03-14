@@ -28,8 +28,14 @@ class GoogleCalendarService:
     def _get_calendar_list(self):
         return self.service.calendarList().list().execute()
 
-    def _query_freebusy(self, body):
-        return self.service.freebusy().query(body=body).execute()
+    def _list_events(self, calendar_id, time_min, time_max):
+        return self.service.events().list(
+            calendarId=calendar_id,
+            timeMin=time_min,
+            timeMax=time_max,
+            singleEvents=True,
+            orderBy='startTime'
+        ).execute()
 
     def _insert_event(self, calendar_id, body, conference_data_version=None, send_updates='all'):
         insert_kwargs = {
@@ -45,7 +51,7 @@ class GoogleCalendarService:
         return self.service.events().delete(calendarId=calendar_id, eventId=event_id).execute()
 
     async def get_busy_slots(self, start_time: datetime, end_time: datetime) -> list:
-        # 1. Fetch all calendars as secondary calendars can also have events
+        # 1. Fetch all calendars
         loop = asyncio.get_event_loop()
         try:
             calendar_list = await loop.run_in_executor(None, self._get_calendar_list)
@@ -54,30 +60,41 @@ class GoogleCalendarService:
             print(f"DEBUG: Failed to fetch calendar list: {e}")
             calendar_ids = ['primary']
 
-        # 2. Query FreeBusy
+        # 2. Query Events for each calendar
         time_min_str = start_time.strftime('%Y-%m-%dT%H:%M:%SZ') if start_time.tzinfo else start_time.isoformat() + 'Z'
         time_max_str = end_time.strftime('%Y-%m-%dT%H:%M:%SZ') if end_time.tzinfo else end_time.isoformat() + 'Z'
         
-        body = {
-            "timeMin": time_min_str,
-            "timeMax": time_max_str,
-            "items": [{"id": cid} for cid in calendar_ids]
-        }
-        
-        try:
-            events_result = await loop.run_in_executor(None, self._query_freebusy, body)
-            
-            all_busy = []
-            calendars_busy = events_result.get('calendars', {})
-            for cal_id, cal_data in calendars_busy.items():
-                busy = cal_data.get('busy', [])
-                print(f"DEBUG: Calendar {cal_id} has {len(busy)} busy slots")
-                all_busy.extend(busy)
+        all_busy = []
+        for cid in calendar_ids:
+            try:
+                events_result = await loop.run_in_executor(None, self._list_events, cid, time_min_str, time_max_str)
+                events = events_result.get('items', [])
                 
-            return all_busy
-        except Exception as e:
-            print(f"DEBUG: Error in get_busy_slots: {str(e)}")
-            return []
+                for event in events:
+                    # Skip 'free' events
+                    if event.get('transparency') == 'transparent':
+                        continue
+                    
+                    start = event.get('start', {}).get('dateTime') or event.get('start', {}).get('date')
+                    end = event.get('end', {}).get('dateTime') or event.get('end', {}).get('date')
+                    
+                    if start and end:
+                        # Convert all-day events (date only) to datetime
+                        if 'T' not in start:
+                            start = f"{start}T00:00:00Z"
+                        if 'T' not in end:
+                            end = f"{end}T23:59:59Z"
+                            
+                        all_busy.append({
+                            'start': start,
+                            'end': end,
+                            'summary': event.get('summary', 'Busy'),
+                            'id': event.get('id')
+                        })
+            except Exception as e:
+                print(f"DEBUG: Failed to list events for calendar {cid}: {e}")
+                
+        return all_busy
 
     async def create_event(self, summary: str, start_time: datetime, end_time: datetime, attendees: list[str] = None, location: str = "", meeting_type: str = "online", description: str = ""):
         """Creates a calendar event with attendees and optionally a Google Meet link."""
@@ -127,7 +144,7 @@ class GoogleCalendarService:
             return False
 
 def find_common_free_slots(
-    busy_slots_per_user: list[list[tuple[datetime, datetime]]], 
+    busy_slots_per_user: list[list[dict]], 
     start_date: datetime, 
     end_date: datetime,
     user_availabilities: list[dict] = None,
@@ -175,6 +192,8 @@ def find_common_free_slots(
         active_users_in_segment = 0
         working_but_busy_count = 0
         requesting_user_busy = False
+        requesting_user_summary = None
+        requesting_user_is_external = False
         
         busy_user_id = None
         busy_user_count = 0
@@ -211,12 +230,28 @@ def find_common_free_slots(
             
             # Intersection check with busy slots
             is_busy_with_event = False
-            for b_start, b_end in busy_slots_per_user[i]:
+            current_summary = None
+            current_is_external = False
+
+            for b_slot in busy_slots_per_user[i]:
+                # Handle both dicts and legacy tuples
+                if isinstance(b_slot, dict):
+                    b_start = b_slot['start']
+                    b_end = b_slot['end']
+                    summary = b_slot.get('summary')
+                    is_ext = b_slot.get('is_external', False)
+                else:
+                    b_start, b_end = b_slot
+                    summary = None
+                    is_ext = False
+
                 b_s = b_start if b_start.tzinfo else b_start.replace(tzinfo=timezone.utc)
                 b_e = b_end if b_end.tzinfo else b_end.replace(tzinfo=timezone.utc)
                 
                 if max(segment_start, b_s) < min(segment_end, b_e):
                     is_busy_with_event = True
+                    current_summary = summary
+                    current_is_external = is_ext
                     break
             
             active_users_in_segment += 1
@@ -227,6 +262,8 @@ def find_common_free_slots(
                     busy_user_id = user_ids[i]
                 if i == requesting_user_index:
                     requesting_user_busy = True
+                    requesting_user_summary = current_summary
+                    requesting_user_is_external = current_is_external
 
         # Determine type
         # For a group, a "match" should strictly mean ALL participants are available and free.
@@ -245,17 +282,22 @@ def find_common_free_slots(
             type_label = "match"
             availability = 1.0
             source_user_id = None
+            requesting_user_summary = None
+            requesting_user_is_external = False
         else:
             type_label = "others_busy"
             # Availability is the fraction of total participants who are both working and free
-            availability = free_count / num_users
+            availability = free_count / num_users if num_users > 0 else 0
             source_user_id = busy_user_id if busy_user_count == 1 else None
+            requesting_user_summary = None
+            requesting_user_is_external = False
 
-        # Combine adjacent segments
+        # Combine adjacent segments if they are the same type AND same summary
         if free_slots and free_slots[-1]["type"] == type_label and \
            free_slots[-1]["end"] == segment_start.isoformat().replace('+00:00', 'Z') and \
            free_slots[-1].get("availability") == availability and \
-           free_slots[-1].get("source_user_id") == source_user_id:
+           free_slots[-1].get("source_user_id") == source_user_id and \
+           free_slots[-1].get("summary") == requesting_user_summary:
             free_slots[-1]["end"] = segment_end.isoformat().replace('+00:00', 'Z')
         else:
             free_slots.append({
@@ -265,7 +307,9 @@ def find_common_free_slots(
                 "free_count": free_count,
                 "total_count": num_users,
                 "availability": availability,
-                "source_user_id": source_user_id
+                "source_user_id": source_user_id,
+                "summary": requesting_user_summary,
+                "is_external": requesting_user_is_external
             })
             
         current_utc += timedelta(minutes=30)

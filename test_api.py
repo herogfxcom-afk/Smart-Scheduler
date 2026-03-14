@@ -71,7 +71,7 @@ class TestReport:
         passed = sum(1 for r in self.results if r["success"])
         total = len(self.results)
         for r in self.results:
-            mark = "✅" if r["success"] else "❌"
+            mark = "[OK]" if r["success"] else "[FAIL]"
             print(f"{mark} {r['name']}")
         print("="*40)
         print(f"TOTAL: {total} | PASSED: {passed} | FAILED: {total-passed}")
@@ -90,15 +90,33 @@ def test_auth_me():
     except Exception as e:
         report.add("Auth: /auth/me profile load", False, str(e))
 
-def test_apple_connect():
+def test_multiple_apple_connect():
+    """Regression test for IntegrityError when connecting multiple Apple IDs."""
     try:
         valid_init_data = generate_mock_init_data(os.environ["BOT_TOKEN"])
-        payload = {"email": "test@icloud.com", "password": "abcd-efgh-ijkl-mnop"}
-        response = client.post("/auth/apple/connect", headers={"init-data": valid_init_data}, json=payload)
-        assert response.status_code == 200
-        report.add("Auth: Apple Calendar connection", True)
+        
+        # 1. Connect first account
+        payload1 = {"email": "account1@icloud.com", "password": "abcd-efgh-ijkl-mnop"}
+        response1 = client.post("/auth/apple/connect", headers={"init-data": valid_init_data}, json=payload1)
+        assert response1.status_code == 200
+        
+        # 2. Connect second account (different email)
+        payload2 = {"email": "account2@icloud.com", "password": "mnop-qrst-uvwx-yz12"}
+        response2 = client.post("/auth/apple/connect", headers={"init-data": valid_init_data}, json=payload2)
+        assert response2.status_code == 200
+        
+        # 3. Verify both exist in DB
+        db = next(override_get_db())
+        user = db.query(models.User).filter(models.User.telegram_id == 12345).first()
+        conns = db.query(models.CalendarConnection).filter_by(user_id=user.id, provider='apple').all()
+        assert len(conns) >= 2
+        emails = [c.email for c in conns]
+        assert "account1@icloud.com" in emails
+        assert "account2@icloud.com" in emails
+        
+        report.add("Auth: Multiple Apple connections (Integrity Fix)", True)
     except Exception as e:
-        report.add("Auth: Apple Calendar connection", False, str(e))
+        report.add("Auth: Multiple Apple connections (Integrity Fix)", False, str(e))
 
 async def test_dst_transition():
     """Verifies that meeting creation works during DST transition (March 29, 2026)"""
@@ -222,31 +240,43 @@ async def test_meeting_lifecycle():
                     print(f"DEBUG: Create meeting failed: {response.status_code} - {response.text}")
                 assert response.status_code == 200
                 meeting_id = response.json().get("id")
-                if not meeting_id:
-                    print(f"DEBUG: No ID in response: {response.json()}")
                 assert meeting_id is not None
+                
+                # Create a simulate persistent BusySlot for this meeting
+                # This simulates what happens after a sync or manual entry
+                busy_sim = models.BusySlot(
+                    user_id=user.id,
+                    start_time=start_dt,
+                    end_time=end_dt,
+                    summary="Lifecycle Test",
+                    is_external=False
+                )
+                db.add(busy_sim)
+                db.commit()
+                
                 report.add("Lifecycle: Create Meeting (Backend + Apple Sync)", True)
 
                 # B. VERIFY DB RECORD & IDs
                 print("DEBUG: Verifying database record...")
                 db.expire_all()
                 meeting = db.query(models.GroupMeeting).get(meeting_id)
-                if not meeting: print("DEBUG: Meeting not found in DB!")
                 assert meeting.apple_event_id == "https://icloud.com/event/123"
                 report.add("Lifecycle: Database ID Verification (apple_event_id stored)", True)
 
                 # C. SOFT DELETE (Creator)
                 print("DEBUG: Starting soft delete...")
                 response = client.delete(f"/api/meetings/{meeting_id}", headers={"init-data": valid_init_data})
-                if response.status_code != 200:
-                    print(f"DEBUG: Soft delete failed: {response.status_code} - {response.text}")
                 assert response.status_code == 200
                 
                 db.expire_all()
                 meeting = db.query(models.GroupMeeting).get(meeting_id)
                 assert meeting.is_cancelled is True
                 assert meeting.apple_event_id is None
-                report.add("Lifecycle: Soft Delete & External Cleanup (apple_event_id cleared)", True)
+                
+                # VERIFY BusySlot is PURGED
+                busy_check = db.query(models.BusySlot).filter_by(user_id=user.id, start_time=start_dt, end_time=end_dt).first()
+                assert busy_check is None
+                report.add("Lifecycle: Soft Delete & Atomic BusySlot Purge", True)
 
                 # D. HARD DELETE
                 print("DEBUG: Starting hard delete...")
@@ -265,7 +295,7 @@ if __name__ == "__main__":
     import asyncio
     print("Starting Advanced Backend Lifecycle Tests...\n")
     test_auth_me()
-    test_apple_connect()
+    test_multiple_apple_connect()
     
     # Run async tests
     async def run_async_tests():

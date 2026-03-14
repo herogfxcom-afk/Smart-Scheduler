@@ -99,6 +99,9 @@ class BusySlot(Base):
     connection_id = Column(Integer, ForeignKey("calendar_connections.id"), nullable=True)
     start_time = Column(DateTime(timezone=True), nullable=False)
     end_time = Column(DateTime(timezone=True), nullable=False)
+    summary = Column(String(255), nullable=True)
+    external_id = Column(String(255), nullable=True)
+    is_external = Column(Boolean, default=False)
 
     user = relationship("User", back_populates="busy_slots")
     connection = relationship("CalendarConnection", back_populates="busy_slots")

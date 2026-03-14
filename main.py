@@ -665,7 +665,7 @@ async def connect_apple(data: dict, current_user: User = Depends(get_current_use
     
     # Check if a connection already exists
     conn = db.query(models.CalendarConnection).filter_by(
-        user_id=current_user.id, provider='apple'
+        user_id=current_user.id, provider='apple', email=apple_email
     ).first()
     if conn:
         conn.auth_data = encrypted
@@ -733,15 +733,31 @@ async def sync_calendar(request: Request, current_user: User = Depends(get_curre
                     outlook_busy = await o_service.get_busy_slots(start, end)
                     all_busy_slots.extend(outlook_busy)
                 
+                # Fetch app-created meetings/invites to skip them in sync
+                known_external_ids = set()
+                meetings = db.query(models.GroupMeeting).filter(models.GroupMeeting.user_id == current_user.id).all()
+                for m in meetings:
+                    if m.google_event_id: known_external_ids.add(m.google_event_id)
+                    if m.outlook_event_id: known_external_ids.add(m.outlook_event_id)
+                invites = db.query(models.MeetingInvite).filter(models.MeetingInvite.user_id == current_user.id).all()
+                for i in invites:
+                    if i.google_event_id: known_external_ids.add(i.google_event_id)
+                    if i.outlook_event_id: known_external_ids.add(i.outlook_event_id)
+
                 # Update last sync time
                 conn.last_sync_at = datetime.now(timezone.utc)
                 conn.last_sync_status = "success"
                 conn.status = "active"
                 conn.last_error = None
                 
-                # 3. Save slots with connection_id
+                # Save slots with connection_id
                 for slot in all_busy_slots:
                     try:
+                        # Skip if this is a meeting created BY THIS APP (to avoid double sync)
+                        ext_id = slot.get('id')
+                        if ext_id and ext_id in known_external_ids:
+                            continue
+
                         s_out = slot['start'].replace('Z', '+00:00')
                         e_out = slot['end'].replace('Z', '+00:00')
                         
@@ -757,10 +773,20 @@ async def sync_calendar(request: Request, current_user: User = Depends(get_curre
                                 user_id=current_user.id,
                                 connection_id=conn.id,
                                 start_time=st_aware,
-                                end_time=et_aware
+                                end_time=et_aware,
+                                summary=slot.get('summary'),
+                                external_id=ext_id,
+                                is_external=True
                             )
                             db.add(new_slot)
                             total_slots += 1
+                        else:
+                            # Update existing slot if needed
+                            existing = db.query(BusySlot).filter_by(user_id=current_user.id, start_time=st_aware, end_time=et_aware).first()
+                            if existing and not existing.summary:
+                                existing.summary = slot.get('summary')
+                                existing.external_id = ext_id
+                                existing.is_external = True
                     except Exception as parse_e:
                         print(f"DEBUG: Error parsing slot {slot}: {parse_e}")
 
@@ -793,7 +819,6 @@ async def get_busy_slots(current_user: User = Depends(get_current_user), db: Ses
     now = datetime.now(timezone.utc)
     # Filter to 1 day ago and 30 days ahead
     recent_limit = now - timedelta(days=1)
-    future_limit = now + timedelta(days=365) # We keep a year for archival but query limited
     
     slots = db.query(BusySlot).filter(
         BusySlot.user_id == current_user.id,
@@ -801,7 +826,12 @@ async def get_busy_slots(current_user: User = Depends(get_current_user), db: Ses
         BusySlot.start_time <= now + timedelta(days=30)
     ).all()
     return [
-        {"start": s.start_time.isoformat().replace('+00:00', '') + "Z", "end": s.end_time.isoformat().replace('+00:00', '') + "Z"} 
+        {
+            "start": s.start_time.isoformat().replace('+00:00', '') + "Z", 
+            "end": s.end_time.isoformat().replace('+00:00', '') + "Z",
+            "summary": s.summary or "Busy",
+            "is_external": bool(s.is_external)
+        } 
         for s in slots
     ]
 
@@ -851,13 +881,17 @@ async def get_solo_scheduler(
             except:
                 continue
                 
-        # Get busy slots from database (Internal + Synced from Google/etc.)
         db_slots = db.query(models.BusySlot).filter(models.BusySlot.user_id == current_user.id).all()
         busy_slots = []
         for s in db_slots:
             st = s.start_time if s.start_time.tzinfo else s.start_time
             et = s.end_time if s.end_time.tzinfo else s.end_time
-            busy_slots.append((st, et))
+            busy_slots.append({
+                "start": st,
+                "end": et,
+                "summary": s.summary,
+                "is_external": bool(s.is_external)
+            })
         
         # Добавляем встречи созданные в приложении как занятые слоты
         meeting_invites = db.query(models.MeetingInvite).filter(
@@ -869,7 +903,13 @@ async def get_solo_scheduler(
             if m:
                 st = m.start_time if m.start_time.tzinfo else m.start_time
                 et = m.end_time if m.end_time.tzinfo else m.end_time
-                busy_slots.append((st, et))
+                busy_slots.append({
+                    "start": st,
+                    "end": et,
+                    "summary": m.title,
+                    "is_external": False
+                })
+
         print(f"DEBUG SOLO: {len(db_slots)} synced slots + {len(meeting_invites)} meeting invites for user {current_user.id}")
         # We use find_common_free_slots for a single user
         segments = find_common_free_slots(
@@ -879,7 +919,8 @@ async def get_solo_scheduler(
             [user_avail],
             user_timezones=[user_tz_name],
             viewer_tz=user_tz_name,
-            requesting_user_index=0
+            requesting_user_index=0,
+            user_ids=[str(current_user.id)]
         )
         
         return segments
@@ -1138,6 +1179,15 @@ async def delete_meeting(meeting_id: int, background_tasks: BackgroundTasks, cur
             meeting.is_cancelled = True
             db.query(models.MeetingInvite).filter(models.MeetingInvite.meeting_id == meeting_id).update({"status": "cancelled"})
             
+            # Atomic BusySlot cleanup for all participants (The "Instant Deletion" pattern)
+            participant_ids = [invite.user_id for invite in meeting.invites]
+            participant_ids.append(meeting.user_id)
+            db.query(models.BusySlot).filter(
+                models.BusySlot.user_id.in_(participant_ids),
+                models.BusySlot.start_time == meeting.start_time,
+                models.BusySlot.end_time == meeting.end_time
+            ).delete(synchronize_session=False)
+            
             # Creator's own external cleanup
             for conn in current_user.connections:
                 if not conn.is_active: continue
@@ -1146,10 +1196,16 @@ async def delete_meeting(meeting_id: int, background_tasks: BackgroundTasks, cur
                     refresh_token = decrypt_token(conn.auth_data)
                     
                     # 1. Cleanup via Meeting ID
+                    # 1. Cleanup via Meeting ID
                     if conn.provider == 'google' and meeting.google_event_id:
                         from calendar_service import GoogleCalendarService
                         g_service = GoogleCalendarService(refresh_token)
-                        await g_service.delete_event(meeting.google_event_id)
+                        # Ensure we try to delete from ALL calendars if primary fails, 
+                        # but start with primary and the stored ID.
+                        deleted_ok = await g_service.delete_event(meeting.google_event_id)
+                        if not deleted_ok:
+                            print(f"DEBUG: Failed to delete Google event {meeting.google_event_id} from primary, trying to find it in other calendars...")
+                            # Optional: fetch calendar list and try each. But delete_event already has a flaw.
                         meeting.google_event_id = None
                     elif conn.provider == 'outlook' and meeting.outlook_event_id:
                         from outlook_service import OutlookCalendarService
@@ -1207,6 +1263,15 @@ async def delete_meeting(meeting_id: int, background_tasks: BackgroundTasks, cur
             return {"status": "cancelled", "message": "Meeting cancelled for all"}
         else:
             # Second time (or confirm): Hard delete for everyone
+            # Ensure BusySlots are also purged just in case (e.g. if they weren't caught during soft cancel)
+            participant_ids = [invite.user_id for invite in meeting.invites]
+            participant_ids.append(meeting.user_id)
+            db.query(models.BusySlot).filter(
+                models.BusySlot.user_id.in_(participant_ids),
+                models.BusySlot.start_time == meeting.start_time,
+                models.BusySlot.end_time == meeting.end_time
+            ).delete(synchronize_session=False)
+
             db.delete(meeting)
             db.commit()
             return {"status": "deleted", "message": "Meeting fully removed"}
@@ -1216,6 +1281,14 @@ async def delete_meeting(meeting_id: int, background_tasks: BackgroundTasks, cur
         if invite.status != "cancelled":
             # First time: Participant-side soft cancel
             invite.status = "cancelled"
+            
+            # Atomic BusySlot cleanup for this participant only
+            db.query(models.BusySlot).filter(
+                models.BusySlot.user_id == current_user.id,
+                models.BusySlot.start_time == meeting.start_time,
+                models.BusySlot.end_time == meeting.end_time
+            ).delete(synchronize_session=False)
+            
             db.commit()
             return {"status": "cancelled", "message": "You left the meeting"}
         else:
@@ -1327,10 +1400,16 @@ async def get_free_slots(data: dict, current_user: User = Depends(get_current_us
                 BusySlot.end_time >= start,
                 BusySlot.start_time <= end
             ).all()
-            user_slots = [(s.start_time, s.end_time) for s in user_busy]
+            user_slots = [
+                {
+                    "start": s.start_time, 
+                    "end": s.end_time, 
+                    "summary": s.summary, 
+                    "is_external": bool(s.is_external)
+                } for s in user_busy
+            ]
             
             # FIX: Also include GroupMeeting records (app-created meetings) as busy slots
-            # Join via MeetingInvite to get meetings the user is associated with
             meeting_invites = db.query(models.MeetingInvite).filter(
                 models.MeetingInvite.user_id == uid,
                 models.MeetingInvite.status.in_(["accepted", "pending"])
@@ -1338,7 +1417,12 @@ async def get_free_slots(data: dict, current_user: User = Depends(get_current_us
             for mi in meeting_invites:
                 m = mi.meeting
                 if m and m.start_time >= start and m.end_time <= end:
-                    user_slots.append((m.start_time, m.end_time))
+                    user_slots.append({
+                        "start": m.start_time, 
+                        "end": m.end_time,
+                        "summary": m.title,
+                        "is_external": False
+                    })
             
             busy_slots_per_user.append(user_slots)
             

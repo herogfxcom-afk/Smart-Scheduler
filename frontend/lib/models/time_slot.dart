@@ -16,6 +16,9 @@ class TimeSlot {
   
   @JsonKey(name: 'source_user_id')
   final String? sourceUserId;
+  final String? summary;
+  @JsonKey(name: 'is_external')
+  final bool isExternal;
 
   const TimeSlot({
     required this.start,
@@ -25,6 +28,8 @@ class TimeSlot {
     this.freeCount,
     this.totalCount,
     this.sourceUserId,
+    this.summary,
+    this.isExternal = false,
   });
 
   factory TimeSlot.fromJson(Map<String, dynamic> json) {
@@ -36,6 +41,8 @@ class TimeSlot {
       freeCount: json['free_count'] as int?,
       totalCount: json['total_count'] as int?,
       sourceUserId: json['source_user_id']?.toString(),
+      summary: json['summary'] as String?,
+      isExternal: json['is_external'] as bool? ?? false,
     );
   }
 
