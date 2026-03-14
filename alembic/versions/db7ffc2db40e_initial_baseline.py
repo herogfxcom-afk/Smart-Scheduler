@@ -22,23 +22,26 @@ def upgrade() -> None:
     """Upgrade schema."""
     conn = op.get_bind()
     inspector = sa.inspect(conn)
+    tables = inspector.get_table_names()
     
     # Check busy_slots
-    busy_slots_columns = [c['name'] for c in inspector.get_columns('busy_slots')]
-    if 'connection_id' not in busy_slots_columns:
-        op.add_column('busy_slots', sa.Column('connection_id', sa.Integer(), nullable=True))
-        op.create_foreign_key('fk_busy_slots_connection', 'busy_slots', 'calendar_connections', ['connection_id'], ['id'])
+    if 'busy_slots' in tables:
+        busy_slots_columns = [c['name'] for c in inspector.get_columns('busy_slots')]
+        if 'connection_id' not in busy_slots_columns:
+            op.add_column('busy_slots', sa.Column('connection_id', sa.Integer(), nullable=True))
+            op.create_foreign_key('fk_busy_slots_connection', 'busy_slots', 'calendar_connections', ['connection_id'], ['id'])
     
     # Check users
-    users_columns = [c['name'] for c in inspector.get_columns('users')]
-    if 'email' not in users_columns:
-        op.add_column('users', sa.Column('email', sa.String(length=255), nullable=True))
-    
-    # Drop columns if they exist
-    if 'google_refresh_token' in users_columns:
-        op.drop_column('users', 'google_refresh_token')
-    if 'apple_auth_data' in users_columns:
-        op.drop_column('users', 'apple_auth_data')
+    if 'users' in tables:
+        users_columns = [c['name'] for c in inspector.get_columns('users')]
+        if 'email' not in users_columns:
+            op.add_column('users', sa.Column('email', sa.String(length=255), nullable=True))
+        
+        # Drop columns if they exist
+        if 'google_refresh_token' in users_columns:
+            op.drop_column('users', 'google_refresh_token')
+        if 'apple_auth_data' in users_columns:
+            op.drop_column('users', 'apple_auth_data')
 
 
 def downgrade() -> None:

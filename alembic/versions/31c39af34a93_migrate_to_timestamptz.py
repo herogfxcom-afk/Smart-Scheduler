@@ -22,46 +22,57 @@ def upgrade() -> None:
     """Upgrade schema."""
     conn = op.get_bind()
     inspector = sa.inspect(conn)
+    tables = inspector.get_table_names()
 
     # 1. users
-    users_columns = [c['name'] for c in inspector.get_columns('users')]
-    with op.batch_alter_table('users', schema=None) as batch_op:
-        if 'created_at' in users_columns:
-            batch_op.alter_column('created_at', type_=sa.DateTime(timezone=True))
-        if 'google_refresh_token' in users_columns:
-            batch_op.drop_column('google_refresh_token')
-        if 'apple_auth_data' in users_columns:
-            batch_op.drop_column('apple_auth_data')
+    if 'users' in tables:
+        users_columns = [c['name'] for c in inspector.get_columns('users')]
+        with op.batch_alter_table('users', schema=None) as batch_op:
+            if 'created_at' in users_columns:
+                batch_op.alter_column('created_at', type_=sa.DateTime(timezone=True))
+            if 'google_refresh_token' in users_columns:
+                batch_op.drop_column('google_refresh_token')
+            if 'apple_auth_data' in users_columns:
+                batch_op.drop_column('apple_auth_data')
 
     # 2. calendar_connections
-    with op.batch_alter_table('calendar_connections', schema=None) as batch_op:
-        batch_op.alter_column('created_at', type_=sa.DateTime(timezone=True))
-        batch_op.alter_column('last_sync', type_=sa.DateTime(timezone=True))
+    if 'calendar_connections' in tables:
+        with op.batch_alter_table('calendar_connections', schema=None) as batch_op:
+            batch_op.alter_column('created_at', type_=sa.DateTime(timezone=True))
+            cols = [c['name'] for c in inspector.get_columns('calendar_connections')]
+            if 'last_sync' in cols:
+                batch_op.alter_column('last_sync', type_=sa.DateTime(timezone=True))
+            elif 'last_sync_at' in cols:
+                batch_op.alter_column('last_sync_at', type_=sa.DateTime(timezone=True))
 
     # 3. groups
-    with op.batch_alter_table('groups', schema=None) as batch_op:
-        batch_op.alter_column('created_at', type_=sa.DateTime(timezone=True))
+    if 'groups' in tables:
+        with op.batch_alter_table('groups', schema=None) as batch_op:
+            batch_op.alter_column('created_at', type_=sa.DateTime(timezone=True))
 
     # 4. group_meetings
-    with op.batch_alter_table('group_meetings', schema=None) as batch_op:
-        batch_op.alter_column('start_time', type_=sa.DateTime(timezone=True))
-        batch_op.alter_column('end_time', type_=sa.DateTime(timezone=True))
+    if 'group_meetings' in tables:
+        with op.batch_alter_table('group_meetings', schema=None) as batch_op:
+            batch_op.alter_column('start_time', type_=sa.DateTime(timezone=True))
+            batch_op.alter_column('end_time', type_=sa.DateTime(timezone=True))
 
     # 5. busy_slots
-    with op.batch_alter_table('busy_slots', schema=None) as batch_op:
-        batch_op.alter_column('start_time', type_=sa.DateTime(timezone=True))
-        batch_op.alter_column('end_time', type_=sa.DateTime(timezone=True))
+    if 'busy_slots' in tables:
+        with op.batch_alter_table('busy_slots', schema=None) as batch_op:
+            batch_op.alter_column('start_time', type_=sa.DateTime(timezone=True))
+            batch_op.alter_column('end_time', type_=sa.DateTime(timezone=True))
 
     # 6. meeting_invites
-    invites_columns = [c['name'] for c in inspector.get_columns('meeting_invites')]
-    with op.batch_alter_table('meeting_invites', schema=None) as batch_op:
-        if 'created_at' in invites_columns:
-            batch_op.alter_column('created_at', type_=sa.DateTime(timezone=True))
-        
-        # Check if constraint exists before dropping
-        unique_constraints = inspector.get_unique_constraints('meeting_invites')
-        if any(uc['name'] == '_meeting_user_invite_uc' for uc in unique_constraints):
-            batch_op.drop_constraint('_meeting_user_invite_uc', type_='unique')
+    if 'meeting_invites' in tables:
+        invites_columns = [c['name'] for c in inspector.get_columns('meeting_invites')]
+        with op.batch_alter_table('meeting_invites', schema=None) as batch_op:
+            if 'created_at' in invites_columns:
+                batch_op.alter_column('created_at', type_=sa.DateTime(timezone=True))
+            
+            # Check if constraint exists before dropping
+            unique_constraints = inspector.get_unique_constraints('meeting_invites')
+            if any(uc['name'] == '_meeting_user_invite_uc' for uc in unique_constraints):
+                batch_op.drop_constraint('_meeting_user_invite_uc', type_='unique')
 
 
 def downgrade() -> None:

@@ -23,13 +23,16 @@ def upgrade() -> None:
     import sqlalchemy.exc
     conn = op.get_bind()
     inspector = sa.inspect(conn)
-    columns = [c['name'] for c in inspector.get_columns('meeting_invites')]
+    tables = inspector.get_table_names()
 
-    with op.batch_alter_table('meeting_invites', schema=None) as batch_op:
-        if 'outlook_event_id' not in columns:
-            batch_op.add_column(sa.Column('outlook_event_id', sa.String(length=512), nullable=True))
-        if 'google_event_id' not in columns:
-            batch_op.add_column(sa.Column('google_event_id', sa.String(length=512), nullable=True))
+    if 'meeting_invites' in tables:
+        columns = [c['name'] for c in inspector.get_columns('meeting_invites')]
+
+        with op.batch_alter_table('meeting_invites', schema=None) as batch_op:
+            if 'outlook_event_id' not in columns:
+                batch_op.add_column(sa.Column('outlook_event_id', sa.String(length=512), nullable=True))
+            if 'google_event_id' not in columns:
+                batch_op.add_column(sa.Column('google_event_id', sa.String(length=512), nullable=True))
 
 
 def downgrade() -> None:

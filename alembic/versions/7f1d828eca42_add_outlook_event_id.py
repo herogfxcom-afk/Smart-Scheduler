@@ -16,14 +16,15 @@ revision: str = '7f1d828eca42'
 down_revision: Union[str, Sequence[str], None] = 'db7ffc2db40e'
 branch_labels: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
-    """Upgrade schema."""
     conn = op.get_bind()
     inspector = sa.inspect(conn)
-    columns = [c['name'] for c in inspector.get_columns('group_meetings')]
+    tables = inspector.get_table_names()
     
-    if 'outlook_event_id' not in columns:
-        with op.batch_alter_table('group_meetings', schema=None) as batch_op:
-            batch_op.add_column(sa.Column('outlook_event_id', sa.String(length=255), nullable=True))
+    if 'group_meetings' in tables:
+        columns = [c['name'] for c in inspector.get_columns('group_meetings')]
+        if 'outlook_event_id' not in columns:
+            with op.batch_alter_table('group_meetings', schema=None) as batch_op:
+                batch_op.add_column(sa.Column('outlook_event_id', sa.String(length=255), nullable=True))
 
 def downgrade() -> None:
     """Downgrade schema."""

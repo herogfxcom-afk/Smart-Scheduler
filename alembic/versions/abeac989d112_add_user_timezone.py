@@ -22,18 +22,22 @@ def upgrade() -> None:
     """Upgrade schema."""
     conn = op.get_bind()
     inspector = sa.inspect(conn)
-    columns = [c['name'] for c in inspector.get_columns('users')]
+    tables = inspector.get_table_names()
     
-    if 'timezone' not in columns:
-        with op.batch_alter_table('users', schema=None) as batch_op:
-            batch_op.add_column(sa.Column('timezone', sa.String(length=50), nullable=True, server_default='UTC'))
+    if 'users' in tables:
+        columns = [c['name'] for c in inspector.get_columns('users')]
+        if 'timezone' not in columns:
+            with op.batch_alter_table('users', schema=None) as batch_op:
+                batch_op.add_column(sa.Column('timezone', sa.String(length=50), nullable=True, server_default='UTC'))
 
 def downgrade() -> None:
     """Downgrade schema."""
     conn = op.get_bind()
     inspector = sa.inspect(conn)
-    columns = [c['name'] for c in inspector.get_columns('users')]
+    tables = inspector.get_table_names()
     
-    if 'timezone' in columns:
-        with op.batch_alter_table('users', schema=None) as batch_op:
-            batch_op.drop_column('timezone')
+    if 'users' in tables:
+        columns = [c['name'] for c in inspector.get_columns('users')]
+        if 'timezone' in columns:
+            with op.batch_alter_table('users', schema=None) as batch_op:
+                batch_op.drop_column('timezone')
