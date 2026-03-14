@@ -345,6 +345,12 @@ async def telegram_webhook(
             })
         return {"ok": True}
 
+    # 4. Handle Callback Queries (Inline Buttons)
+    callback_query = update.get("callback_query")
+    if callback_query:
+        await _handle_callback_query(callback_query, bot_token, db)
+        return {"ok": True}
+
     if not message:
         return {"ok": True}
     
@@ -429,12 +435,79 @@ async def _send_sync_invite(bot_token: str, chat_id: int, chat_title: str, db: S
     if not group:
         group = _models.Group(telegram_chat_id=str(chat_id), title=chat_title)
         db.add(group)
-    if result.get("ok"):
-        group.last_invite_message_id = result["result"]["message_id"]
     db.commit()
     print(f"BOT: Sent Magic Sync to {chat_title} (chat_id={chat_id}), link={deep_link}")
     
     return {"ok": True}
+
+async def _handle_callback_query(callback_query: dict, bot_token: str, db: Session):
+    """Handles inline button presses (e.g., Cancel & Delete vs Keep)."""
+    cb_id = callback_query.get("id")
+    from_user = callback_query.get("from", {})
+    user_tg_id = str(from_user.get("id"))
+    data = callback_query.get("data", "")
+    message = callback_query.get("message", {})
+    chat_id = message.get("chat", {}).get("id")
+    message_id = message.get("message_id")
+
+    answer_text = "Действие выполнено"
+    
+    if data.startswith("delmtg_"):
+        try:
+            _, action, meeting_id = data.split("_")
+            meeting_id = int(meeting_id)
+            
+            user = db.query(models.User).filter(models.User.telegram_id == user_tg_id).first()
+            if not user:
+                answer_text = "Пользователь не найден"
+            else:
+                invite = db.query(models.MeetingInvite).filter(
+                    models.MeetingInvite.meeting_id == meeting_id,
+                    models.MeetingInvite.user_id == user.id
+                ).first()
+                
+                if invite:
+                    if action == "keep":
+                        invite.status = "cancelled_kept"
+                        db.commit()
+                        answer_text = "Встреча оставлена в календаре"
+                        
+                        # Update original message to remove buttons
+                        async with httpx.AsyncClient() as client:
+                            await client.post(f"https://api.telegram.org/bot{bot_token}/editMessageReplyMarkup", json={
+                                "chat_id": chat_id,
+                                "message_id": message_id,
+                                "reply_markup": {"inline_keyboard": []}
+                            })
+                            
+                    elif action == "remove":
+                        # Full participant removal via the existing logic
+                        from fastapi import BackgroundTasks
+                        await delete_meeting(meeting_id, BackgroundTasks(), user, db)
+                        answer_text = "Встреча полностью удалена"
+                        
+                        # Update original message
+                        async with httpx.AsyncClient() as client:
+                            await client.post(f"https://api.telegram.org/bot{bot_token}/editMessageText", json={
+                                "chat_id": chat_id,
+                                "message_id": message_id,
+                                "text": message.get("text", "") + "\n\n✅ *Удалено из ваших календарей*",
+                                "parse_mode": "Markdown",
+                                "reply_markup": {"inline_keyboard": []}
+                            })
+                else:
+                    answer_text = "Приглашение не найдено или уже обработано"
+        except Exception as e:
+            print(f"DEBUG: Callback query error: {e}")
+            answer_text = "Произошла ошибка"
+
+    # Important: Always answer callback query to remove loading state
+    async with httpx.AsyncClient(timeout=5) as client:
+        await client.post(f"https://api.telegram.org/bot{bot_token}/answerCallbackQuery", json={
+            "callback_query_id": cb_id,
+            "text": answer_text
+        })
+
 # ─────────────────────────────────────────────────────────────
 
 @app.get("/api/status")
@@ -1242,23 +1315,43 @@ async def delete_meeting(meeting_id: int, background_tasks: BackgroundTasks, cur
                 except Exception as e: 
                     print(f"DEBUG: Creator cleanup fail on {conn.provider}: {e}")
             
-            # NOTIFY GROUP
-            if meeting.group:
-                user_tz_name = current_user.timezone or "UTC"
-                try:
-                    user_tz = ZoneInfo(user_tz_name)
-                    # Use pytz or timezone.utc if meeting.start_time is naive
-                    if meeting.start_time.tzinfo is None:
-                        utc_time = meeting.start_time.replace(tzinfo=pytz.utc)
-                    else:
-                        utc_time = meeting.start_time
-                    display_time = utc_time.astimezone(user_tz).strftime('%d.%m %H:%M')
-                except Exception as e:
-                    print(f"DEBUG: Notify time format fail: {e}")
-                    display_time = meeting.start_time.strftime('%d.%m %H:%M')
-                
-                group_text = f"❌ *Встреча отменена*\n\nСоздатель отменил встречу: *{meeting.title}*\nВремя: {display_time} ({user_tz_name})"
+            # NOTIFY GROUP AND PARTICIPANTS
+            user_tz_name = current_user.timezone or "UTC"
+            try:
+                user_tz = ZoneInfo(user_tz_name)
+                if meeting.start_time.tzinfo is None:
+                    utc_time = meeting.start_time.replace(tzinfo=pytz.utc)
+                else:
+                    utc_time = meeting.start_time
+                display_time = utc_time.astimezone(user_tz).strftime('%d.%m %H:%M')
+            except Exception as e:
+                print(f"DEBUG: Notify time format fail: {e}")
+                display_time = meeting.start_time.strftime('%d.%m %H:%M')
+            
+            creator_name = current_user.first_name or current_user.username or "Создатель"
+            
+            # Send group notification
+            if meeting.group and meeting.group.telegram_chat_id:
+                group_text = f"❌ *Встреча отменена*\n\n👤 {creator_name} отменил встречу: *{meeting.title}*\n⏰ Время: {display_time} ({user_tz_name})\n\n*(Участникам отправлены уведомления для очистки личных календарей)*"
                 background_tasks.add_task(send_telegram_notification, meeting.group.telegram_chat_id, group_text)
+
+            # Send individual participant notifications with Keep/Delete options
+            for inv in meeting.invites:
+                if inv.user_id != current_user.id and inv.user and inv.user.telegram_id:
+                    dm_text = (
+                        f"❌ *Встреча отменена*\n\n"
+                        f"{creator_name} отменил встречу *{meeting.title}* ({display_time}).\n\n"
+                        f"Удалить это событие из ваших подключенных календарей (Google/Apple)?"
+                    )
+                    reply_markup = {
+                        "inline_keyboard": [
+                            [
+                                {"text": "🗑️ Удалить", "callback_data": f"delmtg_remove_{meeting.id}"},
+                                {"text": "✅ Оставить", "callback_data": f"delmtg_keep_{meeting.id}"}
+                            ]
+                        ]
+                    }
+                    background_tasks.add_task(send_telegram_notification, str(inv.user.telegram_id), dm_text, reply_markup)
             
             db.commit()
             return {"status": "cancelled", "message": "Meeting cancelled for all"}
@@ -1656,7 +1749,7 @@ async def create_meeting(data: dict, background_tasks: BackgroundTasks, current_
         try:
             parts = idempotency_key.split("_")
             if len(parts) >= 2:
-                tg_chat_id = parts[1]
+                tg_chat_id = parts[1].replace("n", "-")
                 group = db.query(models.Group).filter(models.Group.telegram_chat_id == tg_chat_id).first()
                 if group:
                     group_id = group.id
