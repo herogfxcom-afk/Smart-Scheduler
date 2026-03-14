@@ -1051,92 +1051,92 @@ async def get_solo_scheduler(
 
             # The rest of the logic remains the same, but using our local 'db'
             user_tz_name = user_tz or current_user.timezone or "UTC"
-        try:
-            u_tz = ZoneInfo(user_tz_name)
-        except:
-            u_tz = ZoneInfo("UTC")
-
-        # Range: from user's local midnight (today 00:00 in user TZ) to 7 days later.
-        utc_now = datetime.now(timezone.utc)
-        user_local_now = utc_now.astimezone(u_tz)
-        user_local_midnight = user_local_now.replace(hour=0, minute=0, second=0, microsecond=0)
-        start_date = user_local_midnight.astimezone(timezone.utc)
-        end_date = start_date + timedelta(days=7)
-        
-        # Get user's working hours in the format expected by find_common_free_slots
-        avail = db.query(models.UserAvailability).filter(models.UserAvailability.user_id == current_user.id).all()
-        
-        # Initialize with default 9-18 for all days
-        user_avail = {i: {"start": 9, "end": 18, "enabled": True} for i in range(7)}
-        
-        # Override with user settings where available
-        for a in avail:
-            # Handle start/end time with minute precision (store as hour + minute/60.0)
             try:
-                s_parts = a.start_time.split(":")
-                e_parts = a.end_time.split(":")
-                
-                h_start = int(s_parts[0]) + int(s_parts[1]) / 60.0
-                h_end = int(e_parts[0]) + int(e_parts[1]) / 60.0
-                
-                user_avail[a.day_of_week] = {
-                    "start": h_start,
-                    "end": h_end,
-                    "enabled": bool(a.is_enabled)
-                }
+                u_tz = ZoneInfo(user_tz_name)
             except:
-                continue
-                
-        db_slots = db.query(models.BusySlot).filter(models.BusySlot.user_id == current_user.id).all()
-        busy_slots = []
-        for s in db_slots:
-            st = s.start_time if s.start_time.tzinfo else s.start_time
-            et = s.end_time if s.end_time.tzinfo else s.end_time
-            busy_slots.append({
-                "start": st,
-                "end": et,
-                "summary": s.summary,
-                "is_external": bool(s.is_external)
-            })
-        
-        # Добавляем встречи созданные в приложении как занятые слоты
-        meeting_invites = db.query(models.MeetingInvite).filter(
-            models.MeetingInvite.user_id == current_user.id,
-            models.MeetingInvite.status.in_(["accepted", "pending"])
-        ).all()
-        for mi in meeting_invites:
-            m = mi.meeting
-            if m:
-                st = m.start_time if m.start_time.tzinfo else m.start_time
-                et = m.end_time if m.end_time.tzinfo else m.end_time
+                u_tz = ZoneInfo("UTC")
+
+            # Range: from user's local midnight (today 00:00 in user TZ) to 7 days later.
+            utc_now = datetime.now(timezone.utc)
+            user_local_now = utc_now.astimezone(u_tz)
+            user_local_midnight = user_local_now.replace(hour=0, minute=0, second=0, microsecond=0)
+            start_date = user_local_midnight.astimezone(timezone.utc)
+            end_date = start_date + timedelta(days=7)
+            
+            # Get user's working hours in the format expected by find_common_free_slots
+            avail = db.query(models.UserAvailability).filter(models.UserAvailability.user_id == current_user.id).all()
+            
+            # Initialize with default 9-18 for all days
+            user_avail = {i: {"start": 9, "end": 18, "enabled": True} for i in range(7)}
+            
+            # Override with user settings where available
+            for a in avail:
+                # Handle start/end time with minute precision (store as hour + minute/60.0)
+                try:
+                    s_parts = a.start_time.split(":")
+                    e_parts = a.end_time.split(":")
+                    
+                    h_start = int(s_parts[0]) + int(s_parts[1]) / 60.0
+                    h_end = int(e_parts[0]) + int(e_parts[1]) / 60.0
+                    
+                    user_avail[a.day_of_week] = {
+                        "start": h_start,
+                        "end": h_end,
+                        "enabled": bool(a.is_enabled)
+                    }
+                except:
+                    continue
+                    
+            db_slots = db.query(models.BusySlot).filter(models.BusySlot.user_id == current_user.id).all()
+            busy_slots = []
+            for s in db_slots:
+                st = s.start_time if s.start_time.tzinfo else s.start_time
+                et = s.end_time if s.end_time.tzinfo else s.end_time
                 busy_slots.append({
                     "start": st,
                     "end": et,
-                    "summary": m.title,
-                    "is_external": False
+                    "summary": s.summary,
+                    "is_external": bool(s.is_external)
                 })
+            
+            # Добавляем встречи созданные в приложении как занятые слоты
+            meeting_invites = db.query(models.MeetingInvite).filter(
+                models.MeetingInvite.user_id == current_user.id,
+                models.MeetingInvite.status.in_(["accepted", "pending"])
+            ).all()
+            for mi in meeting_invites:
+                m = mi.meeting
+                if m:
+                    st = m.start_time if m.start_time.tzinfo else m.start_time
+                    et = m.end_time if m.end_time.tzinfo else m.end_time
+                    busy_slots.append({
+                        "start": st,
+                        "end": et,
+                        "summary": m.title,
+                        "is_external": False
+                    })
 
-        print(f"DEBUG SOLO: {len(db_slots)} synced slots + {len(meeting_invites)} meeting invites for user {current_user.id}")
-        # We use find_common_free_slots for a single user
-        segments = find_common_free_slots(
-            [busy_slots], 
-            start_date, 
-            end_date, 
-            [user_avail],
-            user_timezones=[user_tz_name],
-            viewer_tz=user_tz_name,
-            requesting_user_index=0,
-            user_ids=[str(current_user.id)]
-        )
-        
-        return segments
-    except HTTPException:
-        raise
-    except Exception as e:
-        import traceback
-        print(f"ERROR in get_solo_scheduler: {str(e)}")
-        print(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Solo scheduler error: {str(e)}")
+            print(f"DEBUG SOLO: {len(db_slots)} synced slots + {len(meeting_invites)} meeting invites for user {current_user.id}")
+            # We use find_common_free_slots for a single user
+            segments = find_common_free_slots(
+                [busy_slots], 
+                start_date, 
+                end_date, 
+                [user_avail],
+                user_timezones=[user_tz_name],
+                viewer_tz=user_tz_name,
+                requesting_user_index=0,
+                user_ids=[str(current_user.id)]
+            )
+            
+            return segments
+        except HTTPException:
+            raise
+        except Exception as e:
+            import traceback
+            print(f"ERROR in get_solo_scheduler: {str(e)}")
+            print(traceback.format_exc())
+            raise HTTPException(status_code=500, detail=f"Solo scheduler error: {str(e)}")
 
 @app.post("/api/busy-slots")
 async def add_busy_slot(data: dict, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
