@@ -214,7 +214,15 @@ class _HeatmapGridState extends State<HeatmapGrid> {
     final now = userNow();
 
     // 1. Add Meetings (Always visible in both solo and group)
+    // IMPORTANT: Only add app-created meetings (purple). 
+    // External synced events should NOT be added as foreground appointments 
+    // because they are already added as background TimeRegions. 
+    // Adding both causes "creeping" (split narrow columns).
     for (final meeting in widget.myMeetings) {
+      // If the meeting is from an external provider, it will be in widget.slots as isMyBusy.
+      // We skip it here to let the background TimeRegion handle it visually.
+      if (meeting.provider != null && meeting.provider != 'app') continue;
+
       final startUtc = meeting.start.isUtc ? meeting.start : meeting.start.toUtc();
       final endUtc = meeting.end.isUtc ? meeting.end : meeting.end.toUtc();
       

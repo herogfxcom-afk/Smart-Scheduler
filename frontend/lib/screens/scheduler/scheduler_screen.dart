@@ -531,8 +531,11 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
   void _showMeetingDetailsOptions(BuildContext context, SchedulerProvider scheduler, Map<String, dynamic> meetingData) {
     final title = meetingData['title'] ?? 'Встреча';
     final meetingId = meetingData['id'];
-    final isCancelled = meetingData['is_cancelled'] == true;
+    final isGlobalCancelled = meetingData['is_cancelled'] == true;
+    final status = meetingData['status'];
+    final isUserCancelled = status == 'cancelled';
     final isCreator = meetingData['is_creator'] == true;
+    final isCancelled = isGlobalCancelled || isUserCancelled;
 
     showModalBottomSheet(
       context: context,
@@ -568,9 +571,11 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
                 ),
                 if (isCancelled) ...[
                   const SizedBox(height: 8),
-                  const Text(
-                    "Организатор отменил эту встречу. Подтвердите удаление, чтобы очистить ваш календарь.",
-                    style: TextStyle(color: Colors.white70, fontSize: 13),
+                  Text(
+                    isGlobalCancelled 
+                      ? "Организатор отменил эту встречу. Подтвердите удаление, чтобы очистить ваш календарь."
+                      : "Вы отменили свое участие. Подтвердите окончательное удаление.",
+                    style: const TextStyle(color: Colors.white70, fontSize: 13),
                     textAlign: TextAlign.center,
                   ),
                 ],
@@ -596,14 +601,14 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
                           context.read<SoloProvider>().fetchSoloSlots();
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
-                              content: Text(isCancelled ? 'Встреча удалена из списка' : 'Встреча успешно отменена'), 
+                              content: Text(isCancelled ? 'Встреча удалена из списка' : 'Запрос на отмену отправлен'), 
                               backgroundColor: Colors.green
                             ),
                           );
                         } else {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
-                              content: Text(isCancelled ? 'Ошибка удаления' : 'Ошибка отмены встречи'), 
+                              content: Text(isCancelled ? 'Ошибка удаления' : 'Ошибка при отмене'), 
                               backgroundColor: Colors.red
                             ),
                           );

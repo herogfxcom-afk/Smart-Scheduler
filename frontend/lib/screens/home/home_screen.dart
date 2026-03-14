@@ -571,78 +571,59 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
   }
 
-  String _formatDate(DateTime dt) {
-    final localDt = toUserLocal(dt);
-    return "${localDt.day}.${localDt.month}.${localDt.year}";
-  }
-
-  String _formatTime(DateTime dt) {
-    final localDt = toUserLocal(dt);
-    return "${localDt.hour.toString().padLeft(2, '0')}:${localDt.minute.toString().padLeft(2, '0')}";
-  }
-
   void _showMeetingDetails(BuildContext context, Meeting meeting, LanguageProvider lang) {
+    final meetingId = meeting.id;
+    final isGlobalCancelled = meeting.isCancelled;
+    final status = meeting.status; 
+    final isUserCancelled = status == 'cancelled';
+    final isCreator = meeting.isCreator;
+    final isCancelled = isGlobalCancelled || isUserCancelled;
+    final scheduler = context.read<SchedulerProvider>();
+
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF1E1E1E),
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      backgroundColor: Colors.transparent,
       builder: (context) {
         bool isProcessing = false;
         return StatefulBuilder(
-          builder: (context, setState) => Padding(
-            padding: const EdgeInsets.all(24.0),
+          builder: (context, setState) => Container(
+            margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1E1E1E),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: Colors.white.withOpacity(0.1)),
+            ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        meeting.isCancelled ? "ОТМЕНЕНА: ${meeting.title}" : meeting.title,
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: meeting.isCancelled ? Colors.redAccent : Colors.white,
-                          decoration: meeting.isCancelled ? TextDecoration.lineThrough : null,
-                        ),
-                      ),
-                    ),
-                    IconButton(
-                      icon: Icon(meeting.isCancelled ? Icons.close : Icons.delete, color: Colors.redAccent),
-                      onPressed: isProcessing ? null : () async {
-                        setState(() => isProcessing = true);
-                        final bool success;
-                        if (meeting.isCancelled) {
-                          success = await context.read<SchedulerProvider>().confirmCancelMeeting(meeting.id);
-                        } else {
-                          success = await context.read<SchedulerProvider>().deleteMeeting(meeting.id);
-                        }
-                        if (context.mounted) {
-                          Navigator.pop(context);
-                          if (success) {
-                            context.read<MeetingProvider>().fetchMyMeetings();
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(meeting.isCancelled ? 'Встреча удалена' : 'Встреча отменена'),
-                                backgroundColor: Colors.green,
-                              ),
-                            );
-                          }
-                        }
-                      },
-                    ),
-                  ],
+                Icon(
+                  isCancelled ? Icons.event_busy : Icons.event_note, 
+                  color: isCancelled ? Colors.redAccent : Colors.blue, 
+                  size: 48
                 ),
-                if (meeting.isCancelled) ...[
+                const SizedBox(height: 16),
+                Text(
+                  isCancelled ? "ОТМЕНЕНА: ${meeting.title}" : meeting.title,
+                  style: TextStyle(
+                    color: isCancelled ? Colors.redAccent : Colors.white, 
+                    fontSize: 20, 
+                    fontWeight: FontWeight.bold,
+                    decoration: isCancelled ? TextDecoration.lineThrough : null,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                if (isCancelled) ...[
                   const SizedBox(height: 8),
-                  const Text(
-                    "Организатор отменил встречу. Подтвердите удаление для очистки календаря.",
-                    style: TextStyle(color: Colors.white70, fontSize: 13),
+                  Text(
+                    isGlobalCancelled 
+                      ? "Организатор отменил эту встречу. Подтвердите удаление, чтобы очистить ваш календарь."
+                      : "Вы отменили свое участие. Подтвердите окончательное удаление.",
+                    style: const TextStyle(color: Colors.white70, fontSize: 13),
+                    textAlign: TextAlign.center,
                   ),
                 ],
-                const SizedBox(height: 16),
+                const SizedBox(height: 24),
                 Row(
                   children: [
                     const Icon(Icons.calendar_today, size: 18, color: Colors.blue),
@@ -653,36 +634,77 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     ),
                   ],
                 ),
-                if (meeting.location != null) ...[
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      const Icon(Icons.location_on, size: 18, color: Colors.blue),
-                      const SizedBox(width: 8),
-                      Text(meeting.location!, style: const TextStyle(color: Colors.white)),
-                    ],
-                  ),
-                ],
                 const SizedBox(height: 32),
                 SizedBox(
                   width: double.infinity,
-                  child: ElevatedButton.icon(
-                    icon: const Icon(Icons.apple),
-                    label: const Text("Добавить в Apple Calendar"),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      foregroundColor: Colors.black,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                    ),
-                    onPressed: () {
-                      IcsExporter.exportMeeting(meeting);
+                  height: 52,
+                  child: ElevatedButton(
+                    onPressed: isProcessing ? null : () async {
+                      setState(() => isProcessing = true);
+                      
+                      final bool success;
+                      if (isCancelled) {
+                        success = await scheduler.confirmCancelMeeting(meetingId);
+                      } else {
+                        success = await scheduler.deleteMeeting(meetingId);
+                      }
+                      
+                      if (context.mounted) {
+                        Navigator.pop(context);
+                        if (success) {
+                          context.read<MeetingProvider>().fetchMyMeetings();
+                          context.read<SoloProvider>().fetchSoloSlots();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(isCancelled ? 'Встреча удалена из списка' : 'Запрос на отмену отправлен'), 
+                              backgroundColor: Colors.green
+                            ),
+                          );
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(isCancelled ? 'Ошибка удаления' : 'Ошибка при отмене'), 
+                              backgroundColor: Colors.red
+                            ),
+                          );
+                        }
+                      }
                     },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: isCancelled ? Colors.orange.withOpacity(0.2) : Colors.red.withOpacity(0.2),
+                      foregroundColor: isCancelled ? Colors.orangeAccent : Colors.redAccent,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      side: BorderSide(color: isCancelled ? Colors.orangeAccent : Colors.redAccent, width: 1),
+                    ),
+                    child: isProcessing
+                      ? SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: isCancelled ? Colors.orangeAccent : Colors.redAccent, strokeWidth: 2))
+                      : Text(
+                          isCancelled ? 'Подтвердить удаление' : (isCreator ? 'Отменить встречу' : 'Покинуть встречу'), 
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)
+                        ),
                   ),
                 ),
                 const SizedBox(height: 12),
+                if (!isCancelled)
+                  SizedBox(
+                    width: double.infinity,
+                    height: 52,
+                    child: ElevatedButton.icon(
+                      onPressed: () => IcsExporter.exportMeeting(meeting),
+                      icon: const Icon(Icons.apple),
+                      label: const Text('Добавить в Apple Calendar', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: Colors.black,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      ),
+                    ),
+                  ),
+                const SizedBox(height: 12),
                 SizedBox(
                   width: double.infinity,
-                  child: OutlinedButton(
+                  height: 52,
+                  child: TextButton(
                     onPressed: () => Navigator.pop(context),
                     child: Text(lang.translate('close')),
                   ),
@@ -693,6 +715,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         );
       },
     );
+  }
+
+  String _formatDate(DateTime dt) {
+    return DateFormat('EEE, d MMM').format(toUserLocal(dt));
+  }
+
+  String _formatTime(DateTime dt) {
+    final localDt = toUserLocal(dt);
+    return "${localDt.hour.toString().padLeft(2, '0')}:${localDt.minute.toString().padLeft(2, '0')}";
   }
 }
 
