@@ -110,11 +110,11 @@ async def test_meeting_lifecycle():
         user = db.query(models.User).filter(models.User.telegram_id == 12345).first()
         
         # Add a mock Apple connection to trigger that logic
-        apple_conn = models.UserConnection(
+        apple_conn = models.CalendarConnection(
             user_id=user.id,
             provider="apple",
             auth_data=json.dumps({"email": "test@apple.com", "password": "pass"}),
-            is_active=True
+            is_active=1
         )
         db.add(apple_conn)
         db.commit()
