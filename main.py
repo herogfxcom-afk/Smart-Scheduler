@@ -65,6 +65,7 @@ async def db_transaction_health_middleware(request: FastAPIRequest, call_next):
     
     # 1. BEFORE REQUEST: Check if we got a poisoned connection from the pool
     with SessionLocal() as db:
+        db.rollback() # Clear potential aborted transaction state
         try:
             db.execute(text("SELECT 1"))
         except Exception as e:
@@ -79,6 +80,7 @@ async def db_transaction_health_middleware(request: FastAPIRequest, call_next):
     
     # 3. AFTER REQUEST: Check if the request left the connection poisoned
     with SessionLocal() as db:
+        db.rollback() # Ensure we have a clean state for the check
         try:
             db.execute(text("SELECT 1"))
         except Exception as e:
@@ -364,16 +366,18 @@ async def telegram_webhook(
         results = [{
             "type": "article",
             "id": "magic_sync",
-            "title": "📊 Поделиться Magic Sync",
-            "description": "Позволяет всем участникам синхронизировать календари.",
+            "title": "📊 Magic Sync: Синхронизировать календари",
+            "description": "Позволяет найти время, которое подходит всем участникам.",
             "input_message_content": {
-                "message_text": "📊 *Magic Sync: Синхронизация календарей*\n\nНажмите кнопку ниже, чтобы начать!",
+                "message_text": "📊 *Magic Sync: Синхронизация календарей*\n\nНажмите кнопку ниже, чтобы начать поиск общего времени!",
                 "parse_mode": "Markdown"
             },
             "reply_markup": {
                 "inline_keyboard": [[{
-                    "text": "📊 Magic Sync",
-                    "url": f"https://t.me/{bot_username}/app" # Generic launch
+                    "text": "📊 Открыть Magic Sync",
+                    "web_app": {
+                        "url": f"{FRONTEND_URL}/?startapp=inline_query"
+                    }
                 }]]
             }
         }]
@@ -384,11 +388,11 @@ async def telegram_webhook(
                     "inline_query_id": query_id,
                     "results": results,
                     "cache_time": 300,
-                    "is_personal": True,  # Added for better behavior
+                    "is_personal": True,
                     "button": {
-                        "text": "📊 Открыть Magic Sync",
+                        "text": "📊 Спланировать встречу",
                         "web_app": {
-                            "url": f"{FRONTEND_URL}/?startapp=inline_query"
+                            "url": f"{FRONTEND_URL}/?startapp=inline_query_button"
                         }
                     }
                 }
@@ -583,33 +587,42 @@ async def cors_debug():
     return {"cors": "enabled", "middleware": "CORSEverywhere"}
 
 @app.get("/auth/me")
-async def get_me(user_timezone: str = Query(None, alias="timezone"), current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+async def get_me(user_timezone: str = Query(None, alias="timezone"), current_user: User = Depends(get_current_user)):
     """Returns the current user profile including all connected calendars."""
-    if user_timezone and current_user.timezone != user_timezone:
-        current_user.timezone = user_timezone
-        db.commit()
+    from database import SessionLocal
+    
+    with SessionLocal() as db:
+        db.rollback() # Recover from poisoned connection
+        # Re-fetch user in the local session context to handle relations and updates
+        user = db.query(User).options(joinedload(User.connections)).filter(User.id == current_user.id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+            
+        if user_timezone and user.timezone != user_timezone:
+            user.timezone = user_timezone
+            db.commit()
 
-    return {
-        "id": current_user.id,
-        "telegram_id": current_user.telegram_id,
-        "username": current_user.username,
-        "first_name": current_user.first_name,
-        "email": current_user.email,
-        "timezone": current_user.timezone,
-        "is_connected": any(c.provider == 'google' and c.is_active for c in current_user.connections),
-        "is_apple_connected": any(c.provider == 'apple' and c.is_active for c in current_user.connections),
-        "connections": [
-            {
-                "id": c.id,
-                "provider": c.provider,
-                "email": c.email,
-                "status": c.status,
-                "last_sync_status": c.last_sync_status,
-                "is_active": bool(c.is_active),
-                "last_sync_at": c.last_sync_at.isoformat().replace('+00:00', '') + "Z" if c.last_sync_at else None
-            } for c in current_user.connections
-        ]
-    }
+        return {
+            "id": user.id,
+            "telegram_id": user.telegram_id,
+            "username": user.username,
+            "first_name": user.first_name,
+            "email": user.email,
+            "timezone": user.timezone,
+            "is_connected": any(c.provider == 'google' and c.is_active for c in user.connections),
+            "is_apple_connected": any(c.provider == 'apple' and c.is_active for c in user.connections),
+            "connections": [
+                {
+                    "id": c.id,
+                    "provider": c.provider,
+                    "email": c.email,
+                    "status": c.status,
+                    "last_sync_status": c.last_sync_status,
+                    "is_active": bool(c.is_active),
+                    "last_sync_at": c.last_sync_at.isoformat().replace('+00:00', '') + "Z" if c.last_sync_at else None
+                } for c in user.connections
+            ]
+        }
 
 @app.post("/groups/sync")
 async def sync_group(data: dict, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -964,6 +977,7 @@ async def sync_calendar(request: Request, current_user: User = Depends(get_curre
     from database import SessionLocal
     # Use isolated session for sync
     with SessionLocal() as sync_db:
+        sync_db.rollback() # Protect sync from dirty connections
         try:
             # Re-fetch user in the new session
             user_in_sync = sync_db.query(User).filter(User.id == current_user.id).first()
@@ -1014,6 +1028,7 @@ async def get_solo_scheduler(
     
     # Fully isolated session for the entire request
     with SessionLocal() as db:
+        db.rollback() # Critical: clear potential aborted state from pool
         try:
             # Re-fetch user in the local session context
             current_user = db.query(User).filter(User.id == current_user.id).first()

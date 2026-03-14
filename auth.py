@@ -53,7 +53,9 @@ def validate_telegram_init_data(init_data: str) -> dict:
 
 from typing import Optional
 
-def get_current_user(init_data: Optional[str] = Header(None), db: Session = Depends(get_db)):
+from database import SessionLocal
+
+def get_current_user(init_data: Optional[str] = Header(None)):
     """Dependency to get or create user based on Telegram initData."""
     print(f"AUTH: Request received, init_data present: {bool(init_data)}")
     
@@ -70,31 +72,39 @@ def get_current_user(init_data: Optional[str] = Header(None), db: Session = Depe
     
     print(f"AUTH: Extracted Telegram ID: {telegram_id}")
     
-    try:
-        user = db.query(User).options(joinedload(User.connections)).filter(User.telegram_id == telegram_id).first()
-        if not user:
-            print(f"AUTH: Creating new user for ID: {telegram_id}")
-            user = User(
-                telegram_id=telegram_id,
-                username=user_info.get("username"),
-                first_name=user_info.get("first_name"),
-                photo_url=user_info.get("photo_url")
-            )
-            db.add(user)
-            db.commit()
-            db.refresh(user)
-            print("AUTH: User created successfully")
-        else:
-            print(f"AUTH: Found existing user: {user.id}")
-            # Update user info if changed
-            user.username = user_info.get("username")
-            user.first_name = user_info.get("first_name")
-            user.photo_url = user_info.get("photo_url")
-            db.commit()
-            print("AUTH: User updated successfully")
-            
-        return user
-    except Exception as e:
-        print(f"AUTH ERROR IN DB OPERATION: {str(e)}")
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+    # Use an isolated session for authentication to prevent InFailedSqlTransaction contagion
+    with SessionLocal() as db:
+        db.rollback() # Self-healing: clear potential aborted state from pooled connection
+        try:
+            user = db.query(User).options(joinedload(User.connections)).filter(User.telegram_id == telegram_id).first()
+            if not user:
+                print(f"AUTH: Creating new user for ID: {telegram_id}")
+                user = User(
+                    telegram_id=telegram_id,
+                    username=user_info.get("username"),
+                    first_name=user_info.get("first_name"),
+                    photo_url=user_info.get("photo_url")
+                )
+                db.add(user)
+                db.commit()
+                db.refresh(user)
+                print("AUTH: User created successfully")
+            else:
+                print(f"AUTH: Found existing user: {user.id}")
+                # Update user info if changed
+                user.username = user_info.get("username")
+                user.first_name = user_info.get("first_name")
+                user.photo_url = user_info.get("photo_url")
+                db.commit()
+                # Use query instead of refresh to keep options (joinedload) intact
+                user = db.query(User).options(joinedload(User.connections)).filter(User.telegram_id == telegram_id).first()
+                print("AUTH: User updated successfully")
+                
+            # Detach user from the session so it can be used in other sessions later
+            # collections that were joined-loaded will stay attached to the object
+            db.expunge(user)
+            return user
+        except Exception as e:
+            print(f"AUTH ERROR IN DB OPERATION: {str(e)}")
+            db.rollback()
+            raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")

@@ -35,6 +35,11 @@ Base = declarative_base()
 def get_db():
     db = SessionLocal()
     try:
+        # Self-healing: clear any leftover aborted transaction state from the pool
+        try:
+            db.rollback()
+        except:
+            pass
         yield db
     finally:
         db.close()
