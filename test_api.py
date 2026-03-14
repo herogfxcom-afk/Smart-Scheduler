@@ -147,7 +147,10 @@ async def test_meeting_lifecycle():
                 if response.status_code != 200:
                     print(f"DEBUG: Create meeting failed: {response.status_code} - {response.text}")
                 assert response.status_code == 200
-                meeting_id = response.json()["meeting_id"]
+                meeting_id = response.json().get("id")
+                if not meeting_id:
+                    print(f"DEBUG: No ID in response: {response.json()}")
+                assert meeting_id is not None
                 report.add("Lifecycle: Create Meeting (Backend + Apple Sync)", True)
 
                 # B. VERIFY DB RECORD & IDs
