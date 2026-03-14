@@ -124,40 +124,51 @@ async def test_meeting_lifecycle():
             with patch("caldav_service.AppleCalendarService.delete_event", return_value=True):
                 
                 # A. CREATE MEETING
-                start = (datetime.datetime.now() + datetime.timedelta(days=1)).isoformat()
-                end = (datetime.datetime.now() + datetime.timedelta(days=1, hours=1)).isoformat()
+                print("DEBUG: Starting meeting creation...")
+                # use Z to mimic frontend
+                now = datetime.datetime.now(datetime.timezone.utc)
+                start = (now + datetime.timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+                end = (now + datetime.timedelta(days=1, hours=1)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
                 
                 payload = {
-                    "summary": "Lifecycle Test",
-                    "start_time": start,
-                    "end_time": end,
-                    "attendees": [],
-                    "idempotency_key": f"test_{int(time.time())}"
+                    "title": "Lifecycle Test",
+                    "start": start,
+                    "end": end,
+                    "attendee_emails": [],
+                    "idempotency_key": f"test_{int(time.time())}",
+                    "tz_offset": 0
                 }
                 
-                response = client.post("/api/meetings/create", headers={"init-data": valid_init_data}, json=payload)
+                response = client.post("/meeting/create", headers={"init-data": valid_init_data}, json=payload)
+                if response.status_code != 200:
+                    print(f"DEBUG: Create meeting failed: {response.status_code} - {response.text}")
                 assert response.status_code == 200
                 meeting_id = response.json()["meeting_id"]
                 report.add("Lifecycle: Create Meeting (Backend + Apple Sync)", True)
 
                 # B. VERIFY DB RECORD & IDs
+                print("DEBUG: Verifying database record...")
                 db.expire_all()
                 meeting = db.query(models.GroupMeeting).get(meeting_id)
+                if not meeting: print("DEBUG: Meeting not found in DB!")
                 assert meeting.apple_event_id == "https://icloud.com/event/123"
                 report.add("Lifecycle: Database ID Verification (apple_event_id stored)", True)
 
                 # C. SOFT DELETE (Creator)
-                # First call to delete_meeting should mark is_cancelled=True
+                print("DEBUG: Starting soft delete...")
                 response = client.delete(f"/api/meetings/{meeting_id}", headers={"init-data": valid_init_data})
+                if response.status_code != 200:
+                    print(f"DEBUG: Soft delete failed: {response.status_code} - {response.text}")
                 assert response.status_code == 200
                 
                 db.expire_all()
                 meeting = db.query(models.GroupMeeting).get(meeting_id)
                 assert meeting.is_cancelled is True
-                assert meeting.apple_event_id is None # Should be cleared after first delete attempt
+                assert meeting.apple_event_id is None
                 report.add("Lifecycle: Soft Delete & External Cleanup (apple_event_id cleared)", True)
 
                 # D. HARD DELETE
+                print("DEBUG: Starting hard delete...")
                 response = client.delete(f"/api/meetings/{meeting_id}", headers={"init-data": valid_init_data})
                 assert response.status_code == 200
                 
