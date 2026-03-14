@@ -1184,13 +1184,6 @@ async def delete_meeting(meeting_id: int, current_user: User = Depends(get_curre
                         a_service.delete_event(invite.apple_event_id)
                 except Exception as e:
                     print(f"DEBUG: Participant cleanup fail on {conn.provider}: {e}")
-                        await g_service.delete_event(invite.google_event_id)
-                    elif conn.provider == 'outlook' and invite.outlook_event_id:
-                        from outlook_service import OutlookCalendarService
-                        o_service = OutlookCalendarService(refresh_token)
-                        await o_service.delete_event(invite.outlook_event_id)
-                except Exception as e:
-                    print(f"DEBUG: Participant cleanup fail on {conn.provider}: {e}")
             
             db.delete(invite)
             db.commit()
