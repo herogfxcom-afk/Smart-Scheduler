@@ -6,6 +6,13 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 import sentry_sdk
 from sentry_sdk.integrations.fastapi import FastApiIntegration
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+from datetime import datetime, timedelta, timezone
+import pytz
 
 sentry_sdk.init(
     dsn="https://c4f2ee07b69a9b590d740d35220ef5a0@o4511041169391616.ingest.de.sentry.io/4511041208123472",
@@ -57,60 +64,41 @@ from database import engine
 import models
 # metadata.create_all moved inside migrate_db for safer startup
 
-# Production Migration: Ensure 'email' column exists
+# Production Migration: Ensure columns exist
 @app.on_event("startup")
 def migrate_db():
-    from sqlalchemy import text, inspect
-    # Ensure tables exist first
+    from sqlalchemy import inspect
     try:
         models.Base.metadata.create_all(bind=engine)
         print("Database tables ensured.")
         
-        # Manual migration for is_cancelled column
-        with engine.connect() as conn:
-            # Note: For SQLite, table_info is best; for Postgres, we use information_schema
-            if engine.url.drivername.startswith('sqlite'):
-                info = conn.execute(text("PRAGMA table_info(group_meetings)")).fetchall()
-                if 'is_cancelled' not in [i[1] for i in info]:
-                    print("Adding is_cancelled to group_meetings (SQLite)...")
+        inspector = inspect(engine)
+        with engine.begin() as conn:
+            # Migration for group_meetings
+            columns = [c['name'] for c in inspector.get_columns('group_meetings')]
+            if 'is_cancelled' not in columns:
+                print("Adding is_cancelled to group_meetings...")
+                if engine.url.drivername.startswith('sqlite'):
                     conn.execute(text("ALTER TABLE group_meetings ADD COLUMN is_cancelled BOOLEAN DEFAULT 0"))
-                
-                info_conn = conn.execute(text("PRAGMA table_info(calendar_connections)")).fetchall()
-                cols = [i[1] for i in info_conn]
-                if 'last_sync_status' not in cols:
-                    conn.execute(text("ALTER TABLE calendar_connections ADD COLUMN last_sync_status TEXT"))
-                if 'last_sync_at' not in cols:
-                    conn.execute(text("ALTER TABLE calendar_connections ADD COLUMN last_sync_at DATETIME"))
-                
-                conn.commit()
-            else:
-                # Postgres logic
-                res = conn.execute(text("""
-                    SELECT 1 FROM information_schema.columns 
-                    WHERE table_name='group_meetings' AND column_name='is_cancelled'
-                """)).fetchone()
-                if not res:
-                    print("Adding is_cancelled to group_meetings (Postgres)...")
+                else:
                     conn.execute(text("ALTER TABLE group_meetings ADD COLUMN is_cancelled BOOLEAN DEFAULT FALSE"))
-                
-                # Check for last_sync_status and last_sync_at in calendar_connections
-                res_sync = conn.execute(text("""
-                    SELECT 1 FROM information_schema.columns 
-                    WHERE table_name='calendar_connections' AND column_name='last_sync_status'
-                """)).fetchone()
-                if not res_sync:
-                    print("Adding last_sync_status to calendar_connections (Postgres)...")
+            
+            # Migration for calendar_connections
+            columns = [c['name'] for c in inspector.get_columns('calendar_connections')]
+            if 'last_sync_status' not in columns:
+                print("Adding last_sync_status to calendar_connections...")
+                if engine.url.drivername.startswith('sqlite'):
+                    conn.execute(text("ALTER TABLE calendar_connections ADD COLUMN last_sync_status TEXT"))
+                else:
                     conn.execute(text("ALTER TABLE calendar_connections ADD COLUMN last_sync_status VARCHAR(100)"))
-                
-                res_sync_at = conn.execute(text("""
-                    SELECT 1 FROM information_schema.columns 
-                    WHERE table_name='calendar_connections' AND column_name='last_sync_at'
-                """)).fetchone()
-                if not res_sync_at:
-                    print("Adding last_sync_at to calendar_connections (Postgres)...")
+            
+            if 'last_sync_at' not in columns:
+                print("Adding last_sync_at to calendar_connections...")
+                if engine.url.drivername.startswith('sqlite'):
+                    conn.execute(text("ALTER TABLE calendar_connections ADD COLUMN last_sync_at DATETIME"))
+                else:
                     conn.execute(text("ALTER TABLE calendar_connections ADD COLUMN last_sync_at TIMESTAMP WITH TIME ZONE"))
-                
-                conn.commit()
+        print("Migrations check complete.")
     except Exception as e:
         print(f"Database Initialization Error: {e}")
 
