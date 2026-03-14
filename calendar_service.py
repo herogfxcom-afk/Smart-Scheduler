@@ -209,26 +209,7 @@ def find_common_free_slots(
             local_segment_end = segment_end.astimezone(u_tz)
             local_weekday = local_segment_start.weekday()
 
-            is_working = False
-            u_avail = user_availabilities[i].get(local_weekday, {"start": 9, "end": 18, "enabled": True})
-            
-            if u_avail["enabled"]:
-                h_start = local_segment_start.hour
-                m_start = local_segment_start.minute
-                # For half-hour increments, check if the segment is fully within the working window
-                total_min_start = h_start * 60 + m_start
-                total_min_end = total_min_start + 30
-                
-                avail_start = u_avail["start"] * 60
-                avail_end = u_avail["end"] * 60
-                
-                if total_min_start >= avail_start and total_min_end <= avail_end:
-                    is_working = True
-            
-            if not is_working:
-                continue
-            
-            # Intersection check with busy slots
+            # 1. Busy check (Always check for all users to catch meetings outside working hours)
             is_busy_with_event = False
             current_summary = None
             current_is_external = False
@@ -253,10 +234,31 @@ def find_common_free_slots(
                     current_summary = summary
                     current_is_external = is_ext
                     break
+
+            # 2. Working hours check
+            is_working = False
+            u_avail = user_availabilities[i].get(local_weekday, {"start": 9, "end": 18, "enabled": True})
             
-            active_users_in_segment += 1
+            if u_avail["enabled"]:
+                h_start = local_segment_start.hour
+                m_start = local_segment_start.minute
+                total_min_start = h_start * 60 + m_start
+                total_min_end = total_min_start + 30
+                
+                avail_start = u_avail["start"] * 60
+                avail_end = u_avail["end"] * 60
+                
+                if total_min_start >= avail_start and total_min_end <= avail_end:
+                    is_working = True
+            
+            # Update counts based on both status and working hours
+            if is_working:
+                active_users_in_segment += 1
+                if is_busy_with_event:
+                    working_but_busy_count += 1
+            
+            # Even if NOT working, if the REQUESTING user is busy, we mark it as my_busy
             if is_busy_with_event:
-                working_but_busy_count += 1
                 busy_user_count += 1
                 if user_ids and i < len(user_ids):
                     busy_user_id = user_ids[i]
