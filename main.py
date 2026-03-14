@@ -49,7 +49,7 @@ def parse_ms_datetime(dt_str: str) -> datetime:
 app = FastAPI(title="Smart Scheduler API")
 
 # Initialize Rate Limiter
-limiter = Limiter(key_func=lambda req: req.headers.get("init-data", "anon"))
+limiter = Limiter(key_func=lambda request: request.headers.get("init-data", "anon"))
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -525,10 +525,10 @@ async def cors_debug():
     return {"cors": "enabled", "middleware": "CORSEverywhere"}
 
 @app.get("/auth/me")
-async def get_me(timezone: str = Query(None), current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+async def get_me(user_timezone: str = Query(None, alias="timezone"), current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Returns the current user profile including all connected calendars."""
-    if timezone and current_user.timezone != timezone:
-        current_user.timezone = timezone
+    if user_timezone and current_user.timezone != user_timezone:
+        current_user.timezone = user_timezone
         db.commit()
 
     return {
@@ -754,141 +754,141 @@ async def connect_apple(data: dict, current_user: User = Depends(get_current_use
     
     return {"status": "success"}
 
+async def perform_calendar_sync(current_user: User, db: Session):
+    """Internal helper to sync busy slots from all connected calendars to the database."""
+    total_slots = 0
+    active_connections = [c for c in current_user.connections if c.is_active]
+    print(f"DEBUG: perform_calendar_sync for user {current_user.id} - found {len(active_connections)} active connections")
+    
+    if not active_connections:
+        print(f"DEBUG: No calendars connected for user {current_user.id}")
+        return 0
+
+    # Clear old slots for this user before re-syncing everything, but keep manual ones
+    db.query(BusySlot).filter(BusySlot.user_id == current_user.id, BusySlot.connection_id.isnot(None)).delete()
+    
+    # Track seen slots to prevent UniqueConstraint violations
+    seen_slots = set()
+    manual_slots = db.query(BusySlot).filter(BusySlot.user_id == current_user.id, BusySlot.connection_id.is_(None)).all()
+    for ms in manual_slots:
+        st = ms.start_time.replace(tzinfo=None) if ms.start_time.tzinfo else ms.start_time
+        et = ms.end_time.replace(tzinfo=None) if ms.end_time.tzinfo else ms.end_time
+        seen_slots.add((st, et))
+    
+    # Start looking 2 days in the past so we don't miss manual events created today or yesterday
+    start = datetime.now(datetime.timezone.utc) - timedelta(days=2)
+    end = start + timedelta(days=21) # Sync 3 weeks ahead
+
+    for conn in active_connections:
+        all_busy_slots = []
+        try:
+            # 1. Sync Google
+            if conn.provider == 'google':
+                refresh_token = decrypt_token(conn.auth_data)
+                g_service = GoogleCalendarService(refresh_token)
+                google_busy = await g_service.get_busy_slots(start, end)
+                all_busy_slots.extend(google_busy)
+                
+            # 2. Sync Apple
+            elif conn.provider == 'apple':
+                apple_data = json.loads(decrypt_token(conn.auth_data))
+                a_service = AppleCalendarService(apple_data['email'], apple_data['password'])
+                apple_busy = a_service.get_busy_slots(start, end)
+                all_busy_slots.extend(apple_busy)
+
+            # 3. Sync Outlook (Microsoft Graph)
+            elif conn.provider == 'outlook':
+                from outlook_service import OutlookCalendarService
+                refresh_token = decrypt_token(conn.auth_data)
+                o_service = OutlookCalendarService(refresh_token)
+                outlook_busy = await o_service.get_busy_slots(start, end)
+                all_busy_slots.extend(outlook_busy)
+            
+            # Fetch ACTIVE (non-cancelled) app meetings/invites to skip during sync.
+            known_external_ids = set()
+            meetings = db.query(models.GroupMeeting).filter(
+                models.GroupMeeting.user_id == current_user.id,
+                models.GroupMeeting.is_cancelled == False
+            ).all()
+            for m in meetings:
+                if m.google_event_id: known_external_ids.add(m.google_event_id)
+                if m.outlook_event_id: known_external_ids.add(m.outlook_event_id)
+            invites = db.query(models.MeetingInvite).filter(
+                models.MeetingInvite.user_id == current_user.id,
+                models.MeetingInvite.status.in_(['accepted', 'pending'])
+            ).all()
+            for i in invites:
+                if i.google_event_id: known_external_ids.add(i.google_event_id)
+                if i.outlook_event_id: known_external_ids.add(i.outlook_event_id)
+
+            # Update last sync time
+            conn.last_sync_at = datetime.now(datetime.timezone.utc)
+            conn.last_sync_status = "success"
+            conn.status = "active"
+            conn.last_error = None
+            
+            # Save slots with connection_id
+            for slot in all_busy_slots:
+                try:
+                    ext_id = slot.get('id')
+                    if ext_id and ext_id in known_external_ids:
+                        continue
+
+                    s_out = slot['start'].replace('Z', '+00:00')
+                    e_out = slot['end'].replace('Z', '+00:00')
+                    
+                    st_aware = parse_ms_datetime(s_out).astimezone(pytz.utc)
+                    et_aware = parse_ms_datetime(e_out).astimezone(pytz.utc)
+                    st_naive = st_aware.replace(tzinfo=None)
+                    et_naive = et_aware.replace(tzinfo=None)
+                    
+                    slot_key = (st_naive, et_naive)
+                    if slot_key not in seen_slots:
+                        seen_slots.add(slot_key)
+                        new_slot = BusySlot(
+                            user_id=current_user.id,
+                            connection_id=conn.id,
+                            start_time=st_aware,
+                            end_time=et_aware,
+                            summary=slot.get('summary'),
+                            external_id=ext_id,
+                            is_external=True
+                        )
+                        db.add(new_slot)
+                        total_slots += 1
+                    else:
+                        existing = db.query(BusySlot).filter_by(user_id=current_user.id, start_time=st_aware, end_time=et_aware).first()
+                        if existing and not existing.summary:
+                            existing.summary = slot.get('summary')
+                            existing.external_id = ext_id
+                            existing.is_external = True
+                except Exception as parse_e:
+                    print(f"DEBUG: Error parsing slot {slot}: {parse_e}")
+
+        except Exception as conn_e:
+            print(f"DEBUG: Connection {conn.id} ({conn.provider}) sync failed: {conn_e}")
+            conn.status = "error"
+            conn.last_sync_at = datetime.now(datetime.timezone.utc)
+            err_str = str(conn_e)
+            if "401" in err_str or "unauthorized" in err_str.lower():
+                conn.last_sync_status = "401_unauthorized"
+            elif "403" in err_str or "forbidden" in err_str.lower():
+                conn.last_sync_status = "403_forbidden"
+            else:
+                conn.last_sync_status = "500_api_error"
+            conn.last_error = err_str
+    
+    db.commit()
+    print(f"DEBUG: Successfully synced {total_slots} slots for user {current_user.id}")
+    return total_slots
+
 @app.get("/calendar/sync")
-@limiter.limit("5/minute") # Syncing is heavy, limit it
+@limiter.limit("5/minute")
 async def sync_calendar(request: Request, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Syncs busy slots from all connected calendars to the database."""
     try:
-        total_slots = 0
-        active_connections = [c for c in current_user.connections if c.is_active]
-        
-        if not active_connections:
-             print(f"DEBUG: No calendars connected for user {current_user.id}")
-             raise HTTPException(status_code=400, detail="No calendars connected")
-
-        # Clear old slots for this user before re-syncing everything, but keep manual ones
-        db.query(BusySlot).filter(BusySlot.user_id == current_user.id, BusySlot.connection_id.isnot(None)).delete()
-        
-        # Track seen slots to prevent UniqueConstraint violations
-        seen_slots = set()
-        manual_slots = db.query(BusySlot).filter(BusySlot.user_id == current_user.id, BusySlot.connection_id.is_(None)).all()
-        for ms in manual_slots:
-            st = ms.start_time.replace(tzinfo=None) if ms.start_time.tzinfo else ms.start_time
-            et = ms.end_time.replace(tzinfo=None) if ms.end_time.tzinfo else ms.end_time
-            seen_slots.add((st, et))
-        
-        # Start looking 2 days in the past so we don't miss manual events created today or yesterday
-        start = datetime.now(timezone.utc) - timedelta(days=2)
-        end = start + timedelta(days=21) # Sync 3 weeks ahead
-
-        for conn in active_connections:
-            all_busy_slots = []
-            try:
-                # 1. Sync Google
-                if conn.provider == 'google':
-                    refresh_token = decrypt_token(conn.auth_data)
-                    g_service = GoogleCalendarService(refresh_token)
-                    google_busy = await g_service.get_busy_slots(start, end)
-                    all_busy_slots.extend(google_busy)
-                    
-                # 2. Sync Apple
-                elif conn.provider == 'apple':
-                    apple_data = json.loads(decrypt_token(conn.auth_data))
-                    a_service = AppleCalendarService(apple_data['email'], apple_data['password'])
-                    apple_busy = a_service.get_busy_slots(start, end)
-                    all_busy_slots.extend(apple_busy)
-
-                # 3. Sync Outlook (Microsoft Graph)
-                elif conn.provider == 'outlook':
-                    from outlook_service import OutlookCalendarService
-                    refresh_token = decrypt_token(conn.auth_data)
-                    o_service = OutlookCalendarService(refresh_token)
-                    outlook_busy = await o_service.get_busy_slots(start, end)
-                    all_busy_slots.extend(outlook_busy)
-                
-                # Fetch ACTIVE (non-cancelled) app meetings/invites to skip during sync.
-                # NOTE: We do NOT skip events from cancelled meetings/invites so that if the
-                # user still has those events in their calendar, they still show up as busy.
-                known_external_ids = set()
-                meetings = db.query(models.GroupMeeting).filter(
-                    models.GroupMeeting.user_id == current_user.id,
-                    models.GroupMeeting.is_cancelled == False
-                ).all()
-                for m in meetings:
-                    if m.google_event_id: known_external_ids.add(m.google_event_id)
-                    if m.outlook_event_id: known_external_ids.add(m.outlook_event_id)
-                invites = db.query(models.MeetingInvite).filter(
-                    models.MeetingInvite.user_id == current_user.id,
-                    models.MeetingInvite.status.in_(['accepted', 'pending'])
-                ).all()
-                for i in invites:
-                    if i.google_event_id: known_external_ids.add(i.google_event_id)
-                    if i.outlook_event_id: known_external_ids.add(i.outlook_event_id)
-
-
-                # Update last sync time
-                conn.last_sync_at = datetime.now(timezone.utc)
-                conn.last_sync_status = "success"
-                conn.status = "active"
-                conn.last_error = None
-                
-                # Save slots with connection_id
-                for slot in all_busy_slots:
-                    try:
-                        # Skip if this is a meeting created BY THIS APP (to avoid double sync)
-                        ext_id = slot.get('id')
-                        if ext_id and ext_id in known_external_ids:
-                            continue
-
-                        s_out = slot['start'].replace('Z', '+00:00')
-                        e_out = slot['end'].replace('Z', '+00:00')
-                        
-                        st_aware = parse_ms_datetime(s_out).astimezone(pytz.utc)
-                        et_aware = parse_ms_datetime(e_out).astimezone(pytz.utc)
-                        st_naive = st_aware.replace(tzinfo=None)
-                        et_naive = et_aware.replace(tzinfo=None)
-                        
-                        slot_key = (st_naive, et_naive)
-                        if slot_key not in seen_slots:
-                            seen_slots.add(slot_key)
-                            new_slot = BusySlot(
-                                user_id=current_user.id,
-                                connection_id=conn.id,
-                                start_time=st_aware,
-                                end_time=et_aware,
-                                summary=slot.get('summary'),
-                                external_id=ext_id,
-                                is_external=True
-                            )
-                            db.add(new_slot)
-                            total_slots += 1
-                        else:
-                            # Update existing slot if needed
-                            existing = db.query(BusySlot).filter_by(user_id=current_user.id, start_time=st_aware, end_time=et_aware).first()
-                            if existing and not existing.summary:
-                                existing.summary = slot.get('summary')
-                                existing.external_id = ext_id
-                                existing.is_external = True
-                    except Exception as parse_e:
-                        print(f"DEBUG: Error parsing slot {slot}: {parse_e}")
-
-            except Exception as conn_e:
-                print(f"DEBUG: Connection {conn.id} ({conn.provider}) sync failed: {conn_e}")
-                conn.status = "error"
-                conn.last_sync_at = datetime.now(timezone.utc)
-                err_str = str(conn_e)
-                if "401" in err_str or "unauthorized" in err_str.lower():
-                    conn.last_sync_status = "401_unauthorized"
-                elif "403" in err_str or "forbidden" in err_str.lower():
-                    conn.last_sync_status = "403_forbidden"
-                else:
-                    conn.last_sync_status = "500_api_error"
-                conn.last_error = err_str
-        
-        db.commit()
-        print(f"DEBUG: Successfully synced {total_slots} slots from {len(active_connections)} calendars for user {current_user.id}")
-        return {"status": "success", "synced_count": total_slots, "connections_synced": len(active_connections)}
-        
+        total_slots = await perform_calendar_sync(current_user, db)
+        return {"status": "success", "synced_count": total_slots}
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Sync failed: {str(e)}")
@@ -898,7 +898,7 @@ async def sync_calendar(request: Request, current_user: User = Depends(get_curre
 @app.get("/calendar/busy-slots")
 async def get_busy_slots(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Returns a list of all busy slots for the current user, filtered to recent/upcoming to improve performance."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(datetime.timezone.utc)
     # Filter to 1 day ago and 30 days ahead
     recent_limit = now - timedelta(days=1)
     
@@ -922,10 +922,15 @@ async def get_solo_scheduler(
     current_user: User = Depends(get_current_user), 
     db: Session = Depends(get_db),
     user_tz: str = Query(None, alias="timezone"),
-    tz_offset: float = Query(default=0.0)
+    tz_offset: float = Query(default=0.0),
+    force_sync: bool = Query(default=False)
 ):
     """Returns 7-day busy/free segments for the current user's personal heatmap."""
     try:
+        if force_sync:
+            print(f"DEBUG: Forced sync for user {current_user.id}")
+            await perform_calendar_sync(current_user, db)
+
         # Use timezone from query param, then user profile, finally UTC
         user_tz_name = user_tz or current_user.timezone or "UTC"
         try:
@@ -934,10 +939,10 @@ async def get_solo_scheduler(
             u_tz = ZoneInfo("UTC")
 
         # Range: from user's local midnight (today 00:00 in user TZ) to 7 days later.
-        utc_now = datetime.now(timezone.utc)
+        utc_now = datetime.now(datetime.timezone.utc)
         user_local_now = utc_now.astimezone(u_tz)
         user_local_midnight = user_local_now.replace(hour=0, minute=0, second=0, microsecond=0)
-        start_date = user_local_midnight.astimezone(timezone.utc)
+        start_date = user_local_midnight.astimezone(datetime.timezone.utc)
         end_date = start_date + timedelta(days=7)
         
         # Get user's working hours in the format expected by find_common_free_slots
@@ -1493,7 +1498,7 @@ async def get_free_slots(data: dict, current_user: User = Depends(get_current_us
             return {"free_slots": [], "debug": f"no_users_found_for_ids_{tg_ids}"}
 
         # 3. Fetch all cached busy slots for these users for next 14 days
-        start = datetime.now(timezone.utc)
+        start = datetime.now(datetime.timezone.utc)
         end = start + timedelta(days=30)
         
         busy_slots_per_user = []

@@ -7,6 +7,7 @@ import '../../../utils/calendar_processor.dart';
 import '../../../providers/working_hours_notifier.dart';
 import '../../../models/availability.dart';
 import 'package:provider/provider.dart';
+import '../../../providers/solo_provider.dart';
 
 class HeatmapGrid extends StatefulWidget {
   final List<TimeSlot> slots;
@@ -42,6 +43,13 @@ class _HeatmapGridState extends State<HeatmapGrid> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         context.read<WorkingHoursNotifier>().update(widget.availability);
+        
+        // Trigger a delayed forced refresh to sync external calendars
+        Future.delayed(const Duration(milliseconds: 300), () {
+          if (mounted) {
+            context.read<SoloProvider>().fetchSoloSlots(force: true);
+          }
+        });
       }
     });
   }
@@ -243,20 +251,23 @@ class _HeatmapGridState extends State<HeatmapGrid> {
       ));
     }
 
-    // 2. External Busy Slots (Outlook/Google) with summaries
-    // We add these as foreground appointments to show the title.
+    // 2. External Busy Slots (Outlook/Google)
+    // We add these as foreground appointments to show the title or status.
     for (final slot in widget.slots) {
       if (!slot.isMyBusy) continue;
-      if (slot.summary == null || slot.summary!.isEmpty) continue;
 
       final startUtc = slot.start.isUtc ? slot.start : slot.start.toUtc();
       final endUtc = slot.end.isUtc ? slot.end : slot.end.toUtc();
 
+      final bool hasSummary = slot.summary != null && slot.summary!.isNotEmpty;
+      
       appointments.add(ProcessedAppointment(
         startTime: startUtc,
         endTime: endUtc,
-        color: Colors.blue.withOpacity(0.55), // Slightly darker for contrast
-        subject: slot.summary ?? "Busy",
+        color: hasSummary 
+          ? Colors.blue.withOpacity(0.55) 
+          : Colors.grey.withOpacity(0.4), // Gray for slots without summaries
+        subject: hasSummary ? slot.summary! : "Занято",
         originalSlot: slot,
         isMeeting: false,
         isPast: startUtc.isBefore(now),

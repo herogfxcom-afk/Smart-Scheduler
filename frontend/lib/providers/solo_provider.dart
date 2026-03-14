@@ -27,7 +27,8 @@ class SoloProvider with ChangeNotifier {
     return e.toString();
   }
 
-  Future<void> fetchSoloSlots() async {
+  Future<void> fetchSoloSlots({bool force = false}) async {
+    print("DEBUG: SoloProvider.fetchSoloSlots - force: $force");
     try {
       _isLoading = true;
       _error = null;
@@ -35,7 +36,7 @@ class SoloProvider with ChangeNotifier {
 
       final tzOffset = getUserTzOffset();
       final timezone = getUserTimezone();
-      final data = await _apiService.getSoloSlots(tzOffset, timezone);
+      final data = await _apiService.getSoloSlots(tzOffset, timezone, force: force);
       _slots = data.map((s) => TimeSlot.fromJson(s)).toList();
     } catch (e) {
       _error = _parseError(e);
