@@ -9,7 +9,8 @@ class CalendarConnection {
   final String? email;
   final String status;
   final bool isActive;
-  final DateTime? lastSync;
+  final DateTime? lastSyncAt;
+  final String? lastSyncStatus;
 
   CalendarConnection({
     this.id,
@@ -17,7 +18,8 @@ class CalendarConnection {
     this.email,
     required this.status,
     this.isActive = true,
-    this.lastSync,
+    this.lastSyncAt,
+    this.lastSyncStatus,
   });
 
   factory CalendarConnection.fromJson(Map<String, dynamic> json) => _$CalendarConnectionFromJson(json);

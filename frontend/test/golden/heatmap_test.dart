@@ -5,6 +5,8 @@ import 'package:mocktail/mocktail.dart';
 import 'package:provider/provider.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest.dart' as tz;
+import 'package:flutter_timezone/flutter_timezone.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:smart_scheduler_frontend/screens/scheduler/widgets/heatmap_grid.dart';
 import 'package:smart_scheduler_frontend/models/time_slot.dart';
 import 'package:smart_scheduler_frontend/models/meeting.dart';
@@ -14,10 +16,13 @@ import 'package:smart_scheduler_frontend/providers/meeting_provider.dart';
 import 'package:smart_scheduler_frontend/core/telegram/telegram_service.dart';
 import 'package:smart_scheduler_frontend/utils/calendar_processor.dart';
 import 'package:smart_scheduler_frontend/providers/working_hours_notifier.dart';
+import 'package:smart_scheduler_frontend/providers/language_provider.dart';
 import '../mock_classes.dart';
 
 void main() {
   setUpAll(() async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    SharedPreferences.setMockInitialValues({});
     await loadAppFonts();
     tz.initializeTimeZones();
   });
@@ -26,11 +31,13 @@ void main() {
     late MockTelegramService mockTelegram;
     late MockAvailabilityProvider mockAvailability;
     late WorkingHoursNotifier workingHoursNotifier;
+    late LanguageProvider languageProvider;
 
     setUp(() {
       mockTelegram = MockTelegramService();
       mockAvailability = MockAvailabilityProvider();
       workingHoursNotifier = WorkingHoursNotifier();
+      languageProvider = LanguageProvider(); // Real provider is fine as it uses default 'ru' or can be set
 
       when(() => mockTelegram.getUserId()).thenReturn('user_123');
       when(() => mockAvailability.availability).thenReturn(mockMoscowAvailability());
@@ -367,5 +374,87 @@ void main() {
       await tester.pumpDeviceBuilder(builder);
       await screenMatchesGolden(tester, 'heatmap_dst_london');
     });
+
+    testGoldens('Localization & Accessibility - Russian Overflows', (tester) async {
+      tz.setLocalLocation(tz.getLocation('Europe/Moscow'));
+      final baseDate = DateTime(2026, 3, 13, 0, 0, 0);
+      
+      // Force Russian
+      await languageProvider.setLocale('ru');
+
+      final builder = DeviceBuilder()
+        ..overrideDevicesForAllScenarios(devices: [
+          const Device(name: 'russian_ui_overflow_check', size: Size(375, 812)), // iPhone 13-ish
+        ])
+        ..addScenario(
+          name: 'russian_localization',
+          widget: MultiProvider(
+            providers: [
+              Provider<TelegramService>.value(value: mockTelegram),
+              ChangeNotifierProvider<AvailabilityProvider>.value(value: mockAvailability),
+              ChangeNotifierProvider<WorkingHoursNotifier>.value(value: workingHoursNotifier),
+              ChangeNotifierProvider<LanguageProvider>.value(value: languageProvider),
+            ],
+            child: Material(
+              child: HeatmapGrid(
+                slots: mockMoscowSlots(),
+                selectedDay: baseDate,
+                onSlotSelected: (_) {},
+                availability: mockMoscowAvailability(),
+                myUserId: 'user_123',
+                calendarType: CalendarType.group,
+              ),
+            ),
+          ),
+        );
+
+      await tester.pumpDeviceBuilder(builder);
+      await screenMatchesGolden(tester, 'heatmap_localization_ru');
+    });
+
+    testGoldens('Responsive Layout - Small Devices', (tester) async {
+      tz.setLocalLocation(tz.getLocation('Europe/Moscow'));
+      final baseDate = DateTime(2026, 3, 13, 0, 0, 0);
+
+      final builder = DeviceBuilder()
+        ..overrideDevicesForAllScenarios(devices: [
+          const Device(name: 'small_screen_se', size: Size(320, 568)), // iPhone SE
+        ])
+        ..addScenario(
+          name: 'narrow_screen_grid',
+          widget: MultiProvider(
+            providers: [
+              Provider<TelegramService>.value(value: mockTelegram),
+              ChangeNotifierProvider<AvailabilityProvider>.value(value: mockAvailability),
+              ChangeNotifierProvider<WorkingHoursNotifier>.value(value: workingHoursNotifier),
+              ChangeNotifierProvider<LanguageProvider>(create: (_) => LanguageProvider()),
+            ],
+            child: Material(
+              child: HeatmapGrid(
+                slots: mockMoscowSlots(),
+                selectedDay: baseDate,
+                onSlotSelected: (_) {},
+                availability: mockMoscowAvailability(),
+                myUserId: 'user_123',
+                calendarType: CalendarType.group,
+              ),
+            ),
+          ),
+        );
+
+      await tester.pumpDeviceBuilder(builder);
+      await screenMatchesGolden(tester, 'heatmap_responsive_small');
+    });
   });
+}
+
+List<TimeSlot> mockMoscowSlots() {
+  return [
+    TimeSlot(
+      start: DateTime.parse('2026-03-13T13:00:00Z'),
+      end: DateTime.parse('2026-03-13T15:00:00Z'),
+      type: 'match',
+      availability: 1.0,
+    ),
+  ];
 }

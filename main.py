@@ -82,6 +82,12 @@ def migrate_db():
                     conn.execute(text("ALTER TABLE calendar_connections ADD COLUMN last_sync_at DATETIME"))
                 
                 conn.commit()
+            else:
+                # Postgres logic
+                res = conn.execute(text("""
+                    SELECT 1 FROM information_schema.columns 
+                    WHERE table_name='group_meetings' AND column_name='is_cancelled'
+                """)).fetchone()
                 if not res:
                     print("Adding is_cancelled to group_meetings (Postgres)...")
                     conn.execute(text("ALTER TABLE group_meetings ADD COLUMN is_cancelled BOOLEAN DEFAULT FALSE"))
