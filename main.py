@@ -378,20 +378,29 @@ async def telegram_webhook(
             }
         }]
         
-        async with httpx.AsyncClient(timeout=5) as client:
-            payload = {
-                "inline_query_id": query_id,
-                "results": results,
-                "cache_time": 300,
-                "button": {
-                    "text": "📊 Открыть Magic Sync",
-                    "web_app": {
-                        "url": f"{FRONTEND_URL}/?startapp=inline_query"
+        try:
+            async with httpx.AsyncClient(timeout=5) as client:
+                payload = {
+                    "inline_query_id": query_id,
+                    "results": results,
+                    "cache_time": 300,
+                    "is_personal": True,  # Added for better behavior
+                    "button": {
+                        "text": "📊 Открыть Magic Sync",
+                        "web_app": {
+                            "url": f"{FRONTEND_URL}/?startapp=inline_query"
+                        }
                     }
                 }
-            }
-            resp = (await client.post(f"https://api.telegram.org/bot{bot_token}/answerInlineQuery", json=payload)).json()
-            print(f"DEBUG: answerInlineQuery response: {resp}")
+                resp = await client.post(f"https://api.telegram.org/bot{bot_token}/answerInlineQuery", json=payload)
+                resp_data = resp.json()
+                if not resp_data.get("ok"):
+                    logger.error(f"🔴 answerInlineQuery failed: {resp_data}")
+                else:
+                    logger.info("🟢 answerInlineQuery success")
+        except Exception as e:
+            logger.error(f"🔴 answerInlineQuery exception: {e}")
+            
         return {"ok": True}
 
     # 4. Handle Callback Queries (Inline Buttons)
