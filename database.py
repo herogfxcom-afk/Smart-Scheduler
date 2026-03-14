@@ -21,7 +21,12 @@ if not DATABASE_URL:
 engine = create_engine(
     DATABASE_URL,
     # Small optimization for SQLite
-    connect_args={"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
+    connect_args={"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {},
+    # Stability for Neon/Serverless Postgres (handles SSL connection closed errors)
+    pool_pre_ping=True,
+    pool_recycle=300,
+    max_overflow=20,
+    pool_size=10
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
