@@ -66,4 +66,16 @@ class AppleCalendarService:
             summary=summary,
             location=location
         )
-        return event
+        # Return the URL as the unique ID for this event in CalDAV
+        return str(event.url)
+
+    def delete_event(self, event_url: str):
+        """Deletes an event from iCloud via CalDAV using its URL."""
+        try:
+            event = self.client.event_by_url(event_url)
+            event.delete()
+            print(f"DEBUG APPLE: Deleted event at {event_url}")
+            return True
+        except Exception as e:
+            print(f"DEBUG APPLE: Failed to delete event at {event_url}: {e}")
+            return False

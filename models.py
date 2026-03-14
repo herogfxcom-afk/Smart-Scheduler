@@ -83,6 +83,7 @@ class GroupMeeting(Base):
     idempotency_key = Column(String(255), unique=True)
     google_event_id = Column(String(255), nullable=True)
     outlook_event_id = Column(String(255), nullable=True)
+    apple_event_id = Column(String(255), nullable=True)
     
     group = relationship("Group", back_populates="meetings")
     creator = relationship("User", back_populates="created_meetings")
@@ -129,6 +130,7 @@ class MeetingInvite(Base):
     status = Column(String(50), default="pending")  # 'pending', 'accepted', 'declined'
     google_event_id = Column(String(255), nullable=True) # Each participant might have their own event
     outlook_event_id = Column(String(255), nullable=True)
+    apple_event_id = Column(String(255), nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.datetime.now(datetime.timezone.utc))
 
     meeting = relationship("GroupMeeting", back_populates="invites")

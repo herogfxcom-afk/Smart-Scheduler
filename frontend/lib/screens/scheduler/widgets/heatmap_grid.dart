@@ -144,10 +144,14 @@ class _HeatmapGridState extends State<HeatmapGrid> {
               final color = details.region.color ?? Colors.green;
               // Add a border to almost all regions to keep them contained within grid cells
               final bool needsBorder = color.value != Colors.transparent.value;
+              final bool isBusySegment = color.value == Colors.blue.withOpacity(0.4).value || 
+                                       color.value == Colors.orange.withOpacity(0.3).value;
               
               return Container(
+                margin: isBusySegment ? const EdgeInsets.all(1.0) : null,
                 decoration: BoxDecoration(
                   color: color,
+                  borderRadius: isBusySegment ? BorderRadius.circular(4) : null,
                   border: needsBorder 
                     ? Border.all(color: Colors.white.withOpacity(0.05), width: 0.5)
                     : null,

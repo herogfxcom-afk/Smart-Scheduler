@@ -1008,6 +1008,13 @@ async def respond_to_invite(invite_id: int, data: dict, current_user: User = Dep
                     o_service = OutlookCalendarService(decrypt_token(conn.auth_data))
                     await o_service.delete_event(invite.outlook_event_id)
                     invite.outlook_event_id = None
+                elif conn.provider == 'apple' and invite.apple_event_id:
+                    from caldav_service import AppleCalendarService
+                    import json
+                    apple_data = json.loads(decrypt_token(conn.auth_data))
+                    a_service = AppleCalendarService(apple_data['email'], apple_data['password'])
+                    a_service.delete_event(invite.apple_event_id)
+                    invite.apple_event_id = None
             except Exception as e:
                 print(f"DEBUG: Failed to cleanup declined meeting on {conn.provider}: {e}")
 
@@ -1051,78 +1058,145 @@ async def respond_to_invite(invite_id: int, data: dict, current_user: User = Dep
                     invite.outlook_event_id = o_event.get('id')
                 except Exception as e:
                     print(f"DEBUG: Failed to sync accepted meeting to Outlook: {e}")
+            elif conn.provider == 'apple' and not invite.apple_event_id:
+                try:
+                    from caldav_service import AppleCalendarService
+                    from encryption import decrypt_token
+                    import json
+                    apple_data = json.loads(decrypt_token(conn.auth_data))
+                    a_service = AppleCalendarService(apple_data['email'], apple_data['password'])
+                    # Store the URL as the unique ID
+                    apple_event_id = a_service.create_event(
+                        meeting.title, 
+                        meeting.start_time, 
+                        meeting.end_time,
+                        location=meeting.location
+                    )
+                    invite.apple_event_id = str(apple_event_id)
+                except Exception as e:
+                    print(f"DEBUG: Failed to sync accepted meeting to Apple: {e}")
             
     db.commit()
     return {"status": "success"}
 
 @app.delete("/api/meetings/{meeting_id}")
 async def delete_meeting(meeting_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Marks a meeting as cancelled (if creator) or removes invite (if participant)."""
+    """Handles both soft-cancellation and final removal of meetings."""
     meeting = db.query(models.GroupMeeting).filter(models.GroupMeeting.id == meeting_id).first()
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
         
     is_creator = (meeting.user_id == current_user.id)
-    
-    if is_creator and not meeting.is_cancelled:
-        # 1. SOFT CANCEL: Mark as cancelled but keep for participants to see
-        meeting.is_cancelled = True
-        
-        # Cleanup creator's own external calendars immediately
-        google_conn = next((c for c in current_user.connections if c.provider == 'google' and c.is_active), None)
-        if meeting.google_event_id and google_conn:
-            try:
-                from encryption import decrypt_token
-                from calendar_service import GoogleCalendarService
-                g_service = GoogleCalendarService(decrypt_token(google_conn.auth_data))
-                await g_service.delete_event(meeting.google_event_id)
-                meeting.google_event_id = None
-            except Exception as e: print(f"DEBUG: Creator Google cleanup fail: {e}")
-
-        outlook_conn = next((c for c in current_user.connections if c.provider == 'outlook' and c.is_active), None)
-        if meeting.outlook_event_id and outlook_conn:
-            try:
-                from encryption import decrypt_token
-                from outlook_service import OutlookCalendarService
-                o_service = OutlookCalendarService(decrypt_token(outlook_conn.auth_data))
-                await o_service.delete_event(meeting.outlook_event_id)
-                meeting.outlook_event_id = None
-            except Exception as e: print(f"DEBUG: Creator Outlook cleanup fail: {e}")
-
-        db.commit()
-        return {"status": "cancelled"}
-    
-    # 2. PARTICIPANT DELETE or CREATOR FINAL DELETE
     invite = db.query(models.MeetingInvite).filter(
-        models.MeetingInvite.meeting_id == meeting_id, 
+        models.MeetingInvite.meeting_id == meeting_id,
         models.MeetingInvite.user_id == current_user.id
     ).first()
-    
+
+    # Case 1: Creator is cancelling or deleting
+    if is_creator:
+        if not meeting.is_cancelled:
+            # First time: Soft-cancel for everyone
+            meeting.is_cancelled = True
+            db.query(models.MeetingInvite).filter(models.MeetingInvite.meeting_id == meeting_id).update({"status": "cancelled"})
+            
+            # Creator's own external cleanup
+            for conn in current_user.connections:
+                if not conn.is_active: continue
+                try:
+                    from encryption import decrypt_token
+                    refresh_token = decrypt_token(conn.auth_data)
+                    
+                    # 1. Cleanup via Meeting ID
+                    if conn.provider == 'google' and meeting.google_event_id:
+                        from calendar_service import GoogleCalendarService
+                        g_service = GoogleCalendarService(refresh_token)
+                        await g_service.delete_event(meeting.google_event_id)
+                        meeting.google_event_id = None
+                    elif conn.provider == 'outlook' and meeting.outlook_event_id:
+                        from outlook_service import OutlookCalendarService
+                        o_service = OutlookCalendarService(refresh_token)
+                        await o_service.delete_event(meeting.outlook_event_id)
+                        meeting.outlook_event_id = None
+                        
+                    # 2. ALSO Cleanup via Invite ID (creator also has an invite)
+                    if invite:
+                        if conn.provider == 'google' and invite.google_event_id:
+                            from calendar_service import GoogleCalendarService
+                            g_service = GoogleCalendarService(refresh_token)
+                            await g_service.delete_event(invite.google_event_id)
+                            invite.google_event_id = None
+                        elif conn.provider == 'outlook' and invite.outlook_event_id:
+                            from outlook_service import OutlookCalendarService
+                            o_service = OutlookCalendarService(refresh_token)
+                            await o_service.delete_event(invite.outlook_event_id)
+                            invite.outlook_event_id = None
+                    
+                    # 3. Apple Cleanup
+                    if conn.provider == 'apple':
+                        from caldav_service import AppleCalendarService
+                        import json
+                        apple_data = json.loads(decrypt_token(conn.auth_data))
+                        a_service = AppleCalendarService(apple_data['email'], apple_data['password'])
+                        if meeting.apple_event_id:
+                            a_service.delete_event(meeting.apple_event_id)
+                            meeting.apple_event_id = None
+                        if invite and invite.apple_event_id:
+                            a_service.delete_event(invite.apple_event_id)
+                            invite.apple_event_id = None
+                except Exception as e: 
+                    print(f"DEBUG: Creator cleanup fail on {conn.provider}: {e}")
+            
+            db.commit()
+            return {"status": "cancelled", "message": "Meeting cancelled for all"}
+        else:
+            # Second time (or confirm): Hard delete for everyone
+            db.delete(meeting)
+            db.commit()
+            return {"status": "deleted", "message": "Meeting fully removed"}
+
+    # Case 2: Participant is leaving or confirming removal
     if invite:
-        # Cleanup this user's external calendars
-        for conn in current_user.connections:
-            if not conn.is_active: continue
-            try:
-                from encryption import decrypt_token
-                if conn.provider == 'google' and invite.google_event_id:
-                    from calendar_service import GoogleCalendarService
-                    g_service = GoogleCalendarService(decrypt_token(conn.auth_data))
-                    await g_service.delete_event(invite.google_event_id)
-                elif conn.provider == 'outlook' and invite.outlook_event_id:
-                    from outlook_service import OutlookCalendarService
-                    o_service = OutlookCalendarService(decrypt_token(conn.auth_data))
-                    await o_service.delete_event(invite.outlook_event_id)
-            except Exception as e: print(f"DEBUG: Participant external cleanup fail: {e}")
-        
-        db.delete(invite)
-        
-    # If no invites left and it's cancelled, or if creator deletes again, hard delete
-    remaining_invites = db.query(models.MeetingInvite).filter(models.MeetingInvite.meeting_id == meeting_id).count()
-    if remaining_invites == 0 or is_creator:
-        db.delete(meeting)
-        
-    db.commit()
-    return {"status": "success"}
+        if invite.status != "cancelled":
+            # First time: Participant-side soft cancel
+            invite.status = "cancelled"
+            db.commit()
+            return {"status": "cancelled", "message": "You left the meeting"}
+        else:
+            # Second time (confirm): Final removal and external cleanup
+            for conn in current_user.connections:
+                if not conn.is_active: continue
+                try:
+                    from encryption import decrypt_token
+                    refresh_token = decrypt_token(conn.auth_data)
+                    if conn.provider == 'google' and invite.google_event_id:
+                        from calendar_service import GoogleCalendarService
+                        g_service = GoogleCalendarService(refresh_token)
+                        await g_service.delete_event(invite.google_event_id)
+                    elif conn.provider == 'outlook' and invite.outlook_event_id:
+                        from outlook_service import OutlookCalendarService
+                        o_service = OutlookCalendarService(refresh_token)
+                        await o_service.delete_event(invite.outlook_event_id)
+                    elif conn.provider == 'apple' and invite.apple_event_id:
+                        from caldav_service import AppleCalendarService
+                        import json
+                        apple_data = json.loads(decrypt_token(conn.auth_data))
+                        a_service = AppleCalendarService(apple_data['email'], apple_data['password'])
+                        a_service.delete_event(invite.apple_event_id)
+                except Exception as e:
+                    print(f"DEBUG: Participant cleanup fail on {conn.provider}: {e}")
+                        await g_service.delete_event(invite.google_event_id)
+                    elif conn.provider == 'outlook' and invite.outlook_event_id:
+                        from outlook_service import OutlookCalendarService
+                        o_service = OutlookCalendarService(refresh_token)
+                        await o_service.delete_event(invite.outlook_event_id)
+                except Exception as e:
+                    print(f"DEBUG: Participant cleanup fail on {conn.provider}: {e}")
+            
+            db.delete(invite)
+            db.commit()
+            return {"status": "deleted", "message": "Meeting removed from your list"}
+
+    return {"status": "error", "message": "Nothing to delete"}
 
 @app.post("/api/meetings/{meeting_id}/confirm-cancel")
 async def confirm_cancel_meeting(meeting_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -1398,7 +1472,9 @@ async def create_meeting(data: dict, background_tasks: BackgroundTasks, current_
             try:
                 apple_data = json.loads(decrypt_token(conn.auth_data))
                 a_service = AppleCalendarService(apple_data['email'], apple_data['password'])
-                a_service.create_event(summary, start_time, end_time, location)
+                apple_event_id = a_service.create_event(summary, start_time, end_time, location)
+                # Store the event URL as ID
+                apple_event_id = str(apple_event_id)
                 results[f"apple_{conn.id}"] = "success"
             except Exception as e:
                 results[f"apple_{conn.id}"] = f"error: {str(e)}"
@@ -1448,7 +1524,8 @@ async def create_meeting(data: dict, background_tasks: BackgroundTasks, current_
             location=location,
             idempotency_key=idempotency_key,
             google_event_id=google_event_id,
-            outlook_event_id=outlook_event_id
+            outlook_event_id=outlook_event_id,
+            apple_event_id=apple_event_id
         )
         db.add(new_meeting)
         db.flush() # Get new_meeting.id without full commit
@@ -1472,7 +1549,9 @@ async def create_meeting(data: dict, background_tasks: BackgroundTasks, current_
             meeting_id=new_meeting.id,
             user_id=current_user.id,
             status="accepted",
-            google_event_id=google_event_id
+            google_event_id=google_event_id,
+            outlook_event_id=outlook_event_id,
+            apple_event_id=apple_event_id
         )
         db.add(creator_invite)
         
