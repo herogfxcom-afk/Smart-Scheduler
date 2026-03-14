@@ -14,6 +14,7 @@ import '../../providers/scheduler_provider.dart';
 import '../../models/meeting.dart';
 import '../../utils/timezone_utils.dart';
 import '../../utils/ics_exporter.dart';
+import 'package:intl/intl.dart';
 import 'widgets/solo_dashboard.dart'; // Added
 
 class HomeScreen extends StatefulWidget {

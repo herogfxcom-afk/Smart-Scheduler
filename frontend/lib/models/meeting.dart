@@ -30,6 +30,7 @@ class Meeting {
   final int? inviteId;
   final bool isCreator;
   final bool isCancelled;
+  final String? provider; // 'app', 'google', 'outlook'
 
   Meeting({
     required this.id,
@@ -43,6 +44,7 @@ class Meeting {
     this.inviteId,
     required this.isCreator,
     this.isCancelled = false,
+    this.provider = 'app',
   });
 
   factory Meeting.fromJson(Map<String, dynamic> json) {
@@ -58,6 +60,7 @@ class Meeting {
       inviteId: json['invite_id'] as int?,
       isCreator: json['is_creator'] as bool? ?? false,
       isCancelled: json['is_cancelled'] as bool? ?? false,
+      provider: json['provider'] as String? ?? 'app',
     );
   }
 
@@ -74,6 +77,7 @@ class Meeting {
       'invite_id': inviteId,
       'is_creator': isCreator,
       'is_cancelled': isCancelled,
+      'provider': provider,
     };
   }
 }
