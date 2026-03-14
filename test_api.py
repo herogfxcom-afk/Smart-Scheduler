@@ -148,6 +148,29 @@ async def test_dst_transition():
         assert response.json()["detail"] == "outside_working_hours"
         report.add("DST: Correctly identifies night time before shift", True)
 
+        # 3. Non-existent hour test (The Gap)
+        # In London: 01:00 AM -> 02:00 AM. 
+        # If we send a time that *would* be 01:30 AM local, but we use a fixed offset.
+        # 00:30 UTC + 1.0 Offset = 01:30 Local (Non-existent)
+        missing_start = "2026-03-29T00:30:00.000Z"
+        missing_end = "2026-03-29T00:45:00.000Z"
+        
+        payload_missing = {
+            "title": "DST Missing Hour Test",
+            "start": missing_start,
+            "end": missing_end,
+            "attendee_emails": [],
+            "idempotency_key": f"dst_gap_{int(time.time())}",
+            "tz_offset": 1.0 # If frontend already switched to BST offset prematurely or user forced it
+        }
+        
+        # System treats it as 01:30 local. Working hours are 09-18.
+        # It should still be REJECTED as outside working hours (01:30 < 09:00).
+        response = client.post("/meeting/create", headers={"init-data": valid_init_data}, json=payload_missing)
+        assert response.status_code == 400
+        assert response.json()["detail"] == "outside_working_hours"
+        report.add("DST: Non-existent hour (gap) handled by working hours check", True)
+
     except Exception as e:
         report.add("DST: Transition verify", False, str(e))
 
