@@ -100,6 +100,57 @@ def test_apple_connect():
     except Exception as e:
         report.add("Auth: Apple Calendar connection", False, str(e))
 
+async def test_dst_transition():
+    """Verifies that meeting creation works during DST transition (March 29, 2026)"""
+    try:
+        valid_init_data = generate_mock_init_data(os.environ["BOT_TOKEN"])
+        
+        # 1. Europe/London DST: 2026-03-29 01:00 AM -> 02:00 AM
+        # Meeting at 12:00 PM local time
+        # In London: 
+        # Before 1 AM: UTC+0
+        # After 1 AM: UTC+1
+        # So 12:00 PM local is 11:00 AM UTC
+        
+        start_dst = "2026-03-29T11:00:00.000Z" # 12:00 local
+        end_dst = "2026-03-29T12:00:00.000Z"   # 13:00 local
+        
+        payload = {
+            "title": "DST London Test",
+            "start": start_dst,
+            "end": end_dst,
+            "attendee_emails": [],
+            "idempotency_key": f"dst_test_{int(time.time())}",
+            "tz_offset": 1.0 # London is UTC+1 after transition
+        }
+        
+        response = client.post("/meeting/create", headers={"init-data": valid_init_data}, json=payload)
+        assert response.status_code == 200
+        report.add("DST: London Transition (After shift)", True)
+        
+        # 2. Test boundary: Just before shift (e.g. 00:30 AM local = 00:30 AM UTC)
+        start_before = "2026-03-29T00:30:00.000Z"
+        end_before = "2026-03-29T00:45:00.000Z"
+        
+        payload_before = {
+            "title": "DST Before shift",
+            "start": start_before,
+            "end": end_before,
+            "attendee_emails": [],
+            "idempotency_key": f"dst_before_{int(time.time())}",
+            "tz_offset": 0.0 # London is UTC+0 before transition
+        }
+        
+        # This might fail working hours check if they are e.g. 09-18
+        # Since it's 00:30 AM, it SHOULD be outside working hours.
+        response = client.post("/meeting/create", headers={"init-data": valid_init_data}, json=payload_before)
+        assert response.status_code == 400
+        assert response.json()["detail"] == "outside_working_hours"
+        report.add("DST: Correctly identifies night time before shift", True)
+
+    except Exception as e:
+        report.add("DST: Transition verify", False, str(e))
+
 async def test_meeting_lifecycle():
     """Tests full cycle: Create (mocked sync) -> Check DB -> Delete -> Check Cleanup"""
     try:
@@ -193,7 +244,11 @@ if __name__ == "__main__":
     test_auth_me()
     test_apple_connect()
     
-    # Run async lifecycle test using modern asyncio.run()
-    asyncio.run(test_meeting_lifecycle())
+    # Run async tests
+    async def run_async_tests():
+        await test_dst_transition()
+        await test_meeting_lifecycle()
+        
+    asyncio.run(run_async_tests())
     
     report.show_summary()
