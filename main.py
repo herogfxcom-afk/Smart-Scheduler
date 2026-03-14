@@ -767,8 +767,17 @@ async def perform_calendar_sync(current_user: User, db: Session):
         print(f"DEBUG: No calendars connected for user {current_user.id}")
         return 0
 
+    # Prevents concurrent syncs for the same user causing UniqueViolation or Deadlock
+    try:
+        db.query(User).filter(User.id == current_user.id).with_for_update(nowait=True).first()
+    except Exception:
+        # If already locked, another sync is in progress. Skip this one to avoid deadlock/errors.
+        print(f"DEBUG: Sync already in progress for user {current_user.id}, skipping.")
+        return 0
+
     # Clear old slots for this user before re-syncing everything, but keep manual ones
     db.query(BusySlot).filter(BusySlot.user_id == current_user.id, BusySlot.connection_id.isnot(None)).delete()
+    db.flush() # Ensure delete is sent before gather
     
     # Track seen slots to prevent UniqueConstraint violations
     seen_slots = set()
@@ -877,7 +886,13 @@ async def perform_calendar_sync(current_user: User, db: Session):
             except Exception as parse_e:
                 print(f"DEBUG: Error parsing slot {slot}: {parse_e}")
 
-    db.commit()
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        print(f"DEBUG: Final commit for user {current_user.id} failed: {e}")
+        return 0
+
     return total_slots
 
 @app.get("/calendar/sync")
@@ -927,7 +942,11 @@ async def get_solo_scheduler(
     try:
         if force_sync:
             print(f"DEBUG: Forced sync for user {current_user.id}")
-            await perform_calendar_sync(current_user, db)
+            try:
+                await perform_calendar_sync(current_user, db)
+            except Exception as sync_e:
+                print(f"DEBUG: perform_calendar_sync failed top-level: {sync_e}")
+                # Don't crash the whole heatmap if sync fails, just log it.
 
         # Use timezone from query param, then user profile, finally UTC
         user_tz_name = user_tz or current_user.timezone or "UTC"
