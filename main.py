@@ -73,16 +73,37 @@ def migrate_db():
                 if 'is_cancelled' not in [i[1] for i in info]:
                     print("Adding is_cancelled to group_meetings (SQLite)...")
                     conn.execute(text("ALTER TABLE group_meetings ADD COLUMN is_cancelled BOOLEAN DEFAULT 0"))
-                    conn.commit()
-            else:
-                res = conn.execute(text("""
-                    SELECT 1 FROM information_schema.columns 
-                    WHERE table_name='group_meetings' AND column_name='is_cancelled'
-                """)).fetchone()
+                
+                info_conn = conn.execute(text("PRAGMA table_info(calendar_connections)")).fetchall()
+                cols = [i[1] for i in info_conn]
+                if 'last_sync_status' not in cols:
+                    conn.execute(text("ALTER TABLE calendar_connections ADD COLUMN last_sync_status TEXT"))
+                if 'last_sync_at' not in cols:
+                    conn.execute(text("ALTER TABLE calendar_connections ADD COLUMN last_sync_at DATETIME"))
+                
+                conn.commit()
                 if not res:
                     print("Adding is_cancelled to group_meetings (Postgres)...")
                     conn.execute(text("ALTER TABLE group_meetings ADD COLUMN is_cancelled BOOLEAN DEFAULT FALSE"))
-                    conn.commit()
+                
+                # Check for last_sync_status and last_sync_at in calendar_connections
+                res_sync = conn.execute(text("""
+                    SELECT 1 FROM information_schema.columns 
+                    WHERE table_name='calendar_connections' AND column_name='last_sync_status'
+                """)).fetchone()
+                if not res_sync:
+                    print("Adding last_sync_status to calendar_connections (Postgres)...")
+                    conn.execute(text("ALTER TABLE calendar_connections ADD COLUMN last_sync_status VARCHAR(100)"))
+                
+                res_sync_at = conn.execute(text("""
+                    SELECT 1 FROM information_schema.columns 
+                    WHERE table_name='calendar_connections' AND column_name='last_sync_at'
+                """)).fetchone()
+                if not res_sync_at:
+                    print("Adding last_sync_at to calendar_connections (Postgres)...")
+                    conn.execute(text("ALTER TABLE calendar_connections ADD COLUMN last_sync_at TIMESTAMP WITH TIME ZONE"))
+                
+                conn.commit()
     except Exception as e:
         print(f"Database Initialization Error: {e}")
 
@@ -444,8 +465,9 @@ async def get_me(timezone: str = Query(None), current_user: User = Depends(get_c
                 "provider": c.provider,
                 "email": c.email,
                 "status": c.status,
+                "last_sync_status": c.last_sync_status,
                 "is_active": bool(c.is_active),
-                "last_sync": c.last_sync.isoformat().replace('+00:00', '') + "Z" if c.last_sync else None
+                "last_sync_at": c.last_sync_at.isoformat().replace('+00:00', '') + "Z" if c.last_sync_at else None
             } for c in current_user.connections
         ]
     }
@@ -704,7 +726,8 @@ async def sync_calendar(request: Request, current_user: User = Depends(get_curre
                     all_busy_slots.extend(outlook_busy)
                 
                 # Update last sync time
-                conn.last_sync = datetime.now(timezone.utc)
+                conn.last_sync_at = datetime.now(timezone.utc)
+                conn.last_sync_status = "success"
                 conn.status = "active"
                 conn.last_error = None
                 
@@ -736,7 +759,15 @@ async def sync_calendar(request: Request, current_user: User = Depends(get_curre
             except Exception as conn_e:
                 print(f"DEBUG: Connection {conn.id} ({conn.provider}) sync failed: {conn_e}")
                 conn.status = "error"
-                conn.last_error = str(conn_e)
+                conn.last_sync_at = datetime.now(timezone.utc)
+                err_str = str(conn_e)
+                if "401" in err_str or "unauthorized" in err_str.lower():
+                    conn.last_sync_status = "401_unauthorized"
+                elif "403" in err_str or "forbidden" in err_str.lower():
+                    conn.last_sync_status = "403_forbidden"
+                else:
+                    conn.last_sync_status = "500_api_error"
+                conn.last_error = err_str
         
         db.commit()
         print(f"DEBUG: Successfully synced {total_slots} slots from {len(active_connections)} calendars for user {current_user.id}")
@@ -1458,8 +1489,13 @@ async def create_meeting(data: dict, background_tasks: BackgroundTasks, current_
                 # Store the last successful google event ID (or we might need to store multiple in the future)
                 google_event_id = g_event.get('id')
                 results[f"google_{conn.id}"] = "success"
+                conn.last_sync_status = "success"
+                conn.last_sync_at = datetime.now(timezone.utc)
             except Exception as e:
                 results[f"google_{conn.id}"] = f"error: {str(e)}"
+                conn.last_sync_at = datetime.now(timezone.utc)
+                if "401" in str(e): conn.last_sync_status = "401_unauthorized"
+                else: conn.last_sync_status = "500_api_error"
                 
         # 2. Apple
         elif conn.provider == 'apple':
@@ -1470,8 +1506,12 @@ async def create_meeting(data: dict, background_tasks: BackgroundTasks, current_
                 # Store the event URL as ID
                 apple_event_id = str(apple_event_id)
                 results[f"apple_{conn.id}"] = "success"
+                conn.last_sync_status = "success"
+                conn.last_sync_at = datetime.now(timezone.utc)
             except Exception as e:
                 results[f"apple_{conn.id}"] = f"error: {str(e)}"
+                conn.last_sync_at = datetime.now(timezone.utc)
+                conn.last_sync_status = "500_api_error"
         elif conn.provider == 'outlook':
             try:
                 from outlook_service import OutlookCalendarService
@@ -1482,8 +1522,13 @@ async def create_meeting(data: dict, background_tasks: BackgroundTasks, current_
                 )
                 outlook_event_id = o_event.get('id')
                 results[f"outlook_{conn.id}"] = "success"
+                conn.last_sync_status = "success"
+                conn.last_sync_at = datetime.now(timezone.utc)
             except Exception as e:
                 results[f"outlook_{conn.id}"] = f"error: {str(e)}"
+                conn.last_sync_at = datetime.now(timezone.utc)
+                if "401" in str(e): conn.last_sync_status = "401_unauthorized"
+                else: conn.last_sync_status = "500_api_error"
             
     # Save to our DB history
     # FIX: tg_chat_id and group_id initialized early (in scope for send_notifications)

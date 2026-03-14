@@ -1,3 +1,4 @@
+import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -24,6 +25,39 @@ import 'screens/settings/availability_settings_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  final telegramService = TelegramService();
+  telegramService.init();
+  final apiService = ApiService(telegramService);
+
+  await SentryFlutter.init(
+    (options) {
+      options.dsn = const String.fromEnvironment('SENTRY_DSN');
+      options.tracesSampleRate = 1.0;
+      options.profilesSampleRate = 1.0;
+    },
+    appRunner: () => runApp(
+      SentryWidget(
+        child: MultiProvider(
+          providers: [
+            Provider.value(value: telegramService),
+            Provider.value(value: apiService),
+            ChangeNotifierProvider(create: (_) => LanguageProvider()),
+            ChangeNotifierProvider(create: (context) => AuthProvider(apiService, telegramService)..init()),
+            ChangeNotifierProvider(create: (context) => SyncProvider(apiService)),
+            ChangeNotifierProvider(create: (context) => GroupProvider(apiService, telegramService)),
+            ChangeNotifierProvider(create: (context) => SchedulerProvider(apiService)),
+            ChangeNotifierProvider(create: (context) => MeetingProvider(apiService)),
+            ChangeNotifierProvider(create: (context) => AvailabilityProvider(apiService)),
+            ChangeNotifierProvider(create: (context) => SoloProvider(apiService)),
+            ChangeNotifierProvider(create: (context) => WorkingHoursNotifier()),
+          ],
+          child: const SmartSchedulerApp(),
+        ),
+      ),
+    ),
+  );
+  
   tz.initializeTimeZones();
   try {
     final String currentTimeZone = await FlutterTimezone.getLocalTimezone();
@@ -31,53 +65,6 @@ void main() async {
   } catch (e) {
     print('Could not get local timezone: $e');
   }
-
-  final TelegramService telegramService = TelegramService();
-  
-  telegramService.init();
-  final apiService = ApiService(telegramService);
-
-
-  runApp(
-    MultiProvider(
-      providers: [
-        Provider.value(value: telegramService),
-        Provider.value(value: apiService),
-
-        ChangeNotifierProvider(
-          create: (_) => LanguageProvider(),
-        ),
-        ChangeNotifierProvider(
-          create: (_) => AuthProvider(apiService, telegramService)..init(),
-        ),
-        ChangeNotifierProvider(
-          create: (_) => SyncProvider(apiService),
-        ),
-        ChangeNotifierProvider(
-          create: (context) => GroupProvider(
-            context.read<ApiService>(),
-            context.read<TelegramService>(),
-          ),
-        ),
-        ChangeNotifierProvider(
-          create: (_) => SchedulerProvider(apiService),
-        ),
-        ChangeNotifierProvider(
-          create: (_) => MeetingProvider(apiService),
-        ),
-        ChangeNotifierProvider(
-          create: (_) => AvailabilityProvider(apiService),
-        ),
-        ChangeNotifierProvider(
-          create: (_) => SoloProvider(apiService),
-        ),
-        ChangeNotifierProvider(
-          create: (_) => WorkingHoursNotifier(),
-        ),
-      ],
-      child: const SmartSchedulerApp(),
-    ),
-  );
 }
 
 class SmartSchedulerApp extends StatefulWidget {

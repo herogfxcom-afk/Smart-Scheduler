@@ -317,5 +317,55 @@ void main() {
       await tester.pumpDeviceBuilder(builder);
       await screenMatchesGolden(tester, 'heatmap_external_busy');
     });
+    testGoldens('DST Transition - London (March 29, 2026)', (tester) async {
+      // London jumps from 01:00 to 02:00
+      tz.setLocalLocation(tz.getLocation('Europe/London'));
+      final baseDate = DateTime(2026, 3, 29, 0, 0, 0); // DST Sunday
+      
+      final slots = [
+        // Match at 00:00 (GMT)
+        TimeSlot(
+          start: DateTime.parse('2026-03-29T00:00:00Z'),
+          end: DateTime.parse('2026-03-29T01:00:00Z'),
+          type: 'match',
+          availability: 1.0,
+        ),
+        // Match at 02:00 (BST) - note that 01:00-02:00 local doesn't exist
+        TimeSlot(
+          start: DateTime.parse('2026-03-29T01:00:00Z'),
+          end: DateTime.parse('2026-03-29T02:00:00Z'),
+          type: 'match',
+          availability: 1.0,
+        ),
+      ];
+
+      final builder = DeviceBuilder()
+        ..overrideDevicesForAllScenarios(devices: [
+          const Device(name: 'web_view', size: Size(400, 800)),
+        ])
+        ..addScenario(
+          name: 'london_dst_transition',
+          widget: MultiProvider(
+            providers: [
+              Provider<TelegramService>.value(value: mockTelegram),
+              ChangeNotifierProvider<AvailabilityProvider>.value(value: mockAvailability),
+              ChangeNotifierProvider<WorkingHoursNotifier>.value(value: workingHoursNotifier),
+            ],
+            child: Material(
+              child: HeatmapGrid(
+                slots: slots,
+                selectedDay: baseDate,
+                onSlotSelected: (_) {},
+                availability: mockMoscowAvailability(),
+                myUserId: 'user_123',
+                calendarType: CalendarType.group,
+              ),
+            ),
+          ),
+        );
+
+      await tester.pumpDeviceBuilder(builder);
+      await screenMatchesGolden(tester, 'heatmap_dst_london');
+    });
   });
 }

@@ -33,9 +33,10 @@ class CalendarConnection(Base):
     auth_data = Column(Text, nullable=False)  # Encrypted tokens
     status = Column(String(50), default="active")  # 'active', 'error', 'needs_reauth'
     last_error = Column(Text, nullable=True)
+    last_sync_status = Column(String(100), nullable=True) # e.g. 'success', '401_unauthorized', '500_api_error'
     is_active = Column(Integer, default=1)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.datetime.now(datetime.timezone.utc))
-    last_sync = Column(DateTime(timezone=True), nullable=True)
+    last_sync_at = Column(DateTime(timezone=True), nullable=True)
 
     user = relationship("User", back_populates="connections")
     busy_slots = relationship("BusySlot", back_populates="connection", cascade="all, delete-orphan")
