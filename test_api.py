@@ -125,10 +125,14 @@ async def test_meeting_lifecycle():
                 
                 # A. CREATE MEETING
                 print("DEBUG: Starting meeting creation...")
-                # use Z to mimic frontend
-                now = datetime.datetime.now(datetime.timezone.utc)
-                start = (now + datetime.timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
-                end = (now + datetime.timedelta(days=1, hours=1)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+                # Use a time that is within working hours (9-18)
+                # Setting to 12 PM tomorrow
+                tomorrow = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=1)
+                start_dt = tomorrow.replace(hour=12, minute=0, second=0, microsecond=0)
+                end_dt = start_dt + datetime.timedelta(hours=1)
+                
+                start = start_dt.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+                end = end_dt.strftime("%Y-%m-%dT%H:%M:%S.000Z")
                 
                 payload = {
                     "title": "Lifecycle Test",
