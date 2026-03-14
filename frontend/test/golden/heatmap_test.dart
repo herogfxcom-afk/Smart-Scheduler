@@ -13,6 +13,7 @@ import 'package:smart_scheduler_frontend/models/meeting.dart';
 import 'package:smart_scheduler_frontend/providers/availability_provider.dart';
 import 'package:smart_scheduler_frontend/providers/auth_provider.dart';
 import 'package:smart_scheduler_frontend/providers/meeting_provider.dart';
+import 'package:smart_scheduler_frontend/providers/solo_provider.dart';
 import 'package:smart_scheduler_frontend/core/telegram/telegram_service.dart';
 import 'package:smart_scheduler_frontend/utils/calendar_processor.dart';
 import 'package:smart_scheduler_frontend/providers/working_hours_notifier.dart';
@@ -30,18 +31,29 @@ void main() {
   group('HeatmapGrid Golden Tests', () {
     late MockTelegramService mockTelegram;
     late MockAvailabilityProvider mockAvailability;
+    late MockSoloProvider mockSolo;
+    late MockAuthProvider mockAuth;
+    late MockMeetingProvider mockMeeting;
     late WorkingHoursNotifier workingHoursNotifier;
     late LanguageProvider languageProvider;
 
     setUp(() {
       mockTelegram = MockTelegramService();
       mockAvailability = MockAvailabilityProvider();
+      mockSolo = MockSoloProvider();
+      mockAuth = MockAuthProvider();
+      mockMeeting = MockMeetingProvider();
       workingHoursNotifier = WorkingHoursNotifier();
-      languageProvider = LanguageProvider(); // Real provider is fine as it uses default 'ru' or can be set
+      languageProvider = LanguageProvider();
 
       when(() => mockTelegram.getUserId()).thenReturn('user_123');
       when(() => mockAvailability.availability).thenReturn(mockMoscowAvailability());
       when(() => mockAvailability.lastUpdated).thenReturn(DateTime(2025, 1, 1));
+      
+      // Basic mocks for SoloProvider dependencies
+      when(() => mockSolo.fetchSoloSlots(force: any(named: 'force'))).thenAnswer((_) async {});
+      when(() => mockAuth.user).thenReturn(null);
+      when(() => mockMeeting.meetings).thenReturn([]);
     });
 
     testGoldens('Personal Heatmap - Moscow TZ', (tester) async {
@@ -80,6 +92,9 @@ void main() {
               Provider<TelegramService>.value(value: mockTelegram),
               ChangeNotifierProvider<AvailabilityProvider>.value(value: mockAvailability),
               ChangeNotifierProvider<WorkingHoursNotifier>.value(value: workingHoursNotifier),
+              ChangeNotifierProvider<SoloProvider>.value(value: mockSolo),
+              ChangeNotifierProvider<AuthProvider>.value(value: mockAuth),
+              ChangeNotifierProvider<MeetingProvider>.value(value: mockMeeting),
             ],
             child: Material(
               child: HeatmapGrid(
@@ -135,6 +150,9 @@ void main() {
               Provider<TelegramService>.value(value: mockTelegram),
               ChangeNotifierProvider<AvailabilityProvider>.value(value: mockAvailability),
               ChangeNotifierProvider<WorkingHoursNotifier>.value(value: workingHoursNotifier),
+              ChangeNotifierProvider<SoloProvider>.value(value: mockSolo),
+              ChangeNotifierProvider<AuthProvider>.value(value: mockAuth),
+              ChangeNotifierProvider<MeetingProvider>.value(value: mockMeeting),
             ],
             child: Material(
               child: HeatmapGrid(
@@ -176,6 +194,9 @@ void main() {
               Provider<TelegramService>.value(value: mockTelegram),
               ChangeNotifierProvider<AvailabilityProvider>.value(value: mockAvailability),
               ChangeNotifierProvider<WorkingHoursNotifier>.value(value: workingHoursNotifier),
+              ChangeNotifierProvider<SoloProvider>.value(value: mockSolo),
+              ChangeNotifierProvider<AuthProvider>.value(value: mockAuth),
+              ChangeNotifierProvider<MeetingProvider>.value(value: mockMeeting),
             ],
             child: Material(
               child: HeatmapGrid(
@@ -221,6 +242,9 @@ void main() {
               Provider<TelegramService>.value(value: mockTelegram),
               ChangeNotifierProvider<AvailabilityProvider>.value(value: mockAvailability),
               ChangeNotifierProvider<WorkingHoursNotifier>.value(value: workingHoursNotifier),
+              ChangeNotifierProvider<SoloProvider>.value(value: mockSolo),
+              ChangeNotifierProvider<AuthProvider>.value(value: mockAuth),
+              ChangeNotifierProvider<MeetingProvider>.value(value: mockMeeting),
             ],
             child: Material(
               child: HeatmapGrid(
@@ -258,6 +282,9 @@ void main() {
               Provider<TelegramService>.value(value: mockTelegram),
               ChangeNotifierProvider<AvailabilityProvider>.value(value: mockAvailability),
               ChangeNotifierProvider<WorkingHoursNotifier>.value(value: workingHoursNotifier),
+              ChangeNotifierProvider<SoloProvider>.value(value: mockSolo),
+              ChangeNotifierProvider<AuthProvider>.value(value: mockAuth),
+              ChangeNotifierProvider<MeetingProvider>.value(value: mockMeeting),
             ],
             child: Material(
               child: HeatmapGrid(
@@ -279,23 +306,6 @@ void main() {
       tz.setLocalLocation(tz.getLocation('Europe/Moscow'));
       final baseDate = DateTime(2026, 3, 13, 0, 0, 0);
       
-      final slots = [
-        // External busy slot (from Google/Outlook)
-        TimeSlot(
-          start: DateTime.parse('2026-03-13T08:00:00Z'),
-          end: DateTime.parse('2026-03-13T10:00:00Z'),
-          type: 'my_busy',
-          availability: 0.0,
-        ),
-        // Internal App Meeting (should be purple)
-        TimeSlot(
-          start: DateTime.parse('2026-03-13T12:00:00Z'),
-          end: DateTime.parse('2026-03-13T14:00:00Z'),
-          type: 'meeting',
-          availability: 0.0,
-        ),
-      ];
-
       final builder = DeviceBuilder()
         ..overrideDevicesForAllScenarios(devices: [
           const Device(name: 'web_view', size: Size(400, 800)),
@@ -307,10 +317,41 @@ void main() {
               Provider<TelegramService>.value(value: mockTelegram),
               ChangeNotifierProvider<AvailabilityProvider>.value(value: mockAvailability),
               ChangeNotifierProvider<WorkingHoursNotifier>.value(value: workingHoursNotifier),
+              ChangeNotifierProvider<SoloProvider>.value(value: mockSolo),
+              ChangeNotifierProvider<AuthProvider>.value(value: mockAuth),
+              ChangeNotifierProvider<MeetingProvider>.value(value: mockMeeting),
             ],
             child: Material(
               child: HeatmapGrid(
-                slots: slots,
+                slots: [
+                  // 1. External busy slot with summary (Blue)
+                  TimeSlot(
+                    start: DateTime.parse('2026-03-13T08:00:00Z'),
+                    end: DateTime.parse('2026-03-13T09:30:00Z'),
+                    type: 'my_busy',
+                    summary: 'External Lunch',
+                    availability: 0.0,
+                  ),
+                  // 2. External busy slot WITHOUT summary (Grey "Занято")
+                  TimeSlot(
+                    start: DateTime.parse('2026-03-13T10:00:00Z'),
+                    end: DateTime.parse('2026-03-13T11:00:00Z'),
+                    type: 'my_busy',
+                    availability: 0.0,
+                  ),
+                ],
+                myMeetings: [
+                  // 3. App-created meeting (Purple)
+                  Meeting(
+                    id: 1,
+                    title: 'App Strategy',
+                    start: DateTime.parse('2026-03-13T12:00:00Z'),
+                    end: DateTime.parse('2026-03-13T13:30:00Z'),
+                    status: 'accepted',
+                    isCreator: true,
+                    provider: 'app',
+                  ),
+                ],
                 selectedDay: baseDate,
                 onSlotSelected: (_) {},
                 availability: mockMoscowAvailability(),
@@ -357,6 +398,9 @@ void main() {
               Provider<TelegramService>.value(value: mockTelegram),
               ChangeNotifierProvider<AvailabilityProvider>.value(value: mockAvailability),
               ChangeNotifierProvider<WorkingHoursNotifier>.value(value: workingHoursNotifier),
+              ChangeNotifierProvider<SoloProvider>.value(value: mockSolo),
+              ChangeNotifierProvider<AuthProvider>.value(value: mockAuth),
+              ChangeNotifierProvider<MeetingProvider>.value(value: mockMeeting),
             ],
             child: Material(
               child: HeatmapGrid(
@@ -394,6 +438,9 @@ void main() {
               ChangeNotifierProvider<AvailabilityProvider>.value(value: mockAvailability),
               ChangeNotifierProvider<WorkingHoursNotifier>.value(value: workingHoursNotifier),
               ChangeNotifierProvider<LanguageProvider>.value(value: languageProvider),
+              ChangeNotifierProvider<SoloProvider>.value(value: mockSolo),
+              ChangeNotifierProvider<AuthProvider>.value(value: mockAuth),
+              ChangeNotifierProvider<MeetingProvider>.value(value: mockMeeting),
             ],
             child: Material(
               child: HeatmapGrid(
@@ -428,6 +475,9 @@ void main() {
               ChangeNotifierProvider<AvailabilityProvider>.value(value: mockAvailability),
               ChangeNotifierProvider<WorkingHoursNotifier>.value(value: workingHoursNotifier),
               ChangeNotifierProvider<LanguageProvider>(create: (_) => LanguageProvider()),
+              ChangeNotifierProvider<SoloProvider>.value(value: mockSolo),
+              ChangeNotifierProvider<AuthProvider>.value(value: mockAuth),
+              ChangeNotifierProvider<MeetingProvider>.value(value: mockMeeting),
             ],
             child: Material(
               child: HeatmapGrid(
