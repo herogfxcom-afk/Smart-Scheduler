@@ -11,13 +11,23 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from sqlalchemy import text
 from sqlalchemy.orm import Session
+import datetime
 from datetime import datetime, timedelta, timezone
 import pytz
+import os
+import httpx
+import json
+import asyncio
+import re
+from zoneinfo import ZoneInfo
 
+# Sentry initialization
+SENTRY_DSN = os.getenv("SENTRY_DSN", "https://c4f2ee07b69a9b590d740d35220ef5a0@o4511041169391616.ingest.de.sentry.io/4511041208123472")
 sentry_sdk.init(
-    dsn="https://c4f2ee07b69a9b590d740d35220ef5a0@o4511041169391616.ingest.de.sentry.io/4511041208123472",
+    dsn=SENTRY_DSN,
     integrations=[FastApiIntegration()],
-    traces_sample_rate=1.0,
+    traces_sample_rate=0.1,
+    environment=os.getenv("RAILWAY_ENVIRONMENT_NAME", "production")
 )
 
 from auth import get_current_user
@@ -28,12 +38,6 @@ from database import get_db
 from encryption import decrypt_token, encrypt_token
 from calendar_service import GoogleCalendarService, find_common_free_slots
 from caldav_service import AppleCalendarService
-import os
-import httpx
-import json
-import asyncio
-import re
-from zoneinfo import ZoneInfo
 
 def parse_ms_datetime(dt_str: str) -> datetime:
     # Microsoft returns 7 decimal places for microseconds: 2026-03-12T07:00:00.0000000Z
@@ -43,16 +47,6 @@ def parse_ms_datetime(dt_str: str) -> datetime:
     return datetime.fromisoformat(dt_str)
 
 app = FastAPI(title="Smart Scheduler API")
-
-# Initialize Sentry
-SENTRY_DSN = os.getenv("SENTRY_DSN")
-if SENTRY_DSN:
-    sentry_sdk.init(
-        dsn=SENTRY_DSN,
-        traces_sample_rate=0.1,
-        environment=os.getenv("RAILWAY_ENVIRONMENT_NAME", "production")
-    )
-    print("Sentry initialized")
 
 # Initialize Rate Limiter
 limiter = Limiter(key_func=lambda req: req.headers.get("init-data", "anon"))
@@ -208,10 +202,29 @@ async def get_bot_username() -> str:
         
     return BOT_USERNAME_FALLBACK
 
-# ─────────────────── RATE LIMITING ───────────────────
-limiter = Limiter(key_func=get_remote_address)
-app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+async def send_telegram_notification(chat_id: str, text: str, reply_markup: dict = None):
+    """Sends a markdown notification to a Telegram chat."""
+    bot_token = os.getenv("BOT_TOKEN")
+    if not bot_token: return
+    
+    # Handle 'n' prefix for group IDs
+    target_chat = str(chat_id)
+    if target_chat.startswith("n"):
+        target_chat = "-" + target_chat[1:]
+    
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+            payload = {
+                "chat_id": target_chat,
+                "text": text,
+                "parse_mode": "Markdown"
+            }
+            if reply_markup:
+                payload["reply_markup"] = reply_markup
+            await client.post(url, json=payload)
+    except Exception as e:
+        print(f"TRACE: send_telegram_notification fail: {e}")
 
 # ─────────────────── ROUTERS ───────────────────
 app.include_router(google_auth_router)
@@ -1106,7 +1119,7 @@ async def respond_to_invite(invite_id: int, data: dict, current_user: User = Dep
     return {"status": "success"}
 
 @app.delete("/api/meetings/{meeting_id}")
-async def delete_meeting(meeting_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+async def delete_meeting(meeting_id: int, background_tasks: BackgroundTasks, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Handles both soft-cancellation and final removal of meetings."""
     meeting = db.query(models.GroupMeeting).filter(models.GroupMeeting.id == meeting_id).first()
     if not meeting:
@@ -1172,6 +1185,24 @@ async def delete_meeting(meeting_id: int, current_user: User = Depends(get_curre
                 except Exception as e: 
                     print(f"DEBUG: Creator cleanup fail on {conn.provider}: {e}")
             
+            # NOTIFY GROUP
+            if meeting.group:
+                user_tz_name = current_user.timezone or "UTC"
+                try:
+                    user_tz = ZoneInfo(user_tz_name)
+                    # Use pytz or timezone.utc if meeting.start_time is naive
+                    if meeting.start_time.tzinfo is None:
+                        utc_time = meeting.start_time.replace(tzinfo=pytz.utc)
+                    else:
+                        utc_time = meeting.start_time
+                    display_time = utc_time.astimezone(user_tz).strftime('%d.%m %H:%M')
+                except Exception as e:
+                    print(f"DEBUG: Notify time format fail: {e}")
+                    display_time = meeting.start_time.strftime('%d.%m %H:%M')
+                
+                group_text = f"❌ *Встреча отменена*\n\nСоздатель отменил встречу: *{meeting.title}*\nВремя: {display_time} ({user_tz_name})"
+                background_tasks.add_task(send_telegram_notification, meeting.group.telegram_chat_id, group_text)
+            
             db.commit()
             return {"status": "cancelled", "message": "Meeting cancelled for all"}
         else:
@@ -1218,9 +1249,9 @@ async def delete_meeting(meeting_id: int, current_user: User = Depends(get_curre
     return {"status": "error", "message": "Nothing to delete"}
 
 @app.post("/api/meetings/{meeting_id}/confirm-cancel")
-async def confirm_cancel_meeting(meeting_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+async def confirm_cancel_meeting(meeting_id: int, background_tasks: BackgroundTasks, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Allows a participant to acknowledge a cancellation and cleanup their calendar."""
-    return await delete_meeting(meeting_id, current_user, db)
+    return await delete_meeting(meeting_id, background_tasks, current_user, db)
 
 @app.patch("/api/meetings/{meeting_id}")
 async def update_meeting(meeting_id: int, data: dict, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
