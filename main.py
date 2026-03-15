@@ -145,8 +145,28 @@ dp = Dispatcher()
 
 @dp.inline_query()
 async def handle_inline_query(inline_query: InlineQuery):
-    print(f"[INLINE] Получен запрос: {inline_query.query}")  # для логов
-    await inline_query.answer(results=[], cache_time=1)
+    user_id = inline_query.from_user.id
+    print(f"[INLINE] Получен запрос от {user_id}: {inline_query.query}")
+    
+    result_id = f"magic_sync_{user_id}_{int(time.time())}"
+    results = [
+        InlineQueryResultArticle(
+            id=result_id,
+            title="✨ Magic Sync: Найти общее время",
+            description="Мгновенный поиск идеального слота в этом чате.",
+            input_message_content=InputTextMessageContent(
+                message_text="📊 *Magic Sync: Планирование встречи*\n\nНажмите кнопку ниже, чтобы найти общее свободное время!",
+                parse_mode="Markdown"
+            ),
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+                InlineKeyboardButton(
+                    text="📅 Открыть Magic Sync",
+                    url=f"https://t.me/smartschedulertime_bot/app?startapp=inline_{user_id}"
+                )
+            ]])
+        )
+    ]
+    await inline_query.answer(results=results, cache_time=1)
 
 app.add_middleware(
     CORSMiddleware,
