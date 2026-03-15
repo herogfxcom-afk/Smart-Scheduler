@@ -168,7 +168,7 @@ def migrate_db():
     finally:
         db.close()
 
-FRONTEND_URL = os.getenv("FRONTEND_URL", "https://frontend-five-gules-5u3aqd6fzp.vercel.app")
+FRONTEND_URL = os.getenv("FRONTEND_URL", "https://frontend-git-main-herogfxcom-5981s-projects.vercel.app")
 BOT_USERNAME_FALLBACK = os.getenv("BOT_USERNAME", "smartschedulertime_bot")
 
 app.add_middleware(

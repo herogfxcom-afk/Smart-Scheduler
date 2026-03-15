@@ -1,0 +1,1602 @@
+[
+  {
+    "type": "stdout",
+    "created": 1773532873149,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "Skipping cache upload because no files were prepared",
+      "id": "1773532873149232906296700002",
+      "date": 1773532873149,
+      "serial": "1773532873149232906296700002"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532866074,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "Creating build cache...",
+      "id": "1773532866074232906296700000",
+      "date": 1773532866074,
+      "serial": "1773532866074232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532865100,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "Deployment completed",
+      "id": "1773532865100232906296700000",
+      "date": 1773532865100,
+      "serial": "1773532865100232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532833168,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "Deploying outputs...",
+      "id": "1773532833168232906296700000",
+      "date": 1773532833168,
+      "serial": "1773532833168232906296700000"
+    }
+  },
+  {
+    "type": "stderr",
+    "created": 1773532832789,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "Build Completed in /vercel/output [2m]",
+      "id": "1773532832789232906296700000",
+      "date": 1773532832789,
+      "serial": "1773532832789232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532832037,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "Bundle size (424.76 MB) exceeds limit. Enabling runtime dependency installation.",
+      "id": "1773532832037232906296700000",
+      "date": 1773532832037,
+      "serial": "1773532832037232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532830935,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "Installing required dependencies from uv.lock...",
+      "id": "1773532830935232906296700000",
+      "date": 1773532830935,
+      "serial": "1773532830935232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532830933,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "Using uv at \"/usr/local/bin/uv\"",
+      "id": "1773532830933232906296700000",
+      "date": 1773532830933,
+      "serial": "1773532830933232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532829089,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "Writing .python-version file with version 3.12",
+      "id": "1773532829089232906296700000",
+      "date": 1773532829089,
+      "serial": "1773532829089232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532829088,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "Using Python 3.12 from pyproject.toml",
+      "id": "1773532829088232906296700000",
+      "date": 1773532829088,
+      "serial": "1773532829088232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532826529,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "Bundle size (371.97 MB) exceeds limit. Enabling runtime dependency installation.",
+      "id": "1773532826529232906296700000",
+      "date": 1773532826529,
+      "serial": "1773532826529232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532824069,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "Installing required dependencies from requirements.txt...",
+      "id": "1773532824069232906296700000",
+      "date": 1773532824069,
+      "serial": "1773532824069232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532824068,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "Using uv at \"/usr/local/bin/uv\"",
+      "id": "1773532824068232906296700000",
+      "date": 1773532824068,
+      "serial": "1773532824068232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532821880,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "Creating virtual environment at \"/vercel/path0/.vercel/python/.venv\"...",
+      "id": "1773532821880232906296700000",
+      "date": 1773532821880,
+      "serial": "1773532821880232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532820583,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "No Python version specified in .python-version, pyproject.toml, or Pipfile.lock. Using python version: 3.12",
+      "id": "1773532820583232906296700000",
+      "date": 1773532820583,
+      "serial": "1773532820583232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532818026,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[        ] exiting with code 0",
+      "id": "1773532818026232906296700000",
+      "date": 1773532818026,
+      "serial": "1773532818026232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532818025,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[        ] Shutdown hooks complete",
+      "id": "1773532818025232906296700001",
+      "date": 1773532818025,
+      "serial": "1773532818025232906296700001"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532818025,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[   +6 ms] Running 1 shutdown hook",
+      "id": "1773532818025232906296700000",
+      "date": 1773532818025,
+      "serial": "1773532818025232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532818018,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[   +1 ms] \"flutter web\" took 80,227ms.",
+      "id": "1773532818018232906296700000",
+      "date": 1773532818018,
+      "serial": "1773532818018232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532818016,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[   +1 ms] \u2713 Built build/web",
+      "id": "1773532818016232906296700001",
+      "date": 1773532818016,
+      "serial": "1773532818016232906296700001"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532818016,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[  +44 ms] Compiling lib/main.dart for the Web... (completed in 77.3s)",
+      "id": "1773532818016232906296700000",
+      "date": 1773532818016,
+      "serial": "1773532818016232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532817971,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[  +10 ms] Done persisting file store",
+      "id": "1773532817971232906296700000",
+      "date": 1773532817971,
+      "serial": "1773532817971232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532817960,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[ +211 ms] Persisting file store",
+      "id": "1773532817960232906296700000",
+      "date": 1773532817960,
+      "serial": "1773532817960232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532817749,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[   +1 ms] web_service_worker: Complete",
+      "id": "1773532817749232906296700000",
+      "date": 1773532817749,
+      "serial": "1773532817749232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532817747,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[  +91 ms] web_service_worker: Starting due to {}",
+      "id": "1773532817747232906296700000",
+      "date": 1773532817747,
+      "serial": "1773532817747232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532817656,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[ +279 ms] web_release_bundle: Complete",
+      "id": "1773532817656232906296700000",
+      "date": 1773532817656,
+      "serial": "1773532817656232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532817376,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[   +1 ms] shaderc command: [/vercel/path0/frontend/flutter/bin/cache/artifacts/engine/linux-x64/impellerc, --sksl, --iplr, --json, --sl=/vercel/path0/frontend/build/web/assets/shaders/stretch_effect.frag, --spirv=/vercel/path0/frontend/build/web/assets/shaders/stretch_effect.frag.spirv, --input=/vercel/path0/frontend/flutter/packages/flutter/lib/src/material/shaders/stretch_effect.frag, --input-type=frag, --include=/vercel/path0/frontend/flutter/packages/flutter/lib/src/material/shaders, --include=/vercel/path0/frontend/flutter/bin/cache/artifacts/engine/linux-x64/shader_lib]",
+      "id": "1773532817376232906296700000",
+      "date": 1773532817376,
+      "serial": "1773532817376232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532817374,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[ +109 ms] shaderc command: [/vercel/path0/frontend/flutter/bin/cache/artifacts/engine/linux-x64/impellerc, --sksl, --iplr, --json, --sl=/vercel/path0/frontend/build/web/assets/shaders/ink_sparkle.frag, --spirv=/vercel/path0/frontend/build/web/assets/shaders/ink_sparkle.frag.spirv, --input=/vercel/path0/frontend/flutter/packages/flutter/lib/src/material/shaders/ink_sparkle.frag, --input-type=frag, --include=/vercel/path0/frontend/flutter/packages/flutter/lib/src/material/shaders, --include=/vercel/path0/frontend/flutter/bin/cache/artifacts/engine/linux-x64/shader_lib]",
+      "id": "1773532817374232906296700000",
+      "date": 1773532817374,
+      "serial": "1773532817374232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532817264,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[   +1 ms] web_release_bundle: Starting due to {}",
+      "id": "1773532817264232906296700000",
+      "date": 1773532817264,
+      "serial": "1773532817264232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532817262,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[        ] dart2wasm: Complete",
+      "id": "1773532817262232906296700001",
+      "date": 1773532817262,
+      "serial": "1773532817262232906296700001"
+    }
+  },
+  {
+    "type": "stderr",
+    "created": 1773532817262,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[   +9 ms] Use --no-wasm-dry-run to disable these warnings.",
+      "id": "1773532817262232906296700000",
+      "date": 1773532817262,
+      "serial": "1773532817262232906296700000"
+    }
+  },
+  {
+    "type": "stderr",
+    "created": 1773532817253,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "",
+      "id": "1773532817253232906296700006",
+      "date": 1773532817253,
+      "serial": "1773532817253232906296700006"
+    }
+  },
+  {
+    "type": "stderr",
+    "created": 1773532817253,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[        ] Consider addressing these issues to enable wasm builds. See docs for more info: https://docs.flutter.dev/platform-integration/web/wasm",
+      "id": "1773532817253232906296700005",
+      "date": 1773532817253,
+      "serial": "1773532817253232906296700005"
+    }
+  },
+  {
+    "type": "stderr",
+    "created": 1773532817253,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "",
+      "id": "1773532817253232906296700004",
+      "date": 1773532817253,
+      "serial": "1773532817253232906296700004"
+    }
+  },
+  {
+    "type": "stderr",
+    "created": 1773532817253,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "           package:flutter_timezone/flutter_timezone_web.dart 5:1 - package:js/js.dart unsupported (14)",
+      "id": "1773532817253232906296700003",
+      "date": 1773532817253,
+      "serial": "1773532817253232906296700003"
+    }
+  },
+  {
+    "type": "stderr",
+    "created": 1773532817253,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "",
+      "id": "1773532817253232906296700002",
+      "date": 1773532817253,
+      "serial": "1773532817253232906296700002"
+    }
+  },
+  {
+    "type": "stderr",
+    "created": 1773532817253,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[   +1 ms] Found incompatibilities with WebAssembly.",
+      "id": "1773532817253232906296700001",
+      "date": 1773532817253,
+      "serial": "1773532817253232906296700001"
+    }
+  },
+  {
+    "type": "stderr",
+    "created": 1773532817253,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[   +2 ms] Wasm dry run findings:",
+      "id": "1773532817253232906296700000",
+      "date": 1773532817253,
+      "serial": "1773532817253232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532817251,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "           package:flutter_timezone/flutter_timezone_web.dart 5:1 - package:js/js.dart unsupported (14)",
+      "id": "1773532817251232906296700001",
+      "date": 1773532817251,
+      "serial": "1773532817251232906296700001"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532817251,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "",
+      "id": "1773532817251232906296700000",
+      "date": 1773532817251,
+      "serial": "1773532817251232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532817250,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[+7812 ms] Found incompatibilities with WebAssembly.",
+      "id": "1773532817250232906296700000",
+      "date": 1773532817250,
+      "serial": "1773532817250232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532809438,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[ +106 ms] dart2js: Complete",
+      "id": "1773532809438232906296700000",
+      "date": 1773532809438,
+      "serial": "1773532809438232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532809334,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "            Compiled 55,342,280 input bytes (9,202,182 characters source) to 4,614,263 characters JavaScript in 46.4 seconds",
+      "id": "1773532809334232906296700005",
+      "date": 1773532809334,
+      "serial": "1773532809334232906296700005"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532809334,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "                    ^",
+      "id": "1773532809334232906296700004",
+      "date": 1773532809334,
+      "serial": "1773532809334232906296700004"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532809334,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "              Never noSuchMethod(Invocation invocation) {",
+      "id": "1773532809334232906296700003",
+      "date": 1773532809334,
+      "serial": "1773532809334232906296700003"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532809334,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "            Rewrite to 'noSuchMethod(Invocation i) => super.noSuchMethod(i);'.",
+      "id": "1773532809334232906296700002",
+      "date": 1773532809334,
+      "serial": "1773532809334232906296700002"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532809334,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "            Hint: This 'noSuchMethod' implementation is guaranteed to throw an exception. The generated code will be smaller if it is rewritten.",
+      "id": "1773532809334232906296700001",
+      "date": 1773532809334,
+      "serial": "1773532809334232906296700001"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532809334,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[+46509 ms] flutter/packages/flutter/lib/src/widgets/widget_state.dart:1054:9:",
+      "id": "1773532809334232906296700000",
+      "date": 1773532809334,
+      "serial": "1773532809334232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532762821,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[   +1 ms] executing: /vercel/path0/frontend/flutter/bin/cache/dart-sdk/bin/dart compile js --platform-binaries=/vercel/path0/frontend/flutter/bin/cache/flutter_web_sdk/kernel --invoker=flutter_tool -Ddart.vm.product=true -DFLUTTER_VERSION=3.41.4 -DFLUTTER_CHANNEL=stable -DFLUTTER_GIT_URL=https://github.com/flutter/flutter.git -DFLUTTER_FRAMEWORK_REVISION=ff37bef603 -DFLUTTER_ENGINE_REVISION=e4b8dca3f1 -DFLUTTER_DART_VERSION=3.11.1 -DFLUTTER_WEB_USE_SKIA=true -DFLUTTER_WEB_USE_SKWASM=false -DFLUTTER_WEB_CANVASKIT_URL=https://www.gstatic.com/flutter-canvaskit/e4b8dca3f1b4ede4c30371002441c88c12187ed6/ --native-null-assertions --no-source-maps -O4 --minify -o /vercel/path0/frontend/.dart_tool/flutter_build/073681c6efe1ca88d041bcdc1f6b7180/main.dart.js /vercel/path0/frontend/.dart_tool/flutter_build/073681c6efe1ca88d041bcdc1f6b7180/app.dill",
+      "id": "1773532762821232906296700000",
+      "date": 1773532762821,
+      "serial": "1773532762821232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532762820,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "            Dart file .dart_tool/flutter_build/073681c6efe1ca88d041bcdc1f6b7180/main.dart compiled to dill: .dart_tool/flutter_build/073681c6efe1ca88d041bcdc1f6b7180/app.dill.",
+      "id": "1773532762820232906296700001",
+      "date": 1773532762820,
+      "serial": "1773532762820232906296700001"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532762820,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[+21910 ms] Compiled 51,902,931 input bytes (43,874,767 characters source) to 38,154,000 kernel bytes in 21.8 seconds",
+      "id": "1773532762820232906296700000",
+      "date": 1773532762820,
+      "serial": "1773532762820232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532740909,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[   +1 ms] executing: /vercel/path0/frontend/flutter/bin/cache/dart-sdk/bin/dart compile wasm --packages=/vercel/path0/frontend/.dart_tool/package_config.json --extra-compiler-option=--platform=/vercel/path0/frontend/flutter/bin/cache/flutter_web_sdk/kernel/dart2wasm_platform.dill -Ddart.vm.profile=false -Ddart.vm.product=true --extra-compiler-option=--delete-tostring-package-uri=dart:ui --extra-compiler-option=--delete-tostring-package-uri=package:flutter --extra-compiler-option=--import-shared-memory --extra-compiler-option=--shared-memory-max-pages=32768 -DFLUTTER_VERSION=3.41.4 -DFLUTTER_CHANNEL=stable -DFLUTTER_GIT_URL=https://github.com/flutter/flutter.git -DFLUTTER_FRAMEWORK_REVISION=ff37bef603 -DFLUTTER_ENGINE_REVISION=e4b8dca3f1 -DFLUTTER_DART_VERSION=3.11.1 -DFLUTTER_WEB_USE_SKIA=false -DFLUTTER_WEB_USE_SKWASM=true -DFLUTTER_WEB_CANVASKIT_URL=https://www.gstatic.com/flutter-canvaskit/e4b8dca3f1b4ede4c30371002441c88c12187ed6/ --extra-compiler-option=--depfile=/vercel/path0/frontend/.dart_tool/flutter_build/073681c6efe1ca88d041bcdc1f6b7180/dart2wasm.d -O2 --strip-wasm --no-source-maps --minify --extra-compiler-option=--dry-run -o /vercel/path0/frontend/.dart_tool/flutter_build/073681c6efe1ca88d041bcdc1f6b7180/main.dart.wasm /vercel/path0/frontend/.dart_tool/flutter_build/073681c6efe1ca88d041bcdc1f6b7180/main.dart",
+      "id": "1773532740909232906296700000",
+      "date": 1773532740909,
+      "serial": "1773532740909232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532740908,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[   +1 ms] dart2wasm: Starting due to {}",
+      "id": "1773532740908232906296700000",
+      "date": 1773532740908,
+      "serial": "1773532740908232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532740906,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[   +7 ms] executing: /vercel/path0/frontend/flutter/bin/cache/dart-sdk/bin/dart compile js --platform-binaries=/vercel/path0/frontend/flutter/bin/cache/flutter_web_sdk/kernel --invoker=flutter_tool -Ddart.vm.product=true -DFLUTTER_VERSION=3.41.4 -DFLUTTER_CHANNEL=stable -DFLUTTER_GIT_URL=https://github.com/flutter/flutter.git -DFLUTTER_FRAMEWORK_REVISION=ff37bef603 -DFLUTTER_ENGINE_REVISION=e4b8dca3f1 -DFLUTTER_DART_VERSION=3.11.1 -DFLUTTER_WEB_USE_SKIA=true -DFLUTTER_WEB_USE_SKWASM=false -DFLUTTER_WEB_CANVASKIT_URL=https://www.gstatic.com/flutter-canvaskit/e4b8dca3f1b4ede4c30371002441c88c12187ed6/ --native-null-assertions --no-source-maps -O4 --minify -o /vercel/path0/frontend/.dart_tool/flutter_build/073681c6efe1ca88d041bcdc1f6b7180/app.dill --packages=/vercel/path0/frontend/.dart_tool/package_config.json --cfe-only /vercel/path0/frontend/.dart_tool/flutter_build/073681c6efe1ca88d041bcdc1f6b7180/main.dart",
+      "id": "1773532740906232906296700000",
+      "date": 1773532740906,
+      "serial": "1773532740906232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532740899,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[        ] dart2js: Starting due to {}",
+      "id": "1773532740899232906296700001",
+      "date": 1773532740899,
+      "serial": "1773532740899232906296700001"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532740899,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[   +3 ms] web_entrypoint: Complete",
+      "id": "1773532740899232906296700000",
+      "date": 1773532740899,
+      "serial": "1773532740899232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532740893,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[   +2 ms] Found plugin flutter_timezone at /vercel/.pub-cache/hosted/pub.dev/flutter_timezone-1.0.8/",
+      "id": "1773532740893232906296700000",
+      "date": 1773532740893,
+      "serial": "1773532740893232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532740890,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[   +2 ms] Found plugin package_info_plus at /vercel/.pub-cache/hosted/pub.dev/package_info_plus-9.0.0/",
+      "id": "1773532740890232906296700000",
+      "date": 1773532740890,
+      "serial": "1773532740890232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532740888,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[        ] Found plugin sentry_flutter at /vercel/.pub-cache/hosted/pub.dev/sentry_flutter-8.14.2/",
+      "id": "1773532740888232906296700000",
+      "date": 1773532740888,
+      "serial": "1773532740888232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532740887,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[        ] Found plugin shared_preferences_android at /vercel/.pub-cache/hosted/pub.dev/shared_preferences_android-2.4.21/",
+      "id": "1773532740887232906296700000",
+      "date": 1773532740887,
+      "serial": "1773532740887232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532740886,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[   +1 ms] Found plugin shared_preferences_foundation at /vercel/.pub-cache/hosted/pub.dev/shared_preferences_foundation-2.5.6/",
+      "id": "1773532740886232906296700000",
+      "date": 1773532740886,
+      "serial": "1773532740886232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532740885,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[        ] Found plugin path_provider_linux at /vercel/.pub-cache/hosted/pub.dev/path_provider_linux-2.2.1/",
+      "id": "1773532740885232906296700001",
+      "date": 1773532740885,
+      "serial": "1773532740885232906296700001"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532740885,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[   +1 ms] Found plugin shared_preferences_linux at /vercel/.pub-cache/hosted/pub.dev/shared_preferences_linux-2.4.1/",
+      "id": "1773532740885232906296700000",
+      "date": 1773532740885,
+      "serial": "1773532740885232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532740884,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[   +2 ms] Found plugin shared_preferences_web at /vercel/.pub-cache/hosted/pub.dev/shared_preferences_web-2.4.3/",
+      "id": "1773532740884232906296700000",
+      "date": 1773532740884,
+      "serial": "1773532740884232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532740880,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[   +1 ms] Found plugin path_provider_windows at /vercel/.pub-cache/hosted/pub.dev/path_provider_windows-2.3.0/",
+      "id": "1773532740880232906296700000",
+      "date": 1773532740880,
+      "serial": "1773532740880232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532740879,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[        ] Found plugin shared_preferences_windows at /vercel/.pub-cache/hosted/pub.dev/shared_preferences_windows-2.4.1/",
+      "id": "1773532740879232906296700001",
+      "date": 1773532740879,
+      "serial": "1773532740879232906296700001"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532740879,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[   +5 ms] Found plugin shared_preferences at /vercel/.pub-cache/hosted/pub.dev/shared_preferences-2.5.4/",
+      "id": "1773532740879232906296700000",
+      "date": 1773532740879,
+      "serial": "1773532740879232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532740873,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[        ] Found plugin url_launcher_android at /vercel/.pub-cache/hosted/pub.dev/url_launcher_android-6.3.28/",
+      "id": "1773532740873232906296700000",
+      "date": 1773532740873,
+      "serial": "1773532740873232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532740872,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[        ] Found plugin url_launcher_ios at /vercel/.pub-cache/hosted/pub.dev/url_launcher_ios-6.4.1/",
+      "id": "1773532740872232906296700000",
+      "date": 1773532740872,
+      "serial": "1773532740872232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532740871,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[        ] Found plugin url_launcher_linux at /vercel/.pub-cache/hosted/pub.dev/url_launcher_linux-3.2.2/",
+      "id": "1773532740871232906296700001",
+      "date": 1773532740871,
+      "serial": "1773532740871232906296700001"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532740871,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[   +2 ms] Found plugin url_launcher_macos at /vercel/.pub-cache/hosted/pub.dev/url_launcher_macos-3.2.5/",
+      "id": "1773532740871232906296700000",
+      "date": 1773532740871,
+      "serial": "1773532740871232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532740868,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[   +1 ms] Found plugin url_launcher_web at /vercel/.pub-cache/hosted/pub.dev/url_launcher_web-2.4.2/",
+      "id": "1773532740868232906296700000",
+      "date": 1773532740868,
+      "serial": "1773532740868232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532740866,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[        ] Found plugin url_launcher_windows at /vercel/.pub-cache/hosted/pub.dev/url_launcher_windows-3.1.5/",
+      "id": "1773532740866232906296700000",
+      "date": 1773532740866,
+      "serial": "1773532740866232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532740865,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[  +22 ms] Found plugin url_launcher at /vercel/.pub-cache/hosted/pub.dev/url_launcher-6.3.2/",
+      "id": "1773532740865232906296700000",
+      "date": 1773532740865,
+      "serial": "1773532740865232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532740843,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[  +16 ms] web_static_assets: Complete",
+      "id": "1773532740843232906296700000",
+      "date": 1773532740843,
+      "serial": "1773532740843232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532740827,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[   +2 ms] web_static_assets: Starting due to {InvalidatedReasonKind.inputChanged: The following inputs have updated contents: /vercel/path0/frontend/flutter/bin/cache/engine.stamp, InvalidatedReasonKind.outputSetAddition: The following outputs were added to the output set: /vercel/path0/frontend/.dart_tool/flutter_build/073681c6efe1ca88d041bcdc1f6b7180/flutter.js,/vercel/path0/frontend/.dart_tool/flutter_build/073681c6efe1ca88d041bcdc1f6b7180/canvaskit/canvaskit.js,/vercel/path0/frontend/.dart_tool/flutter_build/073681c6efe1ca88d041bcdc1f6b7180/canvaskit/canvaskit.js.symbols,/vercel/path0/frontend/.dart_tool/flutter_build/073681c6efe1ca88d041bcdc1f6b7180/canvaskit/canvaskit.wasm,/vercel/path0/frontend/.dart_tool/flutter_build/073681c6efe1ca88d041bcdc1f6b7180/canvaskit/chromium/canvaskit.js,/vercel/path0/frontend/.dart_tool/flutter_build/073681c6efe1ca88d041bcdc1f6b7180/canvaskit/chromium/canvaskit.js.symbols,/vercel/path0/frontend/.dart_tool/flutter_build/073681c6efe1ca88d041bcdc1f6b7180/canvaskit/chromium/canvaskit.wasm,/vercel/path0/frontend/.dart_tool/flutter_build/073681c6efe1ca88d041bcdc1f6b7180/canvaskit/skwasm.js,/vercel/path0/frontend/.dart_tool/flutter_build/073681c6efe1ca88d041bcdc1f6b7180/canvaskit/skwasm.js.symbols,/vercel/path0/frontend/.dart_tool/flutter_build/073681c6efe1ca88d041bcdc1f6b7180/canvaskit/skwasm.wasm,/vercel/path0/frontend/.dart_tool/flutter_build/073681c6efe1ca88d041bcdc1f6b7180/canvaskit/skwasm_heavy.js,/vercel/path0/frontend/.dart_tool/flutter_build/073681c6efe1ca88d041bcdc1f6b7180/canvaskit/skwasm_heavy.js.symbols,/vercel/path0/frontend/.dart_tool/flutter_build/073681c6efe1ca88d041bcdc1f6b7180/canvaskit/skwasm_heavy.wasm,/vercel/path0/frontend/.dart_tool/flutter_build/073681c6efe1ca88d041bcdc1f6b7180/canvaskit/wimp.js,/vercel/path0/frontend/.dart_tool/flutter_build/073681c6efe1ca88d041bcdc1f6b7180/canvaskit/wimp.js.symbols,/vercel/path0/frontend/.dart_tool/flutter_build/073681c6efe1ca88d041bcdc1f6b7180/canvaskit/wimp.wasm}",
+      "id": "1773532740827232906296700000",
+      "date": 1773532740827,
+      "serial": "1773532740827232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532740824,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[   +2 ms] dart_build: Complete",
+      "id": "1773532740824232906296700000",
+      "date": 1773532740824,
+      "serial": "1773532740824232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532740822,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[  +46 ms] No packages with native assets. Skipping native assets compilation.",
+      "id": "1773532740822232906296700000",
+      "date": 1773532740822,
+      "serial": "1773532740822232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532740775,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[   +2 ms] dart_build: Starting due to {}",
+      "id": "1773532740775232906296700000",
+      "date": 1773532740775,
+      "serial": "1773532740775232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532740773,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[  +19 ms] web_templated_files: Complete",
+      "id": "1773532740773232906296700000",
+      "date": 1773532740773,
+      "serial": "1773532740773232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532740757,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[   +5 ms] web_templated_files: Starting due to {InvalidatedReasonKind.buildKeyChanged: The target build key changed., InvalidatedReasonKind.outputSetAddition: The following outputs were added to the output set: /vercel/path0/frontend/build/web/*/index.html,/vercel/path0/frontend/build/web/flutter_bootstrap.js, InvalidatedReasonKind.inputMissing: The following inputs were missing: /vercel/path0/frontend/web/*/index.html,/vercel/path0/frontend/web/flutter_bootstrap.js, InvalidatedReasonKind.inputChanged: The following inputs have updated contents: /vercel/path0/frontend/flutter/bin/cache/engine.stamp}",
+      "id": "1773532740757232906296700000",
+      "date": 1773532740757,
+      "serial": "1773532740757232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532740749,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[   +9 ms] invalidated build due to missing files: /vercel/path0/frontend/web/*/index.html, /vercel/path0/frontend/web/flutter_bootstrap.js",
+      "id": "1773532740749232906296700000",
+      "date": 1773532740749,
+      "serial": "1773532740749232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532740746,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[   +1 ms] Skipping target: gen_localizations",
+      "id": "1773532740746232906296700000",
+      "date": 1773532740746,
+      "serial": "1773532740746232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532740738,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[  +25 ms] web_entrypoint: Starting due to {InvalidatedReasonKind.outputSetAddition: The following outputs were added to the output set: /vercel/path0/frontend/.dart_tool/flutter_build/073681c6efe1ca88d041bcdc1f6b7180/main.dart, InvalidatedReasonKind.inputChanged: The following inputs have updated contents: /vercel/path0/frontend/flutter/packages/flutter_tools/lib/src/build_system/targets/web.dart}",
+      "id": "1773532740738232906296700000",
+      "date": 1773532740738,
+      "serial": "1773532740738232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532740712,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[   +5 ms] Initializing file store",
+      "id": "1773532740712232906296700000",
+      "date": 1773532740712,
+      "serial": "1773532740712232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532740706,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[   +1 ms] Compiling lib/main.dart for the Web...",
+      "id": "1773532740706232906296700000",
+      "date": 1773532740706,
+      "serial": "1773532740706232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532740704,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[   +4 ms] generated_plugin_registrant.dart not found. Skipping.",
+      "id": "1773532740704232906296700000",
+      "date": 1773532740704,
+      "serial": "1773532740704232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532740700,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[   +3 ms] Found plugin flutter_timezone at /vercel/.pub-cache/hosted/pub.dev/flutter_timezone-1.0.8/",
+      "id": "1773532740700232906296700000",
+      "date": 1773532740700,
+      "serial": "1773532740700232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532740697,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[   +2 ms] Found plugin package_info_plus at /vercel/.pub-cache/hosted/pub.dev/package_info_plus-9.0.0/",
+      "id": "1773532740697232906296700000",
+      "date": 1773532740697,
+      "serial": "1773532740697232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532740694,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[   +2 ms] Found plugin sentry_flutter at /vercel/.pub-cache/hosted/pub.dev/sentry_flutter-8.14.2/",
+      "id": "1773532740694232906296700000",
+      "date": 1773532740694,
+      "serial": "1773532740694232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532740693,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[   +1 ms] Found plugin shared_preferences_android at /vercel/.pub-cache/hosted/pub.dev/shared_preferences_android-2.4.21/",
+      "id": "1773532740693232906296700000",
+      "date": 1773532740693,
+      "serial": "1773532740693232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532740691,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[   +6 ms] Found plugin shared_preferences_foundation at /vercel/.pub-cache/hosted/pub.dev/shared_preferences_foundation-2.5.6/",
+      "id": "1773532740691232906296700000",
+      "date": 1773532740691,
+      "serial": "1773532740691232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532740684,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[   +1 ms] Found plugin path_provider_linux at /vercel/.pub-cache/hosted/pub.dev/path_provider_linux-2.2.1/",
+      "id": "1773532740684232906296700000",
+      "date": 1773532740684,
+      "serial": "1773532740684232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532740683,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[        ] Found plugin shared_preferences_linux at /vercel/.pub-cache/hosted/pub.dev/shared_preferences_linux-2.4.1/",
+      "id": "1773532740683232906296700000",
+      "date": 1773532740683,
+      "serial": "1773532740683232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532740682,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[   +5 ms] Found plugin shared_preferences_web at /vercel/.pub-cache/hosted/pub.dev/shared_preferences_web-2.4.3/",
+      "id": "1773532740682232906296700000",
+      "date": 1773532740682,
+      "serial": "1773532740682232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532740677,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[   +2 ms] Found plugin path_provider_windows at /vercel/.pub-cache/hosted/pub.dev/path_provider_windows-2.3.0/",
+      "id": "1773532740677232906296700000",
+      "date": 1773532740677,
+      "serial": "1773532740677232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532740675,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[   +2 ms] Found plugin shared_preferences_windows at /vercel/.pub-cache/hosted/pub.dev/shared_preferences_windows-2.4.1/",
+      "id": "1773532740675232906296700000",
+      "date": 1773532740675,
+      "serial": "1773532740675232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532740673,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[   +5 ms] Found plugin shared_preferences at /vercel/.pub-cache/hosted/pub.dev/shared_preferences-2.5.4/",
+      "id": "1773532740673232906296700000",
+      "date": 1773532740673,
+      "serial": "1773532740673232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532740667,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[        ] Found plugin url_launcher_android at /vercel/.pub-cache/hosted/pub.dev/url_launcher_android-6.3.28/",
+      "id": "1773532740667232906296700000",
+      "date": 1773532740667,
+      "serial": "1773532740667232906296700000"
+    }
+  },
+  {
+    "type": "stdout",
+    "created": 1773532740666,
+    "payload": {
+      "deploymentId": "dpl_Ez8Z91hB7V8y5xCAbZBzdS489JZi",
+      "info": {
+        "type": "build",
+        "name": "bld_orq4y5l8c",
+        "entrypoint": "."
+      },
+      "text": "[        ] Found plugin url_launcher_ios at /vercel/.pub-cache/hosted/pub.dev/url_launcher_ios-6.4.1/",
+      "id": "1773532740666232906296700000",
+      "date": 1773532740666,
+      "serial": "1773532740666232906296700000"
+    }
+  }
+]

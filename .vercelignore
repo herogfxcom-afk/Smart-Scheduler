@@ -1,0 +1,10 @@
+frontend/
+.venv/
+.git/
+__pycache__/
+*.db
+*.log
+vercel_events.json
+debug_*.py
+node_modules/
+build/

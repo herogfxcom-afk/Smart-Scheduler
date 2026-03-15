@@ -135,7 +135,8 @@ def migrate_db():
     except Exception as e:
         print(f"Database Initialization Error: {e}")
 
-FRONTEND_URL = os.getenv("FRONTEND_URL", "https://frontend-five-gules-5u3aqd6fzp.vercel.app")
+FRONTEND_URL = os.getenv("FRONTEND_URL", "https://frontend-git-main-herogfxcom-5981s-projects.vercel.app")
+API_URL = os.getenv("API_URL", "")
 BOT_USERNAME_FALLBACK = os.getenv("BOT_USERNAME", "smartschedulertime_bot")
 
 app.add_middleware(
@@ -159,9 +160,20 @@ async def log_exceptions_middleware(request: Request, call_next):
         return await call_next(request)
     except Exception as e:
         import traceback
+        error_msg = traceback.format_exc()
         print(f"EXCEPTION IN REQUEST {request.method} {request.url.path}:")
-        traceback.print_exc()
-        # Still raise it so FastAPI/Vercel handles the 500 response
+        print(error_msg)
+        
+        # return detailed error for debugging on Vercel
+        if request.url.path.startswith(("/auth", "/api", "/groups", "/meeting")):
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "error": str(e),
+                    "traceback": error_msg,
+                    "info": "Debugging 500 error on Vercel"
+                }
+            )
         raise e
 
 # ─────────────────── TELEGRAM HELPERS ───────────────────
@@ -467,8 +479,9 @@ async def _send_sync_invite(bot_token: str, chat_id: int, chat_title: str, db: S
     
     # Build the web_app URL — pass group chat_id as query param
     # The frontend reads window.location.search or Telegram's startParam for group context
-    frontend_url = os.getenv("API_URL", "https://smart-scheduler-production-2006.up.railway.app")
-    # Use the Vercel frontend URL (separate from Railway backend)
+    # For the invite link, we need the frontend URL.
+    # In production, this can be different from the API URL.
+    global FRONTEND_URL
     web_app_url = f"{FRONTEND_URL}/?startapp=group_{clean_chat_id}"
 
     payload = {

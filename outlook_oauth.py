@@ -30,11 +30,11 @@ async def get_outlook_auth_url(request: Request, current_user: User = Depends(ge
     redirect_uri = os.getenv("MICROSOFT_REDIRECT_URI")
 
     # Robust redirect URI detection for production
-    if not redirect_uri or "railway.app" in redirect_uri:
-        host = request.headers.get("host")
-        if host and "vercel.app" in host:
-            redirect_uri = f"https://{host}/auth/outlook/callback"
-            print(f"DEBUG OUTLOOK OAUTH: Auto-detected redirect_uri: {redirect_uri}")
+    if not redirect_uri:
+        scheme = request.headers.get("X-Forwarded-Proto", request.url.scheme)
+        host = request.headers.get("X-Forwarded-Host", request.url.hostname) or request.headers.get("host")
+        redirect_uri = f"{scheme}://{host}/auth/outlook/callback"
+        print(f"DEBUG OUTLOOK OAUTH: Auto-detected redirect_uri: {redirect_uri}")
 
     if not client_id or not redirect_uri:
         raise HTTPException(status_code=500, detail="Microsoft OAuth not configured on server")
@@ -61,10 +61,10 @@ async def outlook_oauth_callback(request: Request, code: str, state: str, db: Se
     redirect_uri = os.getenv("MICROSOFT_REDIRECT_URI")
 
     # Robust redirect URI detection for production (must match the one used in /url)
-    if not redirect_uri or "railway.app" in redirect_uri:
-        host = request.headers.get("host")
-        if host and "vercel.app" in host:
-            redirect_uri = f"https://{host}/auth/outlook/callback"
+    if not redirect_uri:
+        scheme = request.headers.get("X-Forwarded-Proto", request.url.scheme)
+        host = request.headers.get("X-Forwarded-Host", request.url.hostname) or request.headers.get("host")
+        redirect_uri = f"{scheme}://{host}/auth/outlook/callback"
 
     if not client_id or not client_secret or not redirect_uri:
         raise HTTPException(status_code=500, detail="Microsoft OAuth not configured on server")
