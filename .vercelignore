@@ -17,3 +17,13 @@ Dockerfile
 Procfile
 runtime.txt
 AI_GUIDE.md
+frontend/.dart_tool/
+frontend/.idea/
+frontend/.flutter-plugins-dependencies
+frontend/build/
+frontend/test_results.txt
+frontend/single_test_error.txt
+frontend/build_errors.txt
+frontend/release_build_errors.txt
+frontend/analyze_full.txt
+frontend/test_output.txt
