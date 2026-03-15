@@ -617,7 +617,7 @@ async def get_me(user_timezone: str = Query(None, alias="timezone"), current_use
                         "status": c.status,
                         "last_sync_status": c.last_sync_status,
                         "is_active": bool(c.is_active),
-                        "last_sync_at": c.last_sync_at.isoformat().replace('+00:00', '') + "Z" if c.last_sync_at else None
+                        "last_sync_at": c.last_sync_at.astimezone(ZoneInfo("UTC")).isoformat().replace('+00:00', '') + "Z" if c.last_sync_at else None
                     } for c in user.connections
                 ]
             }
