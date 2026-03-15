@@ -328,11 +328,16 @@ async def telegram_webhook(req: FastAPIRequest, db: Session = Depends(get_db)):
             }
         }]
         async with httpx.AsyncClient(timeout=5) as client:
-            await client.post(f"https://api.telegram.org/bot{bot_token}/answerInlineQuery", json={
-            "inline_query_id": query_id,
-            "results": results,
-            "cache_time": 0
-        })
+            resp = await client.post(f"https://api.telegram.org/bot{bot_token}/answerInlineQuery", json={
+                "inline_query_id": query_id,
+                "results": results,
+                "cache_time": 0
+            })
+            resp_data = resp.json()
+            if not resp_data.get("ok"):
+                print(f"🔴 answerInlineQuery failed in main_new: {resp_data}")
+            else:
+                print("🟢 answerInlineQuery success in main_new")
         return {"ok": True}
 
     if not message:

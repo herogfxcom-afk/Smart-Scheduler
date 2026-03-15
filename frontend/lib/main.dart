@@ -107,6 +107,18 @@ class _SmartSchedulerAppState extends State<SmartSchedulerApp> with WidgetsBindi
           );
         }
         return;
+      } else if (startParam != null && startParam.startsWith("inline_")) {
+        print("DEBUG: Deep link matched inline query");
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("Magic Sync: Personal Mode"),
+              backgroundColor: Colors.blue,
+              behavior: SnackBarBehavior.floating,
+            )
+          );
+        }
+        return;
       }
       await Future.delayed(Duration(milliseconds: 300 * (i + 1)));
     }
