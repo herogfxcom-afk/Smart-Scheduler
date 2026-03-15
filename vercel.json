@@ -1,7 +1,7 @@
 {
     "functions": {
         "api/index.py": {
-            "excludeFiles": ["frontend/**", "node_modules/**", ".venv/**", ".git/**", "alembic/**", "backend/**", "tests/**", "templates/**", "*.db", "*.log", "vercel_events.json"]
+            "includeFiles": "**/*.py"
         }
     },
     "buildCommand": "cd frontend && bash build.sh && cd .. && cp -r frontend/build/web public && rm -rf frontend",
