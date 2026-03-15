@@ -355,21 +355,21 @@ async def telegram_webhook(
         # Get bot's username (cached)
         bot_username = await get_bot_username()
         
-        # We offer a button to launch the app (generic since we don't know the chat_id here)
+        # We offer a visually appealing plaque for Magic Sync
         results = [{
             "type": "article",
             "id": "magic_sync",
-            "title": "📊 Magic Sync: Синхронизировать календари",
-            "description": "Позволяет найти время, которое подходит всем участникам.",
+            "title": "✨ Magic Sync: Найти общее время",
+            "description": "Мгновенный поиск идеального слота, который подходит всем участникам.",
             "input_message_content": {
-                "message_text": "📊 *Magic Sync: Синхронизация календарей*\n\nНажмите кнопку ниже, чтобы начать поиск общего времени!",
+                "message_text": "📊 *Magic Sync: Планирование встречи*\n\nНажмите кнопку ниже, чтобы найти общее свободное время в этом чате!",
                 "parse_mode": "Markdown"
             },
             "reply_markup": {
                 "inline_keyboard": [[{
-                    "text": "📊 Открыть Magic Sync",
+                    "text": "📅 Открыть Magic Sync",
                     "web_app": {
-                        "url": f"{FRONTEND_URL}/?startapp=inline_query"
+                        "url": f"{FRONTEND_URL}/?startapp=inline"
                     }
                 }]]
             }
@@ -383,9 +383,9 @@ async def telegram_webhook(
                     "cache_time": 300,
                     "is_personal": True,
                     "button": {
-                        "text": "📊 Спланировать встречу",
+                        "text": "✨ Спланировать встречу",
                         "web_app": {
-                            "url": f"{FRONTEND_URL}/?startapp=inline_query_button"
+                            "url": f"{FRONTEND_URL}/?startapp=inline_btn"
                         }
                     }
                 }
