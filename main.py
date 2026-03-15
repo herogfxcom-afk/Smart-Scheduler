@@ -449,7 +449,7 @@ async def telegram_webhook(
             "reply_markup": json.dumps({
                 "inline_keyboard": [[{
                     "text": "📊 Open Scheduler",
-                    "web_app": {"url": f"{FRONTEND_URL}/?startapp=private"}
+                    "web_app": {"url": f"{FRONTEND_URL}/"}
                 }]]
             })
         }
