@@ -441,7 +441,10 @@ async def telegram_webhook(
     chat_type = chat.get("type", "")
     chat_title = chat.get("title", "Группа")
     
+    print(f"💬 [WEBHOOK DEBUG] Received message: '{text}' in chat_type: {chat_type} (chat_id: {chat_id})")
+    
     # Only respond to /sync or /start in groups
+
     if (text.startswith("/sync") or text.startswith("/start")) and chat_type in ["group", "supergroup"]:
         await _send_sync_invite(bot_token, chat_id, chat_title, db)
     elif text.startswith("/start") and chat_type == "private":
