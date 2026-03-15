@@ -13,8 +13,10 @@ load_dotenv()
 
 def validate_telegram_init_data(init_data: str) -> dict:
     """Verifies Telegram Web App initData using HMAC-SHA256."""
+    print(f"DEBUG AUTH: validate_telegram_init_data START. Len: {len(init_data)}", flush=True)
     current_bot_token = os.getenv("BOT_TOKEN")
     if not current_bot_token:
+        print("DEBUG AUTH: ERROR - BOT_TOKEN is missing!", flush=True)
         raise HTTPException(status_code=500, detail="BOT_TOKEN not configured")
     
     try:

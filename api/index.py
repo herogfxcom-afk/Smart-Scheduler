@@ -7,6 +7,10 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 async def app(scope, receive, send):
     try:
         # Lazy import so errors happen at runtime and can be caught here
+        import os
+        print(f"DEBUG STARTUP: Env keys: {list(os.environ.keys())}", flush=True)
+        print(f"DEBUG STARTUP: BOT_TOKEN present: {bool(os.environ.get('BOT_TOKEN'))}", flush=True)
+        print(f"DEBUG STARTUP: DATABASE_URL present: {bool(os.environ.get('DATABASE_URL'))}", flush=True)
         from main import app as main_app
         return await main_app(scope, receive, send)
     except Exception as e:
