@@ -13,12 +13,8 @@ load_dotenv()
 
 def validate_telegram_init_data(init_data: str) -> dict:
     """Verifies Telegram Web App initData using HMAC-SHA256."""
-    import sys
-    print(f"DEBUG AUTH: validate_telegram_init_data START. Len: {len(init_data)}", flush=True)
     current_bot_token = os.getenv("BOT_TOKEN")
-    print(f"DEBUG AUTH: BOT_TOKEN status: {bool(current_bot_token)}", flush=True)
     if not current_bot_token:
-        print("DEBUG AUTH: BOT_TOKEN is missing!", flush=True)
         raise HTTPException(status_code=500, detail="BOT_TOKEN not configured")
     
     try:
@@ -70,10 +66,6 @@ from database import SessionLocal
 
 def get_current_user(init_data: Optional[str] = Header(None)):
     """Dependency to get or create user based on Telegram initData."""
-    print(f"AUTH: get_current_user called. InitData present: {bool(init_data)}", flush=True)
-    bot_token_val = os.getenv("BOT_TOKEN")
-    print(f"AUTH: BOT_TOKEN present: {bool(bot_token_val)} (len: {len(bot_token_val) if bot_token_val else 0})", flush=True)
-    
     if not init_data:
         raise HTTPException(status_code=403, detail="init-data header missing")
         
