@@ -1,7 +1,7 @@
 import caldav
 from caldav.elements import dav, cdav
 from datetime import datetime, timedelta
-import pytz
+from zoneinfo import ZoneInfo
 
 class AppleCalendarService:
     def __init__(self, username, password):

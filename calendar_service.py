@@ -6,7 +6,7 @@ import googleapiclient.discovery
 import asyncio
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
-import pytz
+from zoneinfo import ZoneInfo
 
 SCOPES = [
     'https://www.googleapis.com/auth/calendar',

@@ -13,7 +13,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session, joinedload
 import datetime as dt_module
 from datetime import datetime, timedelta, timezone
-import pytz
+from zoneinfo import ZoneInfo
 import os
 import httpx
 import json
@@ -941,8 +941,8 @@ async def perform_calendar_sync(current_user: User, db: Session):
                 s_out = slot['start'].replace('Z', '+00:00')
                 e_out = slot['end'].replace('Z', '+00:00')
                 
-                st_aware = parse_ms_datetime(s_out).astimezone(pytz.utc)
-                et_aware = parse_ms_datetime(e_out).astimezone(pytz.utc)
+                st_aware = parse_ms_datetime(s_out).astimezone(ZoneInfo("UTC"))
+                et_aware = parse_ms_datetime(e_out).astimezone(ZoneInfo("UTC"))
                 st_naive = st_aware.replace(tzinfo=None)
                 et_naive = et_aware.replace(tzinfo=None)
                 
@@ -1455,7 +1455,7 @@ async def delete_meeting(meeting_id: int, background_tasks: BackgroundTasks, cur
             try:
                 user_tz = ZoneInfo(user_tz_name)
                 if meeting.start_time.tzinfo is None:
-                    utc_time = meeting.start_time.replace(tzinfo=pytz.utc)
+                    utc_time = meeting.start_time.replace(tzinfo=ZoneInfo("UTC"))
                 else:
                     utc_time = meeting.start_time
                 display_time = utc_time.astimezone(user_tz).strftime('%d.%m %H:%M')
@@ -1768,8 +1768,8 @@ async def create_meeting(data: dict, background_tasks: BackgroundTasks, current_
         # Robust UTC parsing: handle Z and offsets, convert to UTC, then store as naive
         s_raw = str(start_str).replace('Z', '+00:00')
         e_raw = str(end_str).replace('Z', '+00:00')
-        start_time = datetime.fromisoformat(s_raw).astimezone(pytz.utc)
-        end_time = datetime.fromisoformat(e_raw).astimezone(pytz.utc)
+        start_time = datetime.fromisoformat(s_raw).astimezone(ZoneInfo("UTC"))
+        end_time = datetime.fromisoformat(e_raw).astimezone(ZoneInfo("UTC"))
     except Exception as e:
         print(f"DEBUG: Error parsing dates {start_str}/{end_str}: {e}")
         raise HTTPException(status_code=400, detail=f"Invalid date format: {e}")

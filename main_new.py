@@ -7,7 +7,7 @@ from starlette.responses import Response
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta, timezone
-import pytz
+from zoneinfo import ZoneInfo
 from auth import get_current_user
 from google_oauth import router as google_auth_router
 from outlook_oauth import router as outlook_auth_router
@@ -706,8 +706,8 @@ async def sync_calendar(current_user: User = Depends(get_current_user), db: Sess
                         s_out = slot['start'].replace('Z', '+00:00')
                         e_out = slot['end'].replace('Z', '+00:00')
                         
-                        st_aware = datetime.fromisoformat(s_out).astimezone(pytz.utc)
-                        et_aware = datetime.fromisoformat(e_out).astimezone(pytz.utc)
+                        st_aware = datetime.fromisoformat(s_out).astimezone(ZoneInfo("UTC"))
+                        et_aware = datetime.fromisoformat(e_out).astimezone(ZoneInfo("UTC"))
                         st_naive = st_aware.replace(tzinfo=None)
                         et_naive = et_aware.replace(tzinfo=None)
                         
@@ -1048,8 +1048,8 @@ async def create_meeting(data: dict, background_tasks: BackgroundTasks, current_
         # Robust UTC parsing: handle Z and offsets, convert to UTC, then store as naive
         s_raw = str(start_str).replace('Z', '+00:00')
         e_raw = str(end_str).replace('Z', '+00:00')
-        start_time = datetime.fromisoformat(s_raw).astimezone(pytz.utc).replace(tzinfo=None)
-        end_time = datetime.fromisoformat(e_raw).astimezone(pytz.utc).replace(tzinfo=None)
+        start_time = datetime.fromisoformat(s_raw).astimezone(ZoneInfo("UTC")).replace(tzinfo=None)
+        end_time = datetime.fromisoformat(e_raw).astimezone(ZoneInfo("UTC")).replace(tzinfo=None)
     except Exception as e:
         print(f"DEBUG: Error parsing dates {start_str}/{end_str}: {e}")
         raise HTTPException(status_code=400, detail=f"Invalid date format: {e}")

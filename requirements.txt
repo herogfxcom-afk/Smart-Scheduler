@@ -9,9 +9,7 @@ google-api-python-client
 python-multipart
 python-dotenv
 httpx
-pytz
 caldav
-requests
 cachetools
 sentry-sdk
 slowapi
