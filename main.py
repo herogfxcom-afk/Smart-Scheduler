@@ -58,39 +58,8 @@ limiter = Limiter(key_func=lambda request: request.headers.get("init-data", "ano
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# Transaction Health Middleware (FastAPI Adaptation)
-@app.middleware("http")
-async def db_transaction_health_middleware(request: FastAPIRequest, call_next):
-    from database import SessionLocal
-    
-    # 1. BEFORE REQUEST: Check if we got a poisoned connection from the pool
-    with SessionLocal() as db:
-        db.rollback() # Clear potential aborted transaction state
-        try:
-            db.execute(text("SELECT 1"))
-        except Exception as e:
-            logger.error(
-                f"🔴 POISONED CONNECTION FROM POOL DETECTED before {request.url.path}\n"
-                f"Error: {e}"
-            )
-            db.rollback()
-            
-    # 2. EXECUTE REQUEST
-    response = await call_next(request)
-    
-    # 3. AFTER REQUEST: Check if the request left the connection poisoned
-    with SessionLocal() as db:
-        db.rollback() # Ensure we have a clean state for the check
-        try:
-            db.execute(text("SELECT 1"))
-        except Exception as e:
-            logger.error(
-                f"🔴 REQUEST {request.url.path} LEFT BROKEN TRANSACTION\n"
-                f"Error: {e}"
-            )
-            db.rollback()
-            
-    return response
+# Transaction Health Middleware - Removed for Vercel performance optimization
+# (Connection health is now handled by pool_pre_ping=True in database.py)
 
 # Create database tables
 from database import engine
