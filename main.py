@@ -63,6 +63,31 @@ limiter = Limiter(key_func=lambda request: request.headers.get("init-data", "ano
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    import traceback
+    error_msg = traceback.format_exc()
+    print(f"GLOBAL ERROR: {error_msg}")
+    return JSONResponse(
+        status_code=500,
+        content={"detail": str(exc), "traceback": error_msg}
+    )
+
+@app.get("/api/debug/diag")
+async def diagnostic_check(db: Session = Depends(get_db)):
+    try:
+        db.execute(text("SELECT 1"))
+        db_status = "ok"
+    except Exception as e:
+        db_status = f"error: {str(e)}"
+    
+    return {
+        "db": db_status,
+        "env": os.getenv("RAILWAY_ENVIRONMENT_NAME", "unknown"),
+        "python": sys.version,
+        "now": datetime.now(timezone.utc).isoformat()
+    }
+
 # Transaction Health Middleware - Removed for Vercel performance optimization
 # (Connection health is now handled by pool_pre_ping=True in database.py)
 
