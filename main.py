@@ -1598,12 +1598,10 @@ async def update_meeting(meeting_id: int, data: dict, current_user: User = Depen
         
     if "title" in data: meeting.title = data["title"]
     if "location" in data: meeting.location = data["location"]
-    if "start" in data: 
-        s_raw = data["start"].replace('Z', '+00:00')
-        meeting.start_time = datetime.fromisoformat(s_raw).astimezone(pytz.utc)
+        meeting.start_time = datetime.fromisoformat(s_raw).astimezone(ZoneInfo("UTC"))
     if "end" in data: 
         e_raw = data["end"].replace('Z', '+00:00')
-        meeting.end_time = datetime.fromisoformat(e_raw).astimezone(pytz.utc)
+        meeting.end_time = datetime.fromisoformat(e_raw).astimezone(ZoneInfo("UTC"))
     
     db.commit()
     return {"status": "success"}

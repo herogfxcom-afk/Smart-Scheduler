@@ -37,15 +37,15 @@ class AppleCalendarService:
                 # Normalize to datetime (handle date-only events)
                 if isinstance(s, datetime):
                     if s.tzinfo is None:
-                        s = pytz.utc.localize(s)
+                        s = s.replace(tzinfo=ZoneInfo("UTC"))
                 else: # date object
-                    s = datetime.combine(s, datetime.min.time(), tzinfo=pytz.utc)
+                    s = datetime.combine(s, datetime.min.time(), tzinfo=ZoneInfo("UTC"))
                     
                 if isinstance(e, datetime):
                     if e.tzinfo is None:
-                        e = pytz.utc.localize(e)
+                        e = e.replace(tzinfo=ZoneInfo("UTC"))
                 else: # date object
-                    e = datetime.combine(e, datetime.min.time(), tzinfo=pytz.utc)
+                    e = datetime.combine(e, datetime.min.time(), tzinfo=ZoneInfo("UTC"))
 
                 busy_slots.append({
                     "start": s.isoformat(),
