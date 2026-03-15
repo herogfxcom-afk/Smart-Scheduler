@@ -160,20 +160,32 @@ async def log_exceptions_middleware(request: Request, call_next):
         return await call_next(request)
     except Exception as e:
         import traceback
+        import sys
         error_msg = traceback.format_exc()
-        print(f"EXCEPTION IN REQUEST {request.method} {request.url.path}:")
+        print(f"CRITICAL EXCEPTION IN REQUEST {request.method} {request.url.path}:")
         print(error_msg)
+        sys.stdout.flush()
         
         # return detailed error for debugging on Vercel
         if request.url.path.startswith(("/auth", "/api", "/groups", "/meeting")):
-            return JSONResponse(
-                status_code=500,
-                content={
-                    "error": str(e),
-                    "traceback": error_msg,
-                    "info": "Debugging 500 error on Vercel"
-                }
-            )
+            try:
+                from fastapi.responses import JSONResponse
+                return JSONResponse(
+                    status_code=500,
+                    content={
+                        "error": str(e),
+                        "traceback": error_msg,
+                        "info": "Middleware catch-all"
+                    }
+                )
+            except:
+                import json
+                from starlette.responses import Response
+                return Response(
+                    content=json.dumps({"error": str(e), "traceback": error_msg}),
+                    status_code=500,
+                    media_type="application/json"
+                )
         raise e
 
 # ─────────────────── TELEGRAM HELPERS ───────────────────

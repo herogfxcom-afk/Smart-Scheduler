@@ -346,7 +346,7 @@ async def telegram_webhook(req: FastAPIRequest, db: Session = Depends(get_db)):
     
     return {"ok": True}
 
-async async def _send_sync_invite(bot_token: str, chat_id: int, chat_title: str, db: Session):
+async def _send_sync_invite(bot_token: str, chat_id: int, chat_title: str, db: Session):
     """Internal helper to send the Magic Sync button to a chat."""
     async with httpx.AsyncClient(timeout=5) as client:
             bot_info_resp = (await client.get(f"https://api.telegram.org/bot{bot_token}/getMe")).json()

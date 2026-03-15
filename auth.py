@@ -13,42 +13,54 @@ load_dotenv()
 
 def validate_telegram_init_data(init_data: str) -> dict:
     """Verifies Telegram Web App initData using HMAC-SHA256."""
+    import sys
+    print("DEBUG AUTH: validate_telegram_init_data started"); sys.stdout.flush()
     current_bot_token = os.getenv("BOT_TOKEN")
     if not current_bot_token:
-        print("AUTH: BOT_TOKEN is missing!")
+        print("DEBUG AUTH: BOT_TOKEN is missing!"); sys.stdout.flush()
         raise HTTPException(status_code=500, detail="BOT_TOKEN not configured")
     
     try:
-        print("AUTH: Beginning validation...")
+        print("DEBUG AUTH: Beginning parse_qs..."); sys.stdout.flush()
         vals = {k: v[0] for k, v in parse_qs(init_data).items()}
+        print(f"DEBUG AUTH: vals keys: {list(vals.keys())}"); sys.stdout.flush()
+        
         if "hash" not in vals:
-            print("AUTH: Hash missing from init_data")
+            print("DEBUG AUTH: Hash missing from init_data"); sys.stdout.flush()
             raise HTTPException(status_code=403, detail="Missing hash")
         
         auth_hash = vals.pop("hash")
         data_check_string = "\n".join([f"{k}={v}" for k, v in sorted(vals.items())])
         
-        print("AUTH: Computing HMAC...")
+        print("DEBUG AUTH: Computing HMAC..."); sys.stdout.flush()
         secret_key = hmac.new("WebAppData".encode(), current_bot_token.encode(), hashlib.sha256).digest()
+        print("DEBUG AUTH: secret_key computed"); sys.stdout.flush()
         h = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
+        print(f"DEBUG AUTH: HMAC computed: {h[:5]}..."); sys.stdout.flush()
         
         if h != auth_hash:
-            print(f"AUTH: Hash mismatch! Expected {auth_hash}, got {h}")
+            print(f"DEBUG AUTH: Hash mismatch! Expected {auth_hash}, got {h}"); sys.stdout.flush()
             raise HTTPException(status_code=403, detail="Invalid hash")
             
         import time
         auth_date = int(vals.get("auth_date", 0))
+        print(f"DEBUG AUTH: auth_date: {auth_date}, current: {time.time()}"); sys.stdout.flush()
         if time.time() - auth_date > 86400:
-            print("AUTH: init_data expired")
+            print("DEBUG AUTH: init_data expired"); sys.stdout.flush()
             raise HTTPException(status_code=403, detail="InitData expired")
         
-        print("AUTH: Validation successful, parsing user JSON...")
-        user_data = json.loads(vals.get("user", "{}"))
+        print("DEBUG AUTH: Parsing user JSON..."); sys.stdout.flush()
+        user_raw = vals.get("user", "{}")
+        print(f"DEBUG AUTH: user_raw: {user_raw[:50]}..."); sys.stdout.flush()
+        user_data = json.loads(user_raw)
+        print("DEBUG AUTH: validate_telegram_init_data successful"); sys.stdout.flush()
         return user_data
     except HTTPException:
         raise
     except Exception as e:
-        print(f"AUTH: Validation exception: {str(e)}")
+        import traceback
+        print(f"DEBUG AUTH CRASH in validate_telegram_init_data: {str(e)}"); sys.stdout.flush()
+        print(traceback.format_exc()); sys.stdout.flush()
         raise HTTPException(status_code=403, detail=f"Auth error: {str(e)}")
 
 from typing import Optional
