@@ -1,4 +1,4 @@
-frontend/
+# Exclude heavy folders that are NOT needed for build or runtime
 .venv/
 .git/
 __pycache__/
