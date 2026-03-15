@@ -300,6 +300,8 @@ async def telegram_webhook(req: FastAPIRequest, db: Session = Depends(get_db)):
     inline_query = update.get("inline_query")
     if inline_query:
         query_id = inline_query.get("id")
+        user_id = inline_query.get("from", {}).get("id")
+        
         # Get bot's username  
         async with httpx.AsyncClient(timeout=5) as client:
             bot_info_resp = (await client.get(f"https://api.telegram.org/bot{bot_token}/getMe")).json()
@@ -319,7 +321,9 @@ async def telegram_webhook(req: FastAPIRequest, db: Session = Depends(get_db)):
             "reply_markup": {
                 "inline_keyboard": [[{
                     "text": "📊 Magic Sync",
-                    "url": f"https://t.me/{bot_username}/app" # Generic launch
+                    "web_app": {
+                        "url": f"{FRONTEND_URL}/?startapp=inline_{user_id}"
+                    }
                 }]]
             }
         }]
@@ -327,7 +331,7 @@ async def telegram_webhook(req: FastAPIRequest, db: Session = Depends(get_db)):
             await client.post(f"https://api.telegram.org/bot{bot_token}/answerInlineQuery", json={
             "inline_query_id": query_id,
             "results": results,
-            "cache_time": 300
+            "cache_time": 0
         })
         return {"ok": True}
 

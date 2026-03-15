@@ -351,6 +351,7 @@ async def telegram_webhook(
     inline_query = update.get("inline_query")
     if inline_query:
         query_id = inline_query.get("id")
+        user_id = inline_query.get("from", {}).get("id")
         
         # Get bot's username (cached)
         bot_username = await get_bot_username()
@@ -369,7 +370,7 @@ async def telegram_webhook(
                 "inline_keyboard": [[{
                     "text": "📅 Открыть Magic Sync",
                     "web_app": {
-                        "url": f"{FRONTEND_URL}/?startapp=inline"
+                        "url": f"{FRONTEND_URL}/?startapp=inline_{user_id}"
                     }
                 }]]
             }
@@ -380,12 +381,12 @@ async def telegram_webhook(
                 payload = {
                     "inline_query_id": query_id,
                     "results": results,
-                    "cache_time": 300,
+                    "cache_time": 0,
                     "is_personal": True,
                     "button": {
                         "text": "✨ Спланировать встречу",
                         "web_app": {
-                            "url": f"{FRONTEND_URL}/?startapp=inline_btn"
+                            "url": f"{FRONTEND_URL}/?startapp=inline_btn_{user_id}"
                         }
                     }
                 }
