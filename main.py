@@ -27,6 +27,10 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("smart-scheduler")
 
+from aiogram import Bot, Dispatcher, types, F
+from aiogram.types import InlineQuery, InlineQueryResultArticle, InputTextMessageContent, InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
+from aiogram.utils.keyboard import InlineKeyboardBuilder
+
 # Sentry initialization
 SENTRY_DSN = os.getenv("SENTRY_DSN", "https://c4f2ee07b69a9b590d740d35220ef5a0@o4511041169391616.ingest.de.sentry.io/4511041208123472")
 sentry_sdk.init(
@@ -108,6 +112,46 @@ def migrate_db():
 FRONTEND_URL = os.getenv("FRONTEND_URL", "https://frontend-git-main-herogfxcom-5981s-projects.vercel.app")
 API_URL = os.getenv("API_URL", "")
 BOT_USERNAME_FALLBACK = os.getenv("BOT_USERNAME", "smartschedulertime_bot")
+
+# Initialize Aiogram
+bot = Bot(token=os.getenv("BOT_TOKEN", ""))
+dp = Dispatcher()
+
+@dp.inline_query()
+async def handle_inline_query_aiogram(inline_query: InlineQuery):
+    user_id = inline_query.from_user.id
+    print(f"🎯 Aiogram: Inline query detected from user {user_id}: {inline_query.query}")
+    
+    result_id = f"magic_sync_{user_id}_{int(time.time())}"
+    
+    # Using the same plaque logic as before but with aiogram types
+    results = [
+        InlineQueryResultArticle(
+            id=result_id,
+            title="✨ Magic Sync: Найти общее время",
+            description="Мгновенный поиск идеального слота, который подходит всем участникам.",
+            input_message_content=InputTextMessageContent(
+                message_text="📊 *Magic Sync: Планирование встречи*\n\nНажмите кнопку ниже, чтобы найти общее свободное время в этом чате!",
+                parse_mode="Markdown"
+            ),
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+                InlineKeyboardButton(
+                    text="📅 Открыть Magic Sync",
+                    url=f"https://t.me/smartschedulertime_bot/app?startapp=inline_{user_id}"
+                )
+            ]])
+        )
+    ]
+    
+    await inline_query.answer(
+        results=results,
+        cache_time=0,
+        is_personal=True,
+        button=types.InlineQueryResultsButton(
+            text="✨ Спланировать встречу",
+            web_app=WebAppInfo(url=f"{FRONTEND_URL}/?startapp=inline_btn_{user_id}")
+        )
+    )
 
 app.add_middleware(
     CORSMiddleware,
@@ -348,60 +392,10 @@ async def telegram_webhook(
         await _send_sync_invite(bot_token, chat_id, chat_title, db)
         return {"ok": True}
 
-    # 3. Handle Inline Query (@botname)
-    inline_query = update.get("inline_query")
-    if inline_query:
-        query_id = inline_query.get("id")
-        user_id = inline_query.get("from", {}).get("id")
-        print(f"🎯 Inline query detected from user {user_id}: {inline_query.get('query')}")
-        
-        # Get bot's username (cached)
-        bot_username = await get_bot_username()
-        
-        # Unique result ID to avoid conflicts
-        result_id = f"magic_sync_{user_id}_{int(time.time())}"
-        
-        # We offer a visually appealing plaque for Magic Sync
-        results = [{
-            "type": "article",
-            "id": result_id,
-            "title": "✨ Magic Sync: Найти общее время",
-            "description": "Мгновенный поиск идеального слота, который подходит всем участникам.",
-            "input_message_content": {
-                "message_text": "📊 *Magic Sync: Планирование встречи*\n\nНажмите кнопку ниже, чтобы найти общее свободное время в этом чате!",
-                "parse_mode": "Markdown"
-            },
-            "reply_markup": {
-                "inline_keyboard": [[{
-                    "text": "📅 Открыть Magic Sync",
-                    "url": f"https://t.me/smartschedulertime_bot/app?startapp=inline_{user_id}"
-                }]]
-            }
-        }]
-        
-        try:
-            async with httpx.AsyncClient(timeout=5) as client:
-                payload = {
-                    "inline_query_id": query_id,
-                    "results": results,
-                    "cache_time": 0,
-                    "is_personal": True,
-                    "button": {
-                        "text": "✨ Спланировать встречу",
-                        "url": f"https://t.me/smartschedulertime_bot/app?startapp=inline_btn_{user_id}"
-                    }
-                }
-                resp = await client.post(f"https://api.telegram.org/bot{bot_token}/answerInlineQuery", json=payload)
-                resp_data = resp.json()
-                if not resp_data.get("ok"):
-                    print(f"🔴 answerInlineQuery failed for user {user_id}: {resp_data}")
-                    logger.error(f"🔴 answerInlineQuery failed: {resp_data}")
-                else:
-                    print(f"🟢 Answer sent successfully for user {user_id}")
-                    logger.info("🟢 answerInlineQuery success")
-        except Exception as e:
-            logger.error(f"🔴 answerInlineQuery exception: {e}")
-            
+    # 3. Handle Inline Query (@botname) via Aiogram
+    if update.get("inline_query"):
+        from aiogram.types import Update
+        await dp.feed_update(bot, Update(**update))
         return {"ok": True}
 
     # 4. Handle Callback Queries (Inline Buttons)
