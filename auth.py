@@ -15,40 +15,40 @@ def validate_telegram_init_data(init_data: str) -> dict:
     """Verifies Telegram Web App initData using HMAC-SHA256."""
     current_bot_token = os.getenv("BOT_TOKEN")
     if not current_bot_token:
-        print("AUTH ERROR: BOT_TOKEN is missing from environment variables!")
+        print("AUTH: BOT_TOKEN is missing!")
         raise HTTPException(status_code=500, detail="BOT_TOKEN not configured")
     
     try:
+        print("AUTH: Beginning validation...")
         vals = {k: v[0] for k, v in parse_qs(init_data).items()}
         if "hash" not in vals:
+            print("AUTH: Hash missing from init_data")
             raise HTTPException(status_code=403, detail="Missing hash")
         
         auth_hash = vals.pop("hash")
-        # Data-check-string: alphabetical order
         data_check_string = "\n".join([f"{k}={v}" for k, v in sorted(vals.items())])
         
-        # secret_key = HMAC_SHA256("WebAppData", bot_token)
+        print("AUTH: Computing HMAC...")
         secret_key = hmac.new("WebAppData".encode(), current_bot_token.encode(), hashlib.sha256).digest()
-        # hash = HMAC_SHA256(secret_key, data_check_string)
         h = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
         
         if h != auth_hash:
-            print(f"AUTH ERROR: Hash mismatch. Expected {auth_hash}, got {h}")
+            print(f"AUTH: Hash mismatch! Expected {auth_hash}, got {h}")
             raise HTTPException(status_code=403, detail="Invalid hash")
             
-        # Prevent replay attacks: check auth_date (timestamp)
         import time
         auth_date = int(vals.get("auth_date", 0))
-        if time.time() - auth_date > 86400: # 24 hours
-            print("AUTH ERROR: InitData expired")
+        if time.time() - auth_date > 86400:
+            print("AUTH: init_data expired")
             raise HTTPException(status_code=403, detail="InitData expired")
         
+        print("AUTH: Validation successful, parsing user JSON...")
         user_data = json.loads(vals.get("user", "{}"))
         return user_data
     except HTTPException:
         raise
     except Exception as e:
-        print(f"AUTH ERROR EXCEPTION: {str(e)}")
+        print(f"AUTH: Validation exception: {str(e)}")
         raise HTTPException(status_code=403, detail=f"Auth error: {str(e)}")
 
 from typing import Optional
@@ -57,28 +57,25 @@ from database import SessionLocal
 
 def get_current_user(init_data: Optional[str] = Header(None)):
     """Dependency to get or create user based on Telegram initData."""
-    print(f"AUTH: Request received, init_data present: {bool(init_data)}")
+    print(f"AUTH: get_current_user called. InitData present: {bool(init_data)}")
     
     if not init_data:
-        print("===> DEBUG AUTH: Fail! init-data header is entirely missing.")
         raise HTTPException(status_code=403, detail="init-data header missing")
         
     user_info = validate_telegram_init_data(init_data)
     telegram_id = user_info.get("id")
     
     if not telegram_id:
-        print("===> DEBUG AUTH: Fail! Telegram ID missing in validated data.")
         raise HTTPException(status_code=401, detail="User ID missing in initData")
     
-    print(f"AUTH: Extracted Telegram ID: {telegram_id}")
+    print(f"AUTH: Success extracting ID {telegram_id}. Connecting to DB...")
     
-    # Use an isolated session for authentication to prevent InFailedSqlTransaction contagion
     with SessionLocal() as db:
-        db.rollback() # Self-healing: clear potential aborted state from pooled connection
         try:
+            print(f"AUTH: Querying DB for telegram_id={telegram_id}")
             user = db.query(User).options(joinedload(User.connections)).filter(User.telegram_id == telegram_id).first()
             if not user:
-                print(f"AUTH: Creating new user for ID: {telegram_id}")
+                print("AUTH: Creating new user record")
                 user = User(
                     telegram_id=telegram_id,
                     username=user_info.get("username"),
@@ -88,23 +85,19 @@ def get_current_user(init_data: Optional[str] = Header(None)):
                 db.add(user)
                 db.commit()
                 db.refresh(user)
-                print("AUTH: User created successfully")
             else:
-                print(f"AUTH: Found existing user: {user.id}")
-                # Update user info if changed
+                print(f"AUTH: Updating existing user {user.id}")
                 user.username = user_info.get("username")
                 user.first_name = user_info.get("first_name")
                 user.photo_url = user_info.get("photo_url")
                 db.commit()
-                # Use query instead of refresh to keep options (joinedload) intact
+                # Reload to ensure joinedload is handled correctly
                 user = db.query(User).options(joinedload(User.connections)).filter(User.telegram_id == telegram_id).first()
-                print("AUTH: User updated successfully")
                 
-            # Detach user from the session so it can be used in other sessions later
-            # collections that were joined-loaded will stay attached to the object
             db.expunge(user)
+            print("AUTH: get_current_user returning user object")
             return user
         except Exception as e:
-            print(f"AUTH ERROR IN DB OPERATION: {str(e)}")
+            print(f"AUTH: DB Operation failed: {str(e)}")
             db.rollback()
             raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
