@@ -280,6 +280,7 @@ async def telegram_webhook(req: FastAPIRequest, db: Session = Depends(get_db)):
     
     try:
         update = await req.json()
+        print(f"📩 BOT UPDATE (main_new): {json.dumps(update, ensure_ascii=True)}")
     except Exception:
         return {"ok": False}
     
@@ -301,17 +302,21 @@ async def telegram_webhook(req: FastAPIRequest, db: Session = Depends(get_db)):
     if inline_query:
         query_id = inline_query.get("id")
         user_id = inline_query.get("from", {}).get("id")
+        print(f"🎯 Inline query detected (main_new) from user {user_id}: {inline_query.get('query')}")
         
         # Get bot's username  
         async with httpx.AsyncClient(timeout=5) as client:
             bot_info_resp = (await client.get(f"https://api.telegram.org/bot{bot_token}/getMe")).json()
             bot_username = bot_info_resp.get("result", {}).get("username", BOT_USERNAME_FALLBACK)
         
+        # Unique result ID
+        result_id = f"magic_sync_{user_id}_{int(time.time())}"
+        
         # We offer a button to launch the app (generic since we don't know the chat_id here)
         # But we can say "Share Magic Sync in this chat"
         results = [{
             "type": "article",
-            "id": "magic_sync",
+            "id": result_id,
             "title": "📊 Поделиться Magic Sync",
             "description": "Позволяет всем участникам синхронизировать календари.",
             "input_message_content": {
@@ -335,9 +340,9 @@ async def telegram_webhook(req: FastAPIRequest, db: Session = Depends(get_db)):
             })
             resp_data = resp.json()
             if not resp_data.get("ok"):
-                print(f"🔴 answerInlineQuery failed in main_new: {resp_data}")
+                print(f"🔴 answerInlineQuery failed (main_new) for user {user_id}: {resp_data}")
             else:
-                print("🟢 answerInlineQuery success in main_new")
+                print(f"🟢 Answer sent successfully (main_new) for user {user_id}")
         return {"ok": True}
 
     if not message:

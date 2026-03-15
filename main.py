@@ -330,7 +330,7 @@ async def telegram_webhook(
     
     try:
         update = await request.json()
-        print(f"BOT UPDATE: {json.dumps(update, ensure_ascii=False)}")
+        print(f"📩 BOT UPDATE: {json.dumps(update, ensure_ascii=True)}")
     except Exception:
         return {"ok": False}
     
@@ -352,14 +352,18 @@ async def telegram_webhook(
     if inline_query:
         query_id = inline_query.get("id")
         user_id = inline_query.get("from", {}).get("id")
+        print(f"🎯 Inline query detected from user {user_id}: {inline_query.get('query')}")
         
         # Get bot's username (cached)
         bot_username = await get_bot_username()
         
+        # Unique result ID to avoid conflicts
+        result_id = f"magic_sync_{user_id}_{int(time.time())}"
+        
         # We offer a visually appealing plaque for Magic Sync
         results = [{
             "type": "article",
-            "id": "magic_sync",
+            "id": result_id,
             "title": "✨ Magic Sync: Найти общее время",
             "description": "Мгновенный поиск идеального слота, который подходит всем участникам.",
             "input_message_content": {
@@ -393,8 +397,10 @@ async def telegram_webhook(
                 resp = await client.post(f"https://api.telegram.org/bot{bot_token}/answerInlineQuery", json=payload)
                 resp_data = resp.json()
                 if not resp_data.get("ok"):
+                    print(f"🔴 answerInlineQuery failed for user {user_id}: {resp_data}")
                     logger.error(f"🔴 answerInlineQuery failed: {resp_data}")
                 else:
+                    print(f"🟢 Answer sent successfully for user {user_id}")
                     logger.info("🟢 answerInlineQuery success")
         except Exception as e:
             logger.error(f"🔴 answerInlineQuery exception: {e}")
