@@ -7,12 +7,12 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 async def app(scope, receive, send):
     try:
         # Lazy import so errors happen at runtime and can be caught here
-    print(f"DEBUG: Vercel Entry Point. Env keys: {list(os.environ.keys())}", flush=True)
-    print(f"DEBUG: API_URL: {os.environ.get('API_URL')}", flush=True)
-    print(f"DEBUG: FRONTEND_URL: {os.environ.get('FRONTEND_URL')}", flush=True)
-    db_url = os.environ.get('DATABASE_URL') or ""
-    print(f"DEBUG: DATABASE_URL exists: {bool(db_url)} (starts with: {db_url[:20]}...)", flush=True)
-    from main import app as main_app
+        print(f"DEBUG: Vercel Entry Point. Env keys: {list(os.environ.keys())}", flush=True)
+        print(f"DEBUG: API_URL: {os.environ.get('API_URL')}", flush=True)
+        print(f"DEBUG: FRONTEND_URL: {os.environ.get('FRONTEND_URL')}", flush=True)
+        db_url = os.environ.get('DATABASE_URL') or ""
+        print(f"DEBUG: DATABASE_URL exists: {bool(db_url)} (starts with: {db_url[:20]}...)", flush=True)
+        from main import app as main_app
         return await main_app(scope, receive, send)
     except Exception as e:
         error_msg = traceback.format_exc()
