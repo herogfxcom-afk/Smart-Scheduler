@@ -323,35 +323,16 @@ app.include_router(outlook_auth_router)
 
 async def _setup_bot_ui():
     """Registers the webhook and sets up the bot menu button."""
+async def _setup_bot_ui():
+    """Sets up the bot menu button only. Webhook is managed manually via setup_webhook.py."""
     bot_token = os.getenv("BOT_TOKEN")
-    api_url = os.getenv("API_URL", "")
-    if not bot_token or not api_url:
-        print("BOT UI SETUP: Skipping - BOT_TOKEN or API_URL not set")
+    if not bot_token:
+        print("BOT UI SETUP: Skipping - BOT_TOKEN not set")
         return
 
-    # Safety guard: only set webhook if URL is a real HTTPS production URL
-    if not api_url.startswith("https://") or "localhost" in api_url:
-        print(f"BOT UI SETUP: Skipping webhook - URL is not a production HTTPS URL: {api_url}")
-        return
-
-    webhook_url = f"{api_url.rstrip('/')}/webhook/bot"
-    print(f"BOT UI SETUP: Setting webhook to {webhook_url}")
     try:
         async with httpx.AsyncClient(timeout=5) as client:
-            # 1. Webhook with Secret Token
-            webhook_secret = os.getenv("WEBHOOK_SECRET")
-            webhook_payload = {
-                "url": webhook_url, 
-                "drop_pending_updates": False,
-                "allowed_updates": ["message", "callback_query", "inline_query"]
-            }
-            if webhook_secret:
-                webhook_payload["secret_token"] = webhook_secret
-                
-            resp = (await client.post(f"https://api.telegram.org/bot{bot_token}/setWebhook", json=webhook_payload)).json()
-            print(f"WEBHOOK SETUP: {resp} (Secret enabled: {bool(webhook_secret)})")
-            
-            # 2. Main Menu Button Setup
+            # Set Main Menu Button only — webhook is NOT set here to prevent resets
             menu_resp = (await client.post(f"https://api.telegram.org/bot{bot_token}/setChatMenuButton", json={
                 "menu_button": {
                     "type": "web_app",
@@ -409,19 +390,40 @@ async def telegram_webhook(
         await _send_sync_invite(bot_token, chat_id, chat_title, db)
         return {"ok": True}
 
-    # 3. Handle Inline Query (@botname) via Aiogram
+    # 3. Handle Inline Query (@botname) - Direct HTTP call, no Aiogram overhead
     if update.get("inline_query"):
-        print(f"🔍 [WEBHOOK] Processing inline_query update_id={update.get('update_id')}")
+        iq = update["inline_query"]
+        iq_id = iq["id"]
+        user_id = iq.get("from", {}).get("id", "?")
+        print(f"🔍 [INLINE] Query from user {user_id}, id={iq_id}")
         try:
-            from aiogram.types import Update as AiogramUpdate
-            aiogram_update = AiogramUpdate(**update)
-            print(f"✅ [WEBHOOK] Update parsed, feeding to DP...")
-            result = await dp.feed_update(bot, aiogram_update)
-            print(f"✨ [WEBHOOK] DP feed_update finished with result: {result}")
+            answer_payload = {
+                "inline_query_id": iq_id,
+                "cache_time": 0,
+                "results": [{
+                    "type": "article",
+                    "id": "open_scheduler",
+                    "title": "Smart Scheduler Time Pro",
+                    "description": "Открыть планировщик встреч",
+                    "input_message_content": {
+                        "message_text": "Открываю Smart Scheduler..."
+                    },
+                    "reply_markup": {
+                        "inline_keyboard": [[{
+                            "text": "📅 Открыть приложение",
+                            "url": "https://t.me/smartschedulertime_bot/app"
+                        }]]
+                    }
+                }]
+            }
+            async with httpx.AsyncClient(timeout=5) as client:
+                resp = await client.post(
+                    f"https://api.telegram.org/bot{bot_token}/answerInlineQuery",
+                    json=answer_payload
+                )
+                print(f"✅ [INLINE] answerInlineQuery response: {resp.text}")
         except Exception as e:
-            print(f"❌ [INLINE ERROR] Failed to process inline_query: {e}")
-            import traceback
-            traceback.print_exc()
+            print(f"❌ [INLINE ERROR] {e}")
         return {"ok": True}
 
     # 4. Handle Callback Queries (Inline Buttons)
