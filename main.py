@@ -148,23 +148,21 @@ async def handle_inline_query(inline_query: InlineQuery):
     print(f"🔥 [INLINE_HANDLER] Query from {inline_query.from_user.id}: {inline_query.query}")
 
     result = InlineQueryResultArticle(
-        id="open_smart_scheduler",
+        id="open_scheduler",
         title="Smart Scheduler Time Pro",
-        description="Открыть планировщик встреч и найти общее время",
+        description="Открыть планировщик встреч",
         input_message_content=InputTextMessageContent(
             message_text="Открываю Smart Scheduler..."
         ),
-        reply_markup=InlineKeyboardMarkup(
-            inline_keyboard=[[
-                InlineKeyboardButton(
-                    text="Открыть приложение",
-                    web_app=WebAppInfo(url="https://frontend-five-gules-5u3aqd6fzp.vercel.app")
-                )
-            ]]
-        )
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+            InlineKeyboardButton(
+                text="📅 Открыть приложение",
+                url="https://frontend-five-gules-5u3aqd6fzp.vercel.app"
+            )
+        ]])
     )
 
-    await inline_query.answer(results=[result], cache_time=1)
+    await inline_query.answer(results=[result], cache_time=0)
 
 app.add_middleware(
     CORSMiddleware,
