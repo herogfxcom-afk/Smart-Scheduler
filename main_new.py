@@ -16,11 +16,11 @@ from database import get_db
 from encryption import decrypt_token, encrypt_token
 from calendar_service import GoogleCalendarService
 from caldav_service import AppleCalendarService
-import json
-import os
-import requests
 import asyncio
 import time
+
+from aiogram import Bot, Dispatcher, types
+from aiogram.types import InlineQuery, InlineQueryResultArticle, InputTextMessageContent, InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 
 app = FastAPI(title="Smart Scheduler API")
 
@@ -43,12 +43,39 @@ def migrate_db():
     inspector = inspect(engine)
     
     # Check users table
-    users_cols = [col['name'] for col in inspector.get_columns('users')]
-    if 'email' not in users_cols:
-        with engine.connect() as conn:
-            try:
-                conn.execute(text("ALTER TABLE users ADD COLUMN email VARCHAR(255)"))
-                conn.commit()
+# Initialize Aiogram
+bot = Bot(token=os.getenv("BOT_TOKEN", ""))
+dp = Dispatcher()
+
+@dp.inline_query()
+async def handle_inline_query_aiogram_new(inline_query: InlineQuery):
+    user_id = inline_query.from_user.id
+    print(f"🎯 Aiogram (main_new): Inline query detected from user {user_id}: {inline_query.query}")
+    
+    result_id = f"magic_sync_{user_id}_{int(time.time())}"
+    
+    results = [
+        InlineQueryResultArticle(
+            id=result_id,
+            title="📊 Поделиться Magic Sync",
+            description="Позволяет всем участникам синхронизировать календари.",
+            input_message_content=InputTextMessageContent(
+                message_text="📊 *Magic Sync: Синхронизация календарей*\n\nНажмите кнопку ниже, чтобы начать!",
+                parse_mode="Markdown"
+            ),
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+                InlineKeyboardButton(
+                    text="📊 Magic Sync",
+                    url=f"https://t.me/smartschedulertime_bot/app?startapp=inline_{user_id}"
+                )
+            ]])
+        )
+    ]
+    
+    await inline_query.answer(
+        results=results,
+        cache_time=0
+    )
                 print("Migration: Added email column to users table.")
             except Exception as e:
                 print(f"Migration Error (email): {e}")
@@ -298,50 +325,10 @@ async def telegram_webhook(req: FastAPIRequest, db: Session = Depends(get_db)):
         await _send_sync_invite(bot_token, chat_id, chat_title, db)
         return {"ok": True}
 
-    # 3. Handle Inline Query (@botname)
-    inline_query = update.get("inline_query")
-    if inline_query:
-        query_id = inline_query.get("id")
-        user_id = inline_query.get("from", {}).get("id")
-        print(f"🎯 Inline query detected (main_new) from user {user_id}: {inline_query.get('query')}")
-        
-        # Get bot's username  
-        async with httpx.AsyncClient(timeout=5) as client:
-            bot_info_resp = (await client.get(f"https://api.telegram.org/bot{bot_token}/getMe")).json()
-            bot_username = bot_info_resp.get("result", {}).get("username", BOT_USERNAME_FALLBACK)
-        
-        # Unique result ID
-        result_id = f"magic_sync_{user_id}_{int(time.time())}"
-        
-        # We offer a button to launch the app (generic since we don't know the chat_id here)
-        # But we can say "Share Magic Sync in this chat"
-        results = [{
-            "type": "article",
-            "id": result_id,
-            "title": "📊 Поделиться Magic Sync",
-            "description": "Позволяет всем участникам синхронизировать календари.",
-            "input_message_content": {
-                "message_text": "📊 *Magic Sync: Синхронизация календарей*\n\nНажмите кнопку ниже, чтобы начать!",
-                "parse_mode": "Markdown"
-            },
-            "reply_markup": {
-                "inline_keyboard": [[{
-                    "text": "📊 Magic Sync",
-                    "url": f"https://t.me/smartschedulertime_bot/app?startapp=inline_{user_id}"
-                }]]
-            }
-        }]
-        async with httpx.AsyncClient(timeout=5) as client:
-            resp = await client.post(f"https://api.telegram.org/bot{bot_token}/answerInlineQuery", json={
-                "inline_query_id": query_id,
-                "results": results,
-                "cache_time": 0
-            })
-            resp_data = resp.json()
-            if not resp_data.get("ok"):
-                print(f"🔴 answerInlineQuery failed (main_new) for user {user_id}: {resp_data}")
-            else:
-                print(f"🟢 Answer sent successfully (main_new) for user {user_id}")
+    # 3. Handle Inline Query (@botname) via Aiogram
+    if update.get("inline_query"):
+        from aiogram.types import Update
+        await dp.feed_update(bot, Update(**update))
         return {"ok": True}
 
     if not message:
