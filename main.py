@@ -330,16 +330,22 @@ async def _setup_bot_ui():
     if not bot_token or not api_url:
         print("BOT UI SETUP: Skipping - BOT_TOKEN or API_URL not set")
         return
-        
+
+    # Safety guard: only set webhook if URL is a real HTTPS production URL
+    if not api_url.startswith("https://") or "localhost" in api_url:
+        print(f"BOT UI SETUP: Skipping webhook - URL is not a production HTTPS URL: {api_url}")
+        return
+
     webhook_url = f"{api_url.rstrip('/')}/webhook/bot"
+    print(f"BOT UI SETUP: Setting webhook to {webhook_url}")
     try:
         async with httpx.AsyncClient(timeout=5) as client:
             # 1. Webhook with Secret Token
             webhook_secret = os.getenv("WEBHOOK_SECRET")
             webhook_payload = {
                 "url": webhook_url, 
-                "drop_pending_updates": True,
-                "allowed_updates": ["message", "callback_query", "inline_query", "my_chat_member", "chat_member"]
+                "drop_pending_updates": False,
+                "allowed_updates": ["message", "callback_query", "inline_query"]
             }
             if webhook_secret:
                 webhook_payload["secret_token"] = webhook_secret
@@ -353,7 +359,7 @@ async def _setup_bot_ui():
                     "type": "web_app",
                     "text": "📅 Open Scheduler",
                     "web_app": {
-                        "url": f"{FRONTEND_URL}/?startapp=menu_button"
+                        "url": f"{FRONTEND_URL}/"
                     }
                 }
             })).json()
