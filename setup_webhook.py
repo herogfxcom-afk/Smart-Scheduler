@@ -20,7 +20,7 @@ def setup_webhook():
     payload = {
         "url": webhook_url,
         "drop_pending_updates": True,
-        "allowed_updates": ["message", "callback_query", "inline_query", "my_chat_member", "chat_member"]
+        "allowed_updates": ["message", "callback_query", "inline_query"]
     }
     
     if secret:

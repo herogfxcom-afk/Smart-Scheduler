@@ -144,40 +144,9 @@ bot = Bot(token=os.getenv("BOT_TOKEN", ""))
 dp = Dispatcher()
 
 @dp.inline_query()
-async def handle_inline_query_aiogram(inline_query: InlineQuery):
-    user_id = inline_query.from_user.id
-    print(f"🎯 Aiogram: Inline query detected from user {user_id}: {inline_query.query}")
-    
-    result_id = f"magic_sync_{user_id}_{int(time.time())}"
-    
-    # Using the same plaque logic as before but with aiogram types
-    results = [
-        InlineQueryResultArticle(
-            id=result_id,
-            title="✨ Magic Sync: Найти общее время",
-            description="Мгновенный поиск идеального слота, который подходит всем участникам.",
-            input_message_content=InputTextMessageContent(
-                message_text="📊 *Magic Sync: Планирование встречи*\n\nНажмите кнопку ниже, чтобы найти общее свободное время в этом чате!",
-                parse_mode="Markdown"
-            ),
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
-                InlineKeyboardButton(
-                    text="📅 Открыть Magic Sync",
-                    url=f"https://t.me/smartschedulertime_bot/app?startapp=inline_{user_id}"
-                )
-            ]])
-        )
-    ]
-    
-    await inline_query.answer(
-        results=results,
-        cache_time=0,
-        is_personal=True,
-        button=types.InlineQueryResultsButton(
-            text="✨ Спланировать встречу",
-            web_app=WebAppInfo(url=f"{FRONTEND_URL}/?startapp=inline_btn_{user_id}")
-        )
-    )
+async def handle_inline_query(inline_query: InlineQuery):
+    print(f"[INLINE] Получен запрос: {inline_query.query}")  # для логов
+    await inline_query.answer(results=[], cache_time=1)
 
 app.add_middleware(
     CORSMiddleware,
