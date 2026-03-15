@@ -413,8 +413,11 @@ async def telegram_webhook(
 
     # 3. Handle Inline Query (@botname) via Aiogram
     if update.get("inline_query"):
-        from aiogram.types import Update
-        await dp.feed_update(bot, Update(**update))
+        try:
+            from aiogram.types import Update as AiogramUpdate
+            await dp.feed_update(bot, AiogramUpdate(**update))
+        except Exception as e:
+            print(f"[INLINE ERROR] Failed to process inline_query: {e}")
         return {"ok": True}
 
     # 4. Handle Callback Queries (Inline Buttons)
