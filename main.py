@@ -145,7 +145,7 @@ dp = Dispatcher()
 
 @dp.inline_query()
 async def handle_inline_query(inline_query: InlineQuery):
-    print(f"[INLINE] Запрос от пользователя {inline_query.from_user.id}")
+    print(f"🔥 [INLINE_HANDLER] Query from {inline_query.from_user.id}: {inline_query.query}")
 
     result = InlineQueryResultArticle(
         id="open_smart_scheduler",
@@ -413,11 +413,17 @@ async def telegram_webhook(
 
     # 3. Handle Inline Query (@botname) via Aiogram
     if update.get("inline_query"):
+        print(f"🔍 [WEBHOOK] Processing inline_query update_id={update.get('update_id')}")
         try:
             from aiogram.types import Update as AiogramUpdate
-            await dp.feed_update(bot, AiogramUpdate(**update))
+            aiogram_update = AiogramUpdate(**update)
+            print(f"✅ [WEBHOOK] Update parsed, feeding to DP...")
+            result = await dp.feed_update(bot, aiogram_update)
+            print(f"✨ [WEBHOOK] DP feed_update finished with result: {result}")
         except Exception as e:
-            print(f"[INLINE ERROR] Failed to process inline_query: {e}")
+            print(f"❌ [INLINE ERROR] Failed to process inline_query: {e}")
+            import traceback
+            traceback.print_exc()
         return {"ok": True}
 
     # 4. Handle Callback Queries (Inline Buttons)
