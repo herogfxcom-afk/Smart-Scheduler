@@ -145,28 +145,26 @@ dp = Dispatcher()
 
 @dp.inline_query()
 async def handle_inline_query(inline_query: InlineQuery):
-    user_id = inline_query.from_user.id
-    print(f"[INLINE] Получен запрос от {user_id}: {inline_query.query}")
-    
-    result_id = f"magic_sync_{user_id}_{int(time.time())}"
-    results = [
-        InlineQueryResultArticle(
-            id=result_id,
-            title="✨ Magic Sync: Найти общее время",
-            description="Мгновенный поиск идеального слота в этом чате.",
-            input_message_content=InputTextMessageContent(
-                message_text="📊 *Magic Sync: Планирование встречи*\n\nНажмите кнопку ниже, чтобы найти общее свободное время!",
-                parse_mode="Markdown"
-            ),
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+    print(f"[INLINE] Запрос от пользователя {inline_query.from_user.id}")
+
+    result = InlineQueryResultArticle(
+        id="open_smart_scheduler",
+        title="Smart Scheduler Time Pro",
+        description="Открыть планировщик встреч и найти общее время",
+        input_message_content=InputTextMessageContent(
+            message_text="Открываю Smart Scheduler..."
+        ),
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[[
                 InlineKeyboardButton(
-                    text="📅 Открыть Magic Sync",
-                    url=f"https://t.me/smartschedulertime_bot/app?startapp=inline_{user_id}"
+                    text="Открыть приложение",
+                    web_app=WebAppInfo(url="https://frontend-git-main-herogfxcom-5981s-projects.vercel.app")
                 )
-            ]])
+            ]]
         )
-    ]
-    await inline_query.answer(results=results, cache_time=1)
+    )
+
+    await inline_query.answer(results=[result], cache_time=1)
 
 app.add_middleware(
     CORSMiddleware,
