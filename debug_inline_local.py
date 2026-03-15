@@ -45,7 +45,7 @@ async def test_inline(inline_query: InlineQuery):
                     reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[[
                         types.InlineKeyboardButton(
                             text="🚀 Open App",
-                            web_app=types.WebAppInfo(url=f"{FRONTEND_URL}/?startapp=inline_{inline_query.from_user.id}")
+                            url=f"https://t.me/smartschedulertime_bot/app?startapp=inline_{inline_query.from_user.id}"
                         )
                     ]])
                 )

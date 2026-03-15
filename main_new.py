@@ -326,9 +326,7 @@ async def telegram_webhook(req: FastAPIRequest, db: Session = Depends(get_db)):
             "reply_markup": {
                 "inline_keyboard": [[{
                     "text": "📊 Magic Sync",
-                    "web_app": {
-                        "url": f"{FRONTEND_URL}/?startapp=inline_{user_id}"
-                    }
+                    "url": f"https://t.me/smartschedulertime_bot/app?startapp=inline_{user_id}"
                 }]]
             }
         }]

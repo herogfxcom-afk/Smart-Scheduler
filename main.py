@@ -373,9 +373,7 @@ async def telegram_webhook(
             "reply_markup": {
                 "inline_keyboard": [[{
                     "text": "📅 Открыть Magic Sync",
-                    "web_app": {
-                        "url": f"{FRONTEND_URL}/?startapp=inline_{user_id}"
-                    }
+                    "url": f"https://t.me/smartschedulertime_bot/app?startapp=inline_{user_id}"
                 }]]
             }
         }]
@@ -389,9 +387,7 @@ async def telegram_webhook(
                     "is_personal": True,
                     "button": {
                         "text": "✨ Спланировать встречу",
-                        "web_app": {
-                            "url": f"{FRONTEND_URL}/?startapp=inline_btn_{user_id}"
-                        }
+                        "url": f"https://t.me/smartschedulertime_bot/app?startapp=inline_btn_{user_id}"
                     }
                 }
                 resp = await client.post(f"https://api.telegram.org/bot{bot_token}/answerInlineQuery", json=payload)
