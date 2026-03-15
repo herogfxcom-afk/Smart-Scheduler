@@ -158,7 +158,7 @@ async def handle_inline_query(inline_query: InlineQuery):
             inline_keyboard=[[
                 InlineKeyboardButton(
                     text="Открыть приложение",
-                    web_app=WebAppInfo(url="https://frontend-git-main-herogfxcom-5981s-projects.vercel.app")
+                    web_app=WebAppInfo(url="https://frontend-five-gules-5u3aqd6fzp.vercel.app")
                 )
             ]]
         )
