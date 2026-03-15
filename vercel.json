@@ -4,8 +4,8 @@
             "excludeFiles": "frontend/**"
         }
     },
-    "buildCommand": "cd frontend && bash build.sh",
-    "outputDirectory": "frontend/build/web",
+    "buildCommand": "cd frontend && bash build.sh && cd .. && cp -r frontend/build/web public && rm -rf frontend",
+    "outputDirectory": "public",
     "rewrites": [
         {
             "source": "/(api|auth|webhook|calendar|groups|meeting|users|cors-debug)(.*)",
