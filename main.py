@@ -602,40 +602,53 @@ async def cors_debug():
 @app.get("/auth/me")
 async def get_me(user_timezone: str = Query(None, alias="timezone"), current_user: User = Depends(get_current_user)):
     """Returns the current user profile including all connected calendars."""
+    print(f"DEBUG /auth/me: Processing for user {current_user.id}")
     from database import SessionLocal
     
-    with SessionLocal() as db:
-        db.rollback() # Recover from poisoned connection
-        # Re-fetch user in the local session context to handle relations and updates
-        user = db.query(User).options(joinedload(User.connections)).filter(User.id == current_user.id).first()
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found")
-            
-        if user_timezone and user.timezone != user_timezone:
-            user.timezone = user_timezone
-            db.commit()
+    try:
+        with SessionLocal() as db:
+            print(f"DEBUG /auth/me: Session created for user {current_user.id}")
+            db.rollback() # Recover from poisoned connection
+            # Re-fetch user in the local session context to handle relations and updates
+            user = db.query(User).options(joinedload(User.connections)).filter(User.id == current_user.id).first()
+            if not user:
+                print(f"DEBUG /auth/me ERROR: User {current_user.id} not found in DB")
+                raise HTTPException(status_code=404, detail="User not found")
+                
+            if user_timezone and user.timezone != user_timezone:
+                print(f"DEBUG /auth/me: Updating timezone to {user_timezone}")
+                user.timezone = user_timezone
+                db.commit()
 
-        return {
-            "id": user.id,
-            "telegram_id": user.telegram_id,
-            "username": user.username,
-            "first_name": user.first_name,
-            "email": user.email,
-            "timezone": user.timezone,
-            "is_connected": any(c.provider == 'google' and c.is_active for c in user.connections),
-            "is_apple_connected": any(c.provider == 'apple' and c.is_active for c in user.connections),
-            "connections": [
-                {
-                    "id": c.id,
-                    "provider": c.provider,
-                    "email": c.email,
-                    "status": c.status,
-                    "last_sync_status": c.last_sync_status,
-                    "is_active": bool(c.is_active),
-                    "last_sync_at": c.last_sync_at.isoformat().replace('+00:00', '') + "Z" if c.last_sync_at else None
-                } for c in user.connections
-            ]
-        }
+            print(f"DEBUG /auth/me: Constructing response for user {user.id}")
+            result = {
+                "id": user.id,
+                "telegram_id": user.telegram_id,
+                "username": user.username,
+                "first_name": user.first_name,
+                "email": user.email,
+                "timezone": user.timezone,
+                "is_connected": any(c.provider == 'google' and c.is_active for c in user.connections),
+                "is_apple_connected": any(c.provider == 'apple' and c.is_active for c in user.connections),
+                "connections": [
+                    {
+                        "id": c.id,
+                        "provider": c.provider,
+                        "email": c.email,
+                        "status": c.status,
+                        "last_sync_status": c.last_sync_status,
+                        "is_active": bool(c.is_active),
+                        "last_sync_at": c.last_sync_at.isoformat().replace('+00:00', '') + "Z" if c.last_sync_at else None
+                    } for c in user.connections
+                ]
+            }
+            print(f"DEBUG /auth/me: Success for user {user.id}")
+            return result
+    except Exception as e:
+        import traceback
+        print(f"DEBUG /auth/me CRASH: {str(e)}")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/groups/sync")
 async def sync_group(data: dict, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
