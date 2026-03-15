@@ -72,6 +72,7 @@ def get_current_user(init_data: Optional[str] = Header(None)):
     
     with SessionLocal() as db:
         try:
+            db.rollback() # Self-healing for poisoned connections
             print(f"AUTH: Querying DB for telegram_id={telegram_id}")
             user = db.query(User).options(joinedload(User.connections)).filter(User.telegram_id == telegram_id).first()
             if not user:
