@@ -1392,11 +1392,9 @@ async def delete_meeting(meeting_id: int, background_tasks: BackgroundTasks, cur
             meeting.is_cancelled = True
             db.query(models.MeetingInvite).filter(models.MeetingInvite.meeting_id == meeting_id).update({"status": "cancelled"})
             
-            # Atomic BusySlot cleanup for all participants (The "Instant Deletion" pattern)
-            participant_ids = [invite.user_id for invite in meeting.invites]
-            participant_ids.append(meeting.user_id)
+            # Creator's own BusySlot cleanup (creator also has a BusySlot)
             db.query(models.BusySlot).filter(
-                models.BusySlot.user_id.in_(participant_ids),
+                models.BusySlot.user_id == current_user.id,
                 models.BusySlot.start_time == meeting.start_time,
                 models.BusySlot.end_time == meeting.end_time
             ).delete(synchronize_session=False)
@@ -1474,23 +1472,15 @@ async def delete_meeting(meeting_id: int, background_tasks: BackgroundTasks, cur
                 group_text = f"❌ *Встреча отменена*\n\n👤 {creator_name} отменил встречу: *{meeting.title}*\n⏰ Время: {display_time} ({user_tz_name})\n\n*(Участникам отправлены уведомления для очистки личных календарей)*"
                 background_tasks.add_task(send_telegram_notification, meeting.group.telegram_chat_id, group_text)
 
-            # Send individual participant notifications with Keep/Delete options
+            # Send individual participant notifications
             for inv in meeting.invites:
                 if inv.user_id != current_user.id and inv.user and inv.user.telegram_id:
                     dm_text = (
                         f"❌ *Встреча отменена*\n\n"
                         f"{creator_name} отменил встречу *{meeting.title}* ({display_time}).\n\n"
-                        f"Удалить это событие из ваших подключенных календарей (Google/Apple)?"
+                        f"Вы можете оставить эту встречу в своём календаре или удалить её через приложение."
                     )
-                    reply_markup = {
-                        "inline_keyboard": [
-                            [
-                                {"text": "🗑️ Удалить", "callback_data": f"delmtg_remove_{meeting.id}"},
-                                {"text": "✅ Оставить", "callback_data": f"delmtg_keep_{meeting.id}"}
-                            ]
-                        ]
-                    }
-                    background_tasks.add_task(send_telegram_notification, str(inv.user.telegram_id), dm_text, reply_markup)
+                    background_tasks.add_task(send_telegram_notification, str(inv.user.telegram_id), dm_text)
             
             db.commit()
             return {"status": "cancelled", "message": "Meeting cancelled for all"}
@@ -1509,10 +1499,52 @@ async def delete_meeting(meeting_id: int, background_tasks: BackgroundTasks, cur
             db.commit()
             return {"status": "deleted", "message": "Meeting fully removed"}
 
-    # Case 2: Participant is leaving or confirming removal
+    # Case 2: Participant is leaving or performing a full cleanup of a cancelled meeting
     if invite:
+        if meeting.is_cancelled:
+            # If the meeting is already cancelled by the creator, doing "Delete"
+            # should trigger both BusySlot purge AND external calendar cleanup immediately.
+            
+            # 1. Atomic BusySlot cleanup for this participant
+            db.query(models.BusySlot).filter(
+                models.BusySlot.user_id == current_user.id,
+                models.BusySlot.start_time == meeting.start_time,
+                models.BusySlot.end_time == meeting.end_time
+            ).delete(synchronize_session=False)
+
+            # 2. External cleanup
+            for conn in current_user.connections:
+                if not conn.is_active: continue
+                try:
+                    from encryption import decrypt_token
+                    refresh_token = decrypt_token(conn.auth_data)
+                    if conn.provider == 'google' and invite.google_event_id:
+                        from calendar_service import GoogleCalendarService
+                        g_service = GoogleCalendarService(refresh_token)
+                        await g_service.delete_event(invite.google_event_id)
+                        invite.google_event_id = None
+                    elif conn.provider == 'outlook' and invite.outlook_event_id:
+                        from outlook_service import OutlookCalendarService
+                        o_service = OutlookCalendarService(refresh_token)
+                        await o_service.delete_event(invite.outlook_event_id)
+                        invite.outlook_event_id = None
+                    elif conn.provider == 'apple' and invite.apple_event_id:
+                        from caldav_service import AppleCalendarService
+                        import json
+                        apple_data = json.loads(decrypt_token(conn.auth_data))
+                        a_service = AppleCalendarService(apple_data['email'], apple_data['password'])
+                        a_service.delete_event(invite.apple_event_id)
+                        invite.apple_event_id = None
+                except Exception as e:
+                    print(f"DEBUG: Participant cleanup fail on {conn.provider}: {e}")
+
+            # 3. Mark invite as fully cancelled/removed (status for UI logic)
+            invite.status = "declined" # Or a specific "removed" status
+            db.commit()
+            return {"status": "deleted", "message": "Meeting removed from your calendars"}
+
         if invite.status != "cancelled":
-            # First time: Participant-side soft cancel
+            # First time for an ACTIVE meeting: Participant-side soft cancel
             invite.status = "cancelled"
             
             # Atomic BusySlot cleanup for this participant only
