@@ -8,3 +8,12 @@ vercel_events.json
 debug_*.py
 node_modules/
 build/
+.pytest_cache/
+alembic/
+.git_show_output.txt
+backend/
+*.sh
+Dockerfile
+Procfile
+runtime.txt
+AI_GUIDE.md
