@@ -12,7 +12,7 @@ build/
 alembic/
 .git_show_output.txt
 backend/
-*.sh
+start.sh
 Dockerfile
 Procfile
 runtime.txt
