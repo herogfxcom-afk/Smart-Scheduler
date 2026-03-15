@@ -106,6 +106,7 @@ def get_current_user(init_data: Optional[str] = Header(None)):
             print("AUTH: get_current_user returning user object")
             return user
         except Exception as e:
-            print(f"AUTH: DB Operation failed: {str(e)}")
+            import traceback as _tb
+            print(f"AUTH: DB Operation FULL TRACEBACK:\n{_tb.format_exc()}", flush=True)
             db.rollback()
             raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
