@@ -40,3 +40,11 @@ else
   echo "No API_URL provided, defaulting to relative paths (Vercel rewrite strategy)"
   flutter build web --release --no-tree-shake-icons --verbose
 fi
+
+echo "Cleaning up to reduce Vercel bundle size..."
+# Delete the Flutter SDK and cache - they are huge and not needed for runtime
+rm -rf flutter
+rm -rf $HOME/.pub-cache
+rm -rf .dart_tool/
+rm -rf .idea/
+echo "Cleanup complete."
