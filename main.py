@@ -1683,8 +1683,10 @@ async def get_free_slots(data: dict, current_user: User = Depends(get_current_us
             print(f"DEBUG: No internal users found for TG IDs: {tg_ids}")
             return {"free_slots": [], "debug": f"no_users_found_for_ids_{tg_ids}"}
 
-        # 3. Fetch all cached busy slots for these users for next 14 days
-        start = datetime.now(dt_module.timezone.utc)
+        # 3. Fetch all cached busy slots for these users for next 30 days
+        now = datetime.now(dt_module.timezone.utc)
+        # Round down to nearest 30 minutes to align with UI grid
+        start = now.replace(minute=(now.minute // 30) * 30, second=0, microsecond=0)
         end = start + timedelta(days=30)
         
         busy_slots_per_user = []
