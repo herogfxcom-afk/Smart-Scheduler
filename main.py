@@ -502,7 +502,7 @@ async def _send_sync_invite(bot_token: str, chat_id: int, chat_title: str, db: S
         "reply_markup": json.dumps({
             "inline_keyboard": [[{
                 "text": "📊 Magic Sync",
-                "web_app": {"url": web_app_url}
+                "url": deep_link
             }]]
         })
     }
