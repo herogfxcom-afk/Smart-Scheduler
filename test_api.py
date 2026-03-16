@@ -4,12 +4,13 @@ import json
 import datetime
 from urllib.parse import urlencode
 from fastapi.testclient import TestClient
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, AsyncMock
 
 # Mock env vars before importing app
 os.environ["BOT_TOKEN"] = "12345:ABCDE"
 os.environ["DATABASE_URL"] = "sqlite:///./test.db"
 os.environ["ENCRYPTION_KEY"] = "8n-zI7Y9f_l4o0MhO1vD3w2Q5jK8uB5sH_xZbGcLvV4=" # valid 32 byte base64 fernet key
+os.environ["WEBHOOK_SECRET"] = "testsecret"
 
 import hmac
 import hashlib
@@ -372,6 +373,101 @@ async def test_cancellation_interactive():
     except Exception as e:
         report.add("Webhook: Interactive Telegram Cancellation", False, str(e))
 
+async def test_inline_query_handler():
+    """Verifies that inline queries send direct HTTP requests to answerInlineQuery."""
+    try:
+        from main import telegram_webhook
+        
+        mock_update = {
+            "update_id": 12345,
+            "inline_query": {
+                "id": "query_123",
+                "from": {"id": 12345},
+                "query": "",
+                "offset": ""
+            }
+        }
+        
+        with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+            mock_post.return_value.status_code = 200
+            
+            response = client.post(
+                "/webhook/bot", 
+                json=mock_update, 
+                headers={"X-Telegram-Bot-Api-Secret-Token": "testsecret"}
+            )
+            assert response.status_code == 200
+            assert response.json() == {"ok": True}
+            
+            # Verify httpx.post was called with answerInlineQuery
+            mock_post.assert_called_once()
+            args, kwargs = mock_post.call_args
+            assert "answerInlineQuery" in args[0]
+            assert kwargs["json"]["inline_query_id"] == "query_123"
+            
+            # Verify the button is a URL button (not web_app) for inline
+            results = kwargs["json"]["results"]
+            assert len(results) == 1
+            button = results[0]["reply_markup"]["inline_keyboard"][0][0]
+            assert "url" in button
+            
+            report.add("Webhook: Inline Query direct HTTP handler", True)
+    except Exception as e:
+        report.add("Webhook: Inline Query direct HTTP handler", False, str(e))
+
+async def test_sync_command_in_group():
+    """Verifies that /sync in a group sends a url button to avoid BUTTON_TYPE_INVALID."""
+    try:
+        from main import telegram_webhook
+        
+        mock_update = {
+            "update_id": 67890,
+            "message": {
+                "message_id": 456,
+                "from": {"id": 999},
+                "chat": {
+                    "id": -100123456789,
+                    "title": "Test Group",
+                    "type": "group"
+                },
+                "text": "/sync",
+                "entities": [{"type": "bot_command", "offset": 0, "length": 5}]
+            }
+        }
+        
+        with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+            mock_post.return_value.status_code = 200
+            mock_post.return_value.json = MagicMock(return_value={"ok": True})
+            
+            # We also need to mock the getMe call inside _send_sync_invite
+            with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
+                mock_get.return_value.json = MagicMock(return_value={"result": {"username": "testbot"}})
+                
+                response = client.post(
+                    "/webhook/bot", 
+                    json=mock_update, 
+                    headers={"X-Telegram-Bot-Api-Secret-Token": "testsecret"}
+                )
+                assert response.status_code == 200
+                assert response.json() == {"ok": True}
+                
+                # Verify httpx.post was called with sendMessage
+                mock_post.assert_called_once()
+                args, kwargs = mock_post.call_args
+                assert "sendMessage" in args[0]
+                assert kwargs["json"]["chat_id"] == -100123456789
+                
+                # Check that reply_markup is correct and uses 'url' and not 'web_app'
+                reply_markup = json.loads(kwargs["json"]["reply_markup"])
+                button = reply_markup["inline_keyboard"][0][0]
+                assert "url" in button
+                assert "web_app" not in button
+                assert "startapp=group_n100123456789" in button["url"]
+                
+                report.add("Webhook: Group /sync command uses url deep link", True)
+    except Exception as e:
+        report.add("Webhook: Group /sync command uses url deep link", False, str(e))
+
 if __name__ == "__main__":
     import asyncio
     print("Starting Advanced Backend Lifecycle Tests...\n")
@@ -383,6 +479,8 @@ if __name__ == "__main__":
         await test_dst_transition()
         await test_meeting_lifecycle()
         await test_cancellation_interactive()
+        await test_inline_query_handler()
+        await test_sync_command_in_group()
         
     asyncio.run(run_async_tests())
     
