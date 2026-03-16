@@ -1361,7 +1361,7 @@ async def respond_to_invite(invite_id: int, data: dict, current_user: User = Dep
                         location=meeting.location,
                         description=meeting.description
                     )
-                    invite.google_event_id = g_event.get('id')
+                    invite.google_event_id = g_event
                 except Exception as e:
                     print(f"DEBUG: Failed to sync accepted meeting to Google: {e}")
             elif conn.provider == 'outlook' and not invite.outlook_event_id:
@@ -1377,7 +1377,7 @@ async def respond_to_invite(invite_id: int, data: dict, current_user: User = Dep
                         location=meeting.location,
                         description=meeting.description
                     )
-                    invite.outlook_event_id = o_event.get('id')
+                    invite.outlook_event_id = o_event
                 except Exception as e:
                     print(f"DEBUG: Failed to sync accepted meeting to Outlook: {e}")
             elif conn.provider == 'apple' and not invite.apple_event_id:
