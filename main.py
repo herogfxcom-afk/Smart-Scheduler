@@ -1377,7 +1377,7 @@ async def respond_to_invite(invite_id: int, data: dict, current_user: User = Dep
                         location=meeting.location,
                         description=meeting.description
                     )
-                    invite.outlook_event_id = o_event
+                    invite.outlook_event_id = o_event.get('id')
                 except Exception as e:
                     print(f"DEBUG: Failed to sync accepted meeting to Outlook: {e}")
             elif conn.provider == 'apple' and not invite.apple_event_id:
@@ -1567,8 +1567,8 @@ async def delete_meeting(meeting_id: int, background_tasks: BackgroundTasks, cur
                 except Exception as e:
                     print(f"DEBUG: Participant cleanup fail on {conn.provider}: {e}")
 
-            # 3. Mark invite as fully cancelled/removed (status for UI logic)
-            invite.status = "declined" # Or a specific "removed" status
+            # 3. Final removal from our DB
+            db.delete(invite)
             db.commit()
             return {"status": "deleted", "message": "Meeting removed from your calendars"}
 
