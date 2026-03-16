@@ -2006,6 +2006,20 @@ async def create_meeting(data: dict, background_tasks: BackgroundTasks, current_
         print(f"DEBUG: Failed to insert meeting or invites: {e}")
         raise HTTPException(status_code=500, detail="Database insertion failed")
 
+    # Prepare notification data BEFORE background task to avoid DetachedInstanceError
+    invited_users_data = []
+    for u in invited_users:
+        u_info = {
+            "telegram_id": u.telegram_id,
+            "username": u.username,
+            "first_name": u.first_name,
+            "timezone": u.timezone or "UTC"
+        }
+        invited_users_data.append(u_info)
+    
+    creator_name = current_user.first_name or current_user.username or "Создатель"
+    creator_tz_name = current_user.timezone or "UTC"
+
     # Send Telegram Notification to the Group (fully async, concurrent dispatch)
     async def send_notifications():
         if not tg_chat_id: return
@@ -2014,7 +2028,6 @@ async def create_meeting(data: dict, background_tasks: BackgroundTasks, current_
         
         try:
             # Group IDs must be integers for the Telegram API
-
             clean_chat_id = tg_chat_id
             if str(clean_chat_id).startswith("n"):
                 clean_chat_id = str(clean_chat_id).replace("n", "-")
@@ -2024,49 +2037,45 @@ async def create_meeting(data: dict, background_tasks: BackgroundTasks, current_
                 target_chat = str(clean_chat_id)
             
             # Fetch bot username for deep linking
-            bot_username = BOT_USERNAME_FALLBACK
-            try:
-                async with httpx.AsyncClient(timeout=5) as client:
-                    bot_resp = (await client.get(f"https://api.telegram.org/bot{bot_token}/getMe")).json()
-                if bot_resp.get("ok"):
-                    bot_username = bot_resp.get("result", {}).get("username", bot_username)
-            except Exception as e:
-                print(f"DEBUG: Failed to get bot username: {e}")
+            bot_username = await get_bot_username()
 
-            # Mention users
+            # Mention participants using HTML for reliability
             mentions = []
-            for u in invited_users:
-                if u.username:
-                    mentions.append(f"@{u.username}")
-                elif u.first_name:
-                    mentions.append(f"[{u.first_name}](tg://user?id={u.telegram_id})")
+            for u_data in invited_users_data:
+                if u_data["username"]:
+                    mentions.append(f"@{u_data['username']}")
+                elif u_data["first_name"]:
+                    # Sanitize HTML in names
+                    safe_name = u_data["first_name"].replace("<", "&lt;").replace(">", "&gt;")
+                    mentions.append(f'<a href="tg://user?id={u_data["telegram_id"]}">{safe_name}</a>')
             
             mentions_str = ", ".join(mentions)
             if not mentions_str:
                 mentions_str = "коллеги"
             
             # Group notification: use creator's timezone
-            user_tz_name = current_user.timezone or "UTC"
             try:
-                from zoneinfo import ZoneInfo
-                user_tz = ZoneInfo(user_tz_name)
+                user_tz = ZoneInfo(creator_tz_name)
                 from_time = start_time.astimezone(user_tz)
                 to_time = end_time.astimezone(user_tz)
                 time_str = f"{from_time.strftime('%d.%m.%Y с %H:%M')} до {to_time.strftime('%H:%M')}"
             except Exception as e:
-                print(f"DEBUG: Failed to format time with {user_tz_name}: {e}")
+                print(f"DEBUG: Failed to format time with {creator_tz_name}: {e}")
                 time_str = start_time.strftime("%d.%m %H:%M") # fallback to UTC if fail
             
             # IMPORTANT: StartApp parameter CANNOT contain the minus (-) sign.
             app_chat_id = str(target_chat).replace("-", "n")
             web_app_url = f"https://t.me/{bot_username}/app?startapp=group_{app_chat_id}"
 
-            creator_name = current_user.first_name or current_user.username
+            # Escape HTML in dynamic fields
+            safe_summary = summary.replace("<", "&lt;").replace(">", "&gt;")
+            safe_creator = creator_name.replace("<", "&lt;").replace(">", "&gt;")
+
             group_text = (
                 f"Smart Scheduler\n"
-                f"📅 **Новое приглашение на встречу от {creator_name}!**\n\n"
-                f"📍 Тема: {summary}\n"
-                f"⏰ Время: **{time_str}**\n\n"
+                f"📅 <b>Новое приглашение на встречу от {safe_creator}!</b>\n\n"
+                f"📍 Тема: {safe_summary}\n"
+                f"⏰ Время: <b>{time_str}</b>\n\n"
                 f"🔔 Участники: {mentions_str}\n\n"
                 f"Пожалуйста, зайдите в приложение и подтвердите или отклоните встречу."
             )
@@ -2078,7 +2087,7 @@ async def create_meeting(data: dict, background_tasks: BackgroundTasks, current_
                 }]]
             }
             
-            async with httpx.AsyncClient(timeout=8) as client:
+            async with httpx.AsyncClient(timeout=10) as client:
                 # Build list of coroutines: group message + one DM per participant
                 tg_url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
                 
@@ -2086,37 +2095,35 @@ async def create_meeting(data: dict, background_tasks: BackgroundTasks, current_
                     client.post(tg_url, json={
                         "chat_id": target_chat,
                         "text": group_text,
-                        "parse_mode": "Markdown",
+                        "parse_mode": "HTML",
                         "reply_markup": reply_markup
                     })
                 ]
                 
-                for u in invited_users:
-                    if u.telegram_id:
+                for u_data in invited_users_data:
+                    if u_data["telegram_id"]:
                         # Convert meeting time to target user's local timezone
                         try:
-                            from zoneinfo import ZoneInfo
-                            u_tz_name = u.timezone or "UTC"
-                            u_tz = ZoneInfo(u_tz_name)
+                            u_tz = ZoneInfo(u_data["timezone"])
                             u_from_time = start_time.astimezone(u_tz)
                             u_to_time = end_time.astimezone(u_tz)
                             u_time_str = f"{u_from_time.strftime('%d.%m.%Y с %H:%M')} до {u_to_time.strftime('%H:%M')}"
                         except Exception as e:
-                            print(f"DEBUG: Failed to format DM time for user {u.id}: {e}")
-                            u_time_str = time_str # Fallback to default (creator's or UTC)
+                            print(f"DEBUG: Failed to format DM time for user: {e}")
+                            u_time_str = time_str # Fallback to default
                             
                         tasks.append(
                             client.post(tg_url, json={
-                                "chat_id": u.telegram_id,
+                                "chat_id": u_data["telegram_id"],
                                 "text": (
                                     f"Smart Scheduler\n"
                                     f"🔔 У вас новое приглашение на встречу!\n\n"
-                                    f"👤 От: {creator_name}\n"
-                                    f"📍 Тема: {summary}\n"
+                                    f"👤 От: {safe_creator}\n"
+                                    f"📍 Тема: {safe_summary}\n"
                                     f"⏰ Время: {u_time_str}\n\n"
                                     f"Откройте приложение, чтобы подтвердить."
                                 ),
-                                "parse_mode": "Markdown",
+                                "parse_mode": "HTML",
                                 "reply_markup": reply_markup
                             })
                         )
@@ -2128,10 +2135,12 @@ async def create_meeting(data: dict, background_tasks: BackgroundTasks, current_
                     if isinstance(r, Exception):
                         print(f"DEBUG: Notification task {i} failed: {r}")
                     else:
-                        print(f"DEBUG: Notification task {i} → HTTP {r.status_code}")
+                        print(f"DEBUG: Notification task {i} → HTTP {r.status_code} | {r.text if r.status_code != 200 else 'OK'}")
                  
         except Exception as e:
             print(f"DEBUG: Error during Telegram notification: {e}")
+            import traceback
+            traceback.print_exc()
 
     # Use FastAPI BackgroundTasks to make it non-blocking
     background_tasks.add_task(send_notifications)
