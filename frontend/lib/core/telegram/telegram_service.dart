@@ -24,6 +24,7 @@ class TelegramService {
         _webApp!.callMethod('expand'.toJS);
         _webApp!.callMethod('ready'.toJS);
         _webApp!.callMethod('enableClosingConfirmation'.toJS);
+        _webApp!.callMethod('disableVerticalSwipes'.toJS);
       } catch (_) {}
     }
   }

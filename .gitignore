@@ -27,3 +27,5 @@ ntuser.dat*
 *.db
 *.sqlite
 *.sqlite3
+
+.vercel
