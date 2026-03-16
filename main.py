@@ -1514,19 +1514,46 @@ async def delete_meeting(meeting_id: int, background_tasks: BackgroundTasks, cur
             db.commit()
             return {"status": "cancelled", "message": "Meeting cancelled for all"}
         else:
-            # Second time (or confirm): Hard delete for everyone
-            # Ensure BusySlots are also purged just in case (e.g. if they weren't caught during soft cancel)
-            participant_ids = [invite.user_id for invite in meeting.invites]
-            participant_ids.append(meeting.user_id)
+            # Second time (or confirm): Personal cleanup for creator
+            # 1. BusySlot cleanup for creator
             db.query(models.BusySlot).filter(
-                models.BusySlot.user_id.in_(participant_ids),
+                models.BusySlot.user_id == current_user.id,
                 models.BusySlot.start_time == meeting.start_time,
                 models.BusySlot.end_time == meeting.end_time
             ).delete(synchronize_session=False)
 
-            db.delete(meeting)
+            # 2. External cleanup for creator
+            for conn in current_user.connections:
+                if not conn.is_active: continue
+                try:
+                    from encryption import decrypt_token
+                    refresh_token = decrypt_token(conn.auth_data)
+                    if conn.provider == 'google' and invite and invite.google_event_id:
+                        from calendar_service import GoogleCalendarService
+                        await GoogleCalendarService(refresh_token).delete_event(invite.google_event_id)
+                        invite.google_event_id = None
+                    elif conn.provider == 'outlook' and invite and invite.outlook_event_id:
+                        from outlook_service import OutlookCalendarService
+                        await OutlookCalendarService(refresh_token).delete_event(invite.outlook_event_id)
+                        invite.outlook_event_id = None
+                except Exception as e:
+                    print(f"DEBUG: Creator hard-delete cleanup fail: {e}")
+
+            # 3. Delete creator's invite
+            if invite:
+                db.delete(invite)
+            
+            # 4. Final physical delete if NO invites left
+            db.flush()
+            remaining = db.query(models.MeetingInvite).filter(models.MeetingInvite.meeting_id == meeting_id).count()
+            if remaining == 0:
+                db.delete(meeting)
+                message = "Meeting fully removed from database"
+            else:
+                message = "Meeting removed from your list (other participants still have it)"
+
             db.commit()
-            return {"status": "deleted", "message": "Meeting fully removed"}
+            return {"status": "deleted", "message": message}
 
     # Case 2: Participant is leaving or performing a full cleanup of a cancelled meeting
     if invite:
@@ -1569,6 +1596,13 @@ async def delete_meeting(meeting_id: int, background_tasks: BackgroundTasks, cur
 
             # 3. Final removal from our DB
             db.delete(invite)
+            db.flush()
+            
+            # Check if this was the last person
+            remaining = db.query(models.MeetingInvite).filter(models.MeetingInvite.meeting_id == meeting_id).count()
+            if remaining == 0:
+                db.delete(meeting)
+
             db.commit()
             return {"status": "deleted", "message": "Meeting removed from your calendars"}
 
@@ -1610,6 +1644,13 @@ async def delete_meeting(meeting_id: int, background_tasks: BackgroundTasks, cur
                     print(f"DEBUG: Participant cleanup fail on {conn.provider}: {e}")
             
             db.delete(invite)
+            db.flush()
+            
+            # Check if this was the last person
+            remaining = db.query(models.MeetingInvite).filter(models.MeetingInvite.meeting_id == meeting_id).count()
+            if remaining == 0:
+                db.delete(meeting)
+
             db.commit()
             return {"status": "deleted", "message": "Meeting removed from your list"}
 
