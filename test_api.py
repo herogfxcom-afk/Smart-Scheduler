@@ -468,11 +468,52 @@ async def test_sync_command_in_group():
     except Exception as e:
         report.add("Webhook: Group /sync command uses url deep link", False, str(e))
 
+def test_ics_export():
+    """Verifies that the /api/meetings/{id}/ics endpoint works with a token in query params."""
+    try:
+        valid_init_data = generate_mock_init_data(os.environ["BOT_TOKEN"])
+        db = next(override_get_db())
+        user = db.query(models.User).filter(models.User.telegram_id == 12345).first()
+        
+        # 1. Create a meeting
+        start_dt = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=1)
+        end_dt = start_dt + datetime.timedelta(hours=1)
+        
+        meeting = models.GroupMeeting(
+            user_id=user.id,
+            title="ICS Test Meeting",
+            description="Testing backend ICS generation",
+            start_time=start_dt,
+            end_time=end_dt,
+            idempotency_key=f"ics_test_{int(time.time())}"
+        )
+        db.add(meeting)
+        db.commit()
+        
+        # 2. Request ICS with token in query params
+        response = client.get(f"/api/meetings/{meeting.id}/ics", params={"token": valid_init_data})
+        
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("text/calendar")
+        assert "attachment" in response.headers["content-disposition"]
+        assert f"meeting_{meeting.id}.ics" in response.headers["content-disposition"]
+        
+        content = response.text
+        assert "BEGIN:VCALENDAR" in content
+        assert "BEGIN:VEVENT" in content
+        assert "SUMMARY:ICS Test Meeting" in content
+        assert "DESCRIPTION:Testing backend ICS generation" in content
+        
+        report.add("API: Meeting ICS export (Query Param Auth)", True)
+    except Exception as e:
+        report.add("API: Meeting ICS export (Query Param Auth)", False, str(e))
+
 if __name__ == "__main__":
     import asyncio
     print("Starting Advanced Backend Lifecycle Tests...\n")
     test_auth_me()
     test_multiple_apple_connect()
+    test_ics_export()
     
     # Run async tests
     async def run_async_tests():

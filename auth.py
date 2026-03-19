@@ -3,7 +3,7 @@ import hashlib
 import json
 import os
 from urllib.parse import parse_qs
-from fastapi import Header, HTTPException, Depends
+from fastapi import Header, HTTPException, Depends, Query
 from sqlalchemy.orm import Session, joinedload
 from database import get_db
 from models import User
@@ -64,12 +64,13 @@ from typing import Optional
 
 from database import SessionLocal
 
-def get_current_user(init_data: Optional[str] = Header(None)):
+def get_current_user(init_data: Optional[str] = Header(None), token: Optional[str] = Query(None)):
     """Dependency to get or create user based on Telegram initData."""
-    if not init_data:
-        raise HTTPException(status_code=403, detail="init-data header missing")
+    effective_init_data = init_data or token
+    if not effective_init_data:
+        raise HTTPException(status_code=403, detail="init-data header or token parameter missing")
         
-    user_info = validate_telegram_init_data(init_data)
+    user_info = validate_telegram_init_data(effective_init_data)
     telegram_id = user_info.get("id")
     
     if not telegram_id:

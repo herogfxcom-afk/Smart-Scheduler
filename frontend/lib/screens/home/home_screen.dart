@@ -15,6 +15,7 @@ import '../../models/meeting.dart';
 import '../../utils/timezone_utils.dart';
 import '../../utils/ics_exporter.dart';
 import 'package:intl/intl.dart';
+import '../../core/telegram/telegram_service.dart';
 import 'widgets/solo_dashboard.dart'; // Added
 
 class HomeScreen extends StatefulWidget {
@@ -691,7 +692,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     width: double.infinity,
                     height: 52,
                     child: ElevatedButton.icon(
-                      onPressed: () => IcsExporter.exportMeeting(meeting),
+                      onPressed: () => IcsExporter.exportMeeting(meeting, context.read<TelegramService>().initData),
                       icon: const Icon(Icons.apple),
                       label: const Text('Добавить в Apple Calendar', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                       style: ElevatedButton.styleFrom(

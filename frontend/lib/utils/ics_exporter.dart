@@ -4,43 +4,21 @@ import 'package:intl/intl.dart';
 import 'timezone_utils.dart'; // We use this to get the UTC start/end
 
 class IcsExporter {
-  static Future<void> exportMeeting(Meeting meeting) async {
-    // Generate an ICS conforming to RFC 5545
-    // Dates must be in UTC for ICS (format YYYYMMDDTHHmmssZ)
-    final DateFormat formatter = DateFormat("yyyyMMdd'T'HHmmss'Z'");
-    
-    // We already keep meeting.start and meeting.end in UTC
-    final dtstart = formatter.format(meeting.start);
-    final dtend = formatter.format(meeting.end);
-    final dtstamp = formatter.format(DateTime.now().toUtc());
-    
-    final uid = meeting.id.toString() + "@smartscheduler.local";
-    final summary = meeting.title.replaceAll(',', '\\,').replaceAll('\n', '\\n');
-    final description = (meeting.title).replaceAll(',', '\\,').replaceAll('\n', '\\n');
-    
-    final String icsContent = '''BEGIN:VCALENDAR
-VERSION:2.0
-PRODID:-//SmartScheduler//App//EN
-CALSCALE:GREGORIAN
-BEGIN:VEVENT
-UID:$uid
-DTSTAMP:$dtstamp
-DTSTART:$dtstart
-DTEND:$dtend
-SUMMARY:$summary
-DESCRIPTION:$description
-END:VEVENT
-END:VCALENDAR''';
+  static Future<void> exportMeeting(Meeting meeting, String? token) async {
+    if (token == null || token.isEmpty) {
+      print("Cannot export ICS: No auth token provided");
+      return;
+    }
 
-    // Encode to Data URI
-    final Uri uri = Uri.parse('data:text/calendar;charset=utf8,${Uri.encodeComponent(icsContent)}');
+    const apiUrl = String.fromEnvironment('API_URL', defaultValue: '');
+    final url = "${apiUrl}/api/meetings/${meeting.id}/ics?token=${Uri.encodeComponent(token)}";
+    final uri = Uri.parse(url);
     
     try {
       if (await canLaunchUrl(uri)) {
-        await launchUrl(uri);
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
       } else {
-        // Fallback for some platforms: try to launch an intermediate HTML or direct download
-        print("Could not launch ICS data URI directly");
+        print("Could not launch ICS URL: $url");
       }
     } catch (e) {
       print("Error launching ICS: $e");

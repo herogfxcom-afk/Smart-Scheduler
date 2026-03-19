@@ -1661,6 +1661,42 @@ async def confirm_cancel_meeting(meeting_id: int, background_tasks: BackgroundTa
     """Allows a participant to acknowledge a cancellation and cleanup their calendar."""
     return await delete_meeting(meeting_id, background_tasks, current_user, db)
 
+@app.get("/api/meetings/{meeting_id}/ics")
+async def get_meeting_ics(meeting_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Generates and returns an ICS file for a specific meeting."""
+    meeting = db.query(models.GroupMeeting).filter(models.GroupMeeting.id == meeting_id).first()
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+        
+    # Check access: creator or invitee
+    is_creator = (meeting.user_id == current_user.id)
+    invite = db.query(models.MeetingInvite).filter(
+        models.MeetingInvite.meeting_id == meeting_id,
+        models.MeetingInvite.user_id == current_user.id
+    ).first()
+    
+    if not is_creator and not invite:
+        raise HTTPException(status_code=403, detail="You do not have access to this meeting")
+
+    # Generate ICS content
+    now_str = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    start_str = meeting.start_time.astimezone(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    end_str = meeting.end_time.astimezone(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    
+    uid = f"{meeting.id}@smartscheduler.local"
+    summary = meeting.title.replace(',', '\\,').replace('\n', '\\n')
+    description = (meeting.description or meeting.title).replace(',', '\\,').replace('\n', '\\n')
+    
+    ics_content = f"BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//SmartScheduler//App//EN\r\nCALSCALE:GREGORIAN\r\nBEGIN:VEVENT\r\nUID:{uid}\r\nDTSTAMP:{now_str}\r\nDTSTART:{start_str}\r\nDTEND:{end_str}\r\nSUMMARY:{summary}\r\nDESCRIPTION:{description}\r\nEND:VEVENT\r\nEND:VCALENDAR"
+
+    return Response(
+        content=ics_content,
+        media_type="text/calendar",
+        headers={
+            "Content-Disposition": f'attachment; filename="meeting_{meeting_id}.ics"'
+        }
+    )
+
 @app.patch("/api/meetings/{meeting_id}")
 async def update_meeting(meeting_id: int, data: dict, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Updates meeting details."""
