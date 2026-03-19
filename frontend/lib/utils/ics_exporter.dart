@@ -1,7 +1,5 @@
 import 'package:url_launcher/url_launcher.dart';
 import '../models/meeting.dart';
-import 'package:intl/intl.dart';
-import 'timezone_utils.dart'; // We use this to get the UTC start/end
 
 class IcsExporter {
   static Future<void> exportMeeting(Meeting meeting, String? token) async {

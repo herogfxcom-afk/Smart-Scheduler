@@ -16,6 +16,7 @@ import '../../providers/availability_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../models/availability.dart';
 import 'widgets/heatmap_grid.dart';
+import '../../core/telegram/telegram_service.dart';
 
 class SchedulerScreen extends StatefulWidget {
   const SchedulerScreen({super.key});
@@ -637,7 +638,7 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
                     child: ElevatedButton.icon(
                       onPressed: () {
                         final m = Meeting.fromJson(meetingData);
-                        IcsExporter.exportMeeting(m);
+                        IcsExporter.exportMeeting(m, context.read<TelegramService>().initData);
                       },
                     icon: const Icon(Icons.apple),
                     label: const Text('Добавить в Apple Calendar', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
