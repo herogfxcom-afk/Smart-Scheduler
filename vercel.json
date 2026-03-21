@@ -1,10 +1,10 @@
 {
     "functions": {
         "api/index.py": {
-            "excludeFiles": ["frontend/**", "venv/**", ".venv/**", "node_modules/**", "alembic/**", ".git/**"]
+            "excludeFiles": "frontend/**"
         }
     },
-    "buildCommand": "cd frontend && bash build.sh && cd .. && cp -r frontend/build/web public && rm -rf frontend venv .venv node_modules alembic .git",
+    "buildCommand": "rm -rf venv .venv node_modules && cd frontend && bash build.sh && cd .. && cp -r frontend/build/web public && rm -rf frontend venv .venv node_modules alembic .git",
     "outputDirectory": "public",
     "rewrites": [
         {
