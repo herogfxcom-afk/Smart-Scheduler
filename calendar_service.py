@@ -36,7 +36,7 @@ class GoogleCalendarService:
         token = self._ensure_token()
         url = "https://www.googleapis.com/calendar/v3/users/me/calendarList"
         headers = {"Authorization": f"Bearer {token}"}
-        with httpx.Client() as client:
+        with httpx.Client(timeout=15.0) as client:
             response = client.get(url, headers=headers)
             response.raise_for_status()
             return response.json()
@@ -49,10 +49,10 @@ class GoogleCalendarService:
         params = {
             "timeMin": time_min,
             "timeMax": time_max,
-            "singleEvents": "true",
+            "singleEvents": True,
             "orderBy": "startTime"
         }
-        with httpx.Client() as client:
+        with httpx.Client(timeout=15.0) as client:
             response = client.get(url, headers=headers, params=params)
             response.raise_for_status()
             return response.json()
@@ -69,7 +69,7 @@ class GoogleCalendarService:
         if conference_data_version is not None:
             params["conferenceDataVersion"] = str(conference_data_version)
             
-        with httpx.Client() as client:
+        with httpx.Client(timeout=15.0) as client:
             response = client.post(url, headers=headers, params=params, json=body)
             response.raise_for_status()
             return response.json()
@@ -79,7 +79,7 @@ class GoogleCalendarService:
         safe_cid = urllib.parse.quote(calendar_id)
         url = f"https://www.googleapis.com/calendar/v3/calendars/{safe_cid}/events/{event_id}"
         headers = {"Authorization": f"Bearer {token}"}
-        with httpx.Client() as client:
+        with httpx.Client(timeout=15.0) as client:
             response = client.delete(url, headers=headers)
             response.raise_for_status()
             return True
@@ -90,7 +90,7 @@ class GoogleCalendarService:
             calendar_list = await loop.run_in_executor(None, self._get_calendar_list)
             calendar_ids = [entry['id'] for entry in calendar_list.get('items', [])]
         except Exception as e:
-            print(f"DEBUG: Failed to fetch calendar list: {e}")
+            print(f"DEBUG: Failed to fetch calendar list: {e}", flush=True)
             calendar_ids = ['primary']
 
         # 2. Query Events for each calendar
@@ -126,7 +126,9 @@ class GoogleCalendarService:
                             'id': event.get('id')
                         })
             except Exception as e:
+                import sys
                 print(f"DEBUG: Failed to list events for calendar {cid}: {e}")
+                sys.stdout.flush()
                 
         return all_busy
 
