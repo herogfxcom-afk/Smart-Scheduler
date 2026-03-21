@@ -1,7 +1,5 @@
 import os
 import datetime as dt_module
-from google.oauth2.credentials import Credentials
-import google.auth.transport.urllib3
 import httpx
 import asyncio
 import urllib.parse
@@ -16,23 +14,29 @@ SCOPES = [
 
 class GoogleCalendarService:
     def __init__(self, refresh_token: str):
-        self.creds = Credentials(
-            None,
-            refresh_token=refresh_token,
-            token_uri="https://oauth2.googleapis.com/token",
-            client_id=os.getenv("GOOGLE_CLIENT_ID"),
-            client_secret=os.getenv("GOOGLE_CLIENT_SECRET"),
-            scopes=SCOPES
-        )
+        self._refresh_token = refresh_token
+        self._client_id = os.getenv("GOOGLE_CLIENT_ID")
+        self._client_secret = os.getenv("GOOGLE_CLIENT_SECRET")
+        self._access_token = None
 
     def _ensure_token(self):
-        """Ensures a valid access token exists, refreshing if necessary."""
-        # IMPORTANT: self.creds.expired returns False when expiry is not set (token=None).
-        # So we must check token is None explicitly, otherwise refresh is never triggered.
-        if self.creds.token is None or not self.creds.valid:
-            request = google.auth.transport.urllib3.Request()
-            self.creds.refresh(request)
-        return self.creds.token
+        """Fetches a fresh access token using the refresh token via direct httpx call.
+        Avoids google.auth.transport.urllib3 which triggers MustDowngradeError on Vercel Lambda.
+        """
+        if self._access_token is None:
+            with httpx.Client(timeout=15.0) as client:
+                resp = client.post(
+                    "https://oauth2.googleapis.com/token",
+                    data={
+                        "client_id": self._client_id,
+                        "client_secret": self._client_secret,
+                        "refresh_token": self._refresh_token,
+                        "grant_type": "refresh_token",
+                    }
+                )
+                resp.raise_for_status()
+                self._access_token = resp.json()["access_token"]
+        return self._access_token
 
     def _get_calendar_list(self):
         token = self._ensure_token()
