@@ -4,6 +4,7 @@ from google.oauth2.credentials import Credentials
 import google.auth.transport.urllib3
 import httpx
 import asyncio
+import urllib.parse
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
@@ -42,7 +43,8 @@ class GoogleCalendarService:
 
     def _list_events(self, calendar_id, time_min, time_max):
         token = self._ensure_token()
-        url = f"https://www.googleapis.com/calendar/v3/calendars/{calendar_id}/events"
+        safe_cid = urllib.parse.quote(calendar_id)
+        url = f"https://www.googleapis.com/calendar/v3/calendars/{safe_cid}/events"
         headers = {"Authorization": f"Bearer {token}"}
         params = {
             "timeMin": time_min,
@@ -57,7 +59,8 @@ class GoogleCalendarService:
 
     def _insert_event(self, calendar_id, body, conference_data_version=None, send_updates='all'):
         token = self._ensure_token()
-        url = f"https://www.googleapis.com/calendar/v3/calendars/{calendar_id}/events"
+        safe_cid = urllib.parse.quote(calendar_id)
+        url = f"https://www.googleapis.com/calendar/v3/calendars/{safe_cid}/events"
         headers = {
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json"
@@ -73,7 +76,8 @@ class GoogleCalendarService:
 
     def _delete_event_sync(self, calendar_id, event_id):
         token = self._ensure_token()
-        url = f"https://www.googleapis.com/calendar/v3/calendars/{calendar_id}/events/{event_id}"
+        safe_cid = urllib.parse.quote(calendar_id)
+        url = f"https://www.googleapis.com/calendar/v3/calendars/{safe_cid}/events/{event_id}"
         headers = {"Authorization": f"Bearer {token}"}
         with httpx.Client() as client:
             response = client.delete(url, headers=headers)
