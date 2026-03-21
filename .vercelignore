@@ -1,5 +1,6 @@
 # Exclude heavy folders that are NOT needed for build or runtime
 .venv/
+venv/
 .git/
 __pycache__/
 *.db
