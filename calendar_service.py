@@ -1,11 +1,11 @@
 import os
 import datetime as dt_module
 from google.oauth2.credentials import Credentials
+import google.auth.transport.urllib3
 from google_auth_oauthlib.flow import Flow
-import googleapiclient.discovery
+import httpx
 import asyncio
 from datetime import datetime, timedelta, timezone
-from zoneinfo import ZoneInfo
 from zoneinfo import ZoneInfo
 
 SCOPES = [
@@ -24,33 +24,62 @@ class GoogleCalendarService:
             client_secret=os.getenv("GOOGLE_CLIENT_SECRET"),
             scopes=SCOPES
         )
-        self.service = googleapiclient.discovery.build('calendar', 'v3', credentials=self.creds)
+
+    def _ensure_token(self):
+        if not self.creds.valid:
+            if self.creds.expired and self.creds.refresh_token:
+                request = google.auth.transport.urllib3.Request()
+                self.creds.refresh(request)
+        return self.creds.token
 
     def _get_calendar_list(self):
-        return self.service.calendarList().list().execute()
+        token = self._ensure_token()
+        url = "https://www.googleapis.com/calendar/v3/users/me/calendarList"
+        headers = {"Authorization": f"Bearer {token}"}
+        with httpx.Client() as client:
+            response = client.get(url, headers=headers)
+            response.raise_for_status()
+            return response.json()
 
     def _list_events(self, calendar_id, time_min, time_max):
-        return self.service.events().list(
-            calendarId=calendar_id,
-            timeMin=time_min,
-            timeMax=time_max,
-            singleEvents=True,
-            orderBy='startTime'
-        ).execute()
+        token = self._ensure_token()
+        url = f"https://www.googleapis.com/calendar/v3/calendars/{calendar_id}/events"
+        headers = {"Authorization": f"Bearer {token}"}
+        params = {
+            "timeMin": time_min,
+            "timeMax": time_max,
+            "singleEvents": "true",
+            "orderBy": "startTime"
+        }
+        with httpx.Client() as client:
+            response = client.get(url, headers=headers, params=params)
+            response.raise_for_status()
+            return response.json()
 
     def _insert_event(self, calendar_id, body, conference_data_version=None, send_updates='all'):
-        insert_kwargs = {
-            'calendarId': calendar_id,
-            'body': body,
-            'sendUpdates': send_updates,
+        token = self._ensure_token()
+        url = f"https://www.googleapis.com/calendar/v3/calendars/{calendar_id}/events"
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json"
         }
+        params = {"sendUpdates": send_updates}
         if conference_data_version is not None:
-            insert_kwargs['conferenceDataVersion'] = conference_data_version
-        return self.service.events().insert(**insert_kwargs).execute()
+            params["conferenceDataVersion"] = str(conference_data_version)
+            
+        with httpx.Client() as client:
+            response = client.post(url, headers=headers, params=params, json=body)
+            response.raise_for_status()
+            return response.json()
 
     def _delete_event_sync(self, calendar_id, event_id):
-        return self.service.events().delete(calendarId=calendar_id, eventId=event_id).execute()
-
+        token = self._ensure_token()
+        url = f"https://www.googleapis.com/calendar/v3/calendars/{calendar_id}/events/{event_id}"
+        headers = {"Authorization": f"Bearer {token}"}
+        with httpx.Client() as client:
+            response = client.delete(url, headers=headers)
+            response.raise_for_status()
+            return True
     async def get_busy_slots(self, start_time: datetime, end_time: datetime) -> list:
         # 1. Fetch all calendars
         loop = asyncio.get_event_loop()
