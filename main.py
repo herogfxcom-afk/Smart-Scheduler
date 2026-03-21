@@ -89,6 +89,59 @@ async def diagnostic_check(db: Session = Depends(get_db)):
         "now": datetime.now(timezone.utc).isoformat()
     }
 
+@app.get("/api/debug/google-cal")
+async def debug_google_cal(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """TEMPORARY DEBUG: Returns raw Google Calendar data to diagnose the missing events issue."""
+    from database import SessionLocal
+    result = {}
+    with SessionLocal() as sdb:
+        user = sdb.query(User).options(joinedload(User.connections)).filter(User.id == current_user.id).first()
+        google_conn = next((c for c in user.connections if c.provider == 'google' and c.is_active), None)
+        if not google_conn:
+            return {"error": "No active Google connection found"}
+        
+        try:
+            refresh_token = decrypt_token(google_conn.auth_data)
+            g_service = GoogleCalendarService(refresh_token)
+            
+            # 1. List all calendars
+            cal_list = g_service._get_calendar_list()
+            calendar_ids = [e['id'] for e in cal_list.get('items', [])]
+            result["calendars"] = calendar_ids
+            
+            # 2. Fetch events from each calendar (next 7 days)
+            from datetime import datetime, timezone, timedelta
+            now = datetime.now(timezone.utc)
+            t_min = now.strftime('%Y-%m-%dT%H:%M:%SZ')
+            t_max = (now + timedelta(days=7)).strftime('%Y-%m-%dT%H:%M:%SZ')
+            
+            result["events_by_calendar"] = {}
+            for cid in calendar_ids:
+                try:
+                    ev = g_service._list_events(cid, t_min, t_max)
+                    items = ev.get('items', [])
+                    result["events_by_calendar"][cid] = [
+                        {"summary": e.get("summary"), "start": e.get("start"), "id": e.get("id")} 
+                        for e in items
+                    ]
+                except Exception as e:
+                    result["events_by_calendar"][cid] = f"ERROR: {str(e)}"
+            
+            # 3. Check known_external_ids (what gets filtered out)
+            known_ids = set()
+            meetings = sdb.query(models.GroupMeeting).filter(
+                models.GroupMeeting.user_id == current_user.id,
+                models.GroupMeeting.is_cancelled == False
+            ).all()
+            for m in meetings:
+                if m.google_event_id: known_ids.add(m.google_event_id)
+            result["known_google_event_ids"] = list(known_ids)
+            result["conn_last_error"] = google_conn.last_error
+            result["conn_last_sync_status"] = google_conn.last_sync_status
+        except Exception as e:
+            result["exception"] = str(e)
+    return result
+
 # Transaction Health Middleware - Removed for Vercel performance optimization
 # (Connection health is now handled by pool_pre_ping=True in database.py)
 
