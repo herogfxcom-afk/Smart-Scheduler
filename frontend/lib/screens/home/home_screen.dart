@@ -138,7 +138,36 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               const SizedBox(height: 32),
 
               // Meetings & Invites Section
-              _buildMeetingsSection(meetingProvider, langProvider),
+              DefaultTabController(
+                length: 2,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TabBar(
+                      isScrollable: true,
+                      tabAlignment: TabAlignment.start,
+                      labelColor: Colors.blueAccent,
+                      unselectedLabelColor: Colors.grey,
+                      indicatorColor: Colors.blueAccent,
+                      dividerColor: Colors.transparent,
+                      tabs: [
+                        Tab(text: langProvider.translate('upcoming_meetings')),
+                        Tab(text: langProvider.translate('past_meetings') ?? 'Прошедшие'),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      height: 400, // Fixed height for tab content or use shrinkWrap if needed
+                      child: TabBarView(
+                        children: [
+                          SingleChildScrollView(child: _buildUpcomingSection(meetingProvider, langProvider)),
+                          SingleChildScrollView(child: _buildPastSection(meetingProvider, langProvider)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
               
               const SizedBox(height: 32),
 
@@ -281,17 +310,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 
-  Widget _buildMeetingsSection(MeetingProvider provider, LanguageProvider lang) {
+  Widget _buildUpcomingSection(MeetingProvider provider, LanguageProvider lang) {
     if (provider.isLoading) {
       return const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator()));
     }
 
     final pending = provider.meetings.where((m) => m.status == 'pending').toList();
-    final confirmed = provider.meetings.where((m) => m.status == 'accepted' || m.status == 'cancelled' || m.isCreator).toList();
+    final upcoming = provider.upcomingMeetings.where((m) => m.status != 'pending').toList();
 
     return Column(
-      // Show error if meetings failed to load
-
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (provider.error != null)
@@ -302,122 +329,162 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               style: const TextStyle(color: Colors.redAccent, fontSize: 12),
             ),
           ),
+        
         if (pending.isNotEmpty) ...[
-          Text(
-            lang.translate('invites'),
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blueAccent),
-          ),
-          const SizedBox(height: 12),
-          ListView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: pending.length,
-            itemBuilder: (context, index) {
-              final m = pending[index];
-              return Card(
-                color: Colors.blue.withOpacity(0.05),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  side: BorderSide(color: Colors.blue.withOpacity(0.2)),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(12.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(Icons.mail_outline, color: Colors.blue),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(m.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                                if (m.groupTitle != null) 
-                                  Text("В группе: ${m.groupTitle}", style: const TextStyle(color: Colors.grey, fontSize: 12)),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          const Icon(Icons.access_time, size: 14, color: Colors.grey),
-                          const SizedBox(width: 4),
-                          Text("${_formatDate(m.start)} ${_formatTime(m.start)}", style: const TextStyle(fontSize: 13)),
-                          const Spacer(),
-                          TextButton(
-                            onPressed: () => provider.respondToInvite(m.inviteId!, 'declined'),
-                            child: Text(lang.translate('decline'), style: const TextStyle(color: Colors.redAccent)),
-                          ),
-                          if (!m.isCancelled) ...[
-                            const SizedBox(width: 8),
-                            ElevatedButton(
-                              onPressed: () => provider.respondToInvite(m.inviteId!, 'accepted'),
-                              style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
-                              child: Text(lang.translate('accept')),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
-          ),
+          _buildInviteCards(pending, provider, lang),
           const SizedBox(height: 24),
         ],
 
-        Text(
-          lang.translate('upcoming_meetings'),
-          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 12),
-        if (confirmed.isEmpty)
-          Card(
-            color: Colors.grey.withOpacity(0.05),
-            child: Padding(
-              padding: const EdgeInsets.all(24.0),
-              child: Center(
-                child: Text(lang.translate('no_meetings'), style: const TextStyle(color: Colors.grey)),
-              ),
-            ),
-          )
+        if (upcoming.isEmpty && pending.isEmpty)
+          _buildEmptyState(lang)
         else
           ListView.separated(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
-            itemCount: confirmed.take(5).length,
+            itemCount: upcoming.length,
             separatorBuilder: (context, index) => const SizedBox(height: 8),
             itemBuilder: (context, index) {
-              final m = confirmed[index];
-              final isCancelled = m.isCancelled;
-              return Card(
-                color: isCancelled ? Colors.red.withOpacity(0.05) : null,
-                child: ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor: isCancelled ? Colors.redAccent.withOpacity(0.2) : Colors.blue, 
-                    child: Icon(isCancelled ? Icons.event_busy : Icons.event, color: isCancelled ? Colors.redAccent : Colors.white)
-                  ),
-                  title: Text(
-                    isCancelled ? "ОТМЕНЕНА: ${m.title}" : m.title, 
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      decoration: isCancelled ? TextDecoration.lineThrough : null,
-                      color: isCancelled ? Colors.redAccent : null,
-                    )
-                  ),
-                  subtitle: Text("${_formatDate(m.start)} • ${_formatTime(m.start)}"),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => _showMeetingDetails(context, m, lang),
-                ),
-              );
+              final m = upcoming[index];
+              return _buildMeetingCard(m, lang);
             },
           ),
       ],
+    );
+  }
+
+  Widget _buildPastSection(MeetingProvider provider, LanguageProvider lang) {
+    if (provider.isLoading) {
+      return const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator()));
+    }
+
+    final past = provider.pastMeetings;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (past.isEmpty)
+          _buildEmptyState(lang, isPast: true)
+        else
+          ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: past.length,
+            separatorBuilder: (context, index) => const SizedBox(height: 8),
+            itemBuilder: (context, index) {
+              final m = past[index];
+              return _buildMeetingCard(m, lang);
+            },
+          ),
+      ],
+    );
+  }
+
+  Widget _buildInviteCards(List<Meeting> pending, MeetingProvider provider, LanguageProvider lang) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          lang.translate('invites'),
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blueAccent),
+        ),
+        const SizedBox(height: 8),
+        ...pending.map((m) => Card(
+          margin: const EdgeInsets.only(bottom: 8),
+          color: Colors.blue.withOpacity(0.05),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(color: Colors.blue.withOpacity(0.2)),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(12.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.mail_outline, color: Colors.blue, size: 20),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(m.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                          if (m.groupTitle != null) 
+                            Text("В группе: ${m.groupTitle}", style: const TextStyle(color: Colors.grey, fontSize: 11)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    const Icon(Icons.access_time, size: 14, color: Colors.grey),
+                    const SizedBox(width: 4),
+                    Text("${_formatDate(m.start)} ${_formatTime(m.start)}", style: const TextStyle(fontSize: 12)),
+                    const Spacer(),
+                    TextButton(
+                      onPressed: () => provider.respondToInvite(m.inviteId!, 'declined'),
+                      child: Text(lang.translate('decline'), style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
+                    ),
+                    if (!m.isCancelled) ...[
+                      const SizedBox(width: 8),
+                      ElevatedButton(
+                        onPressed: () => provider.respondToInvite(m.inviteId!, 'accepted'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue,
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          minimumSize: Size.zero,
+                        ),
+                        child: Text(lang.translate('accept'), style: const TextStyle(fontSize: 12)),
+                      ),
+                    ],
+                  ],
+                ),
+              ],
+            ),
+          ),
+        )),
+      ],
+    );
+  }
+
+  Widget _buildMeetingCard(Meeting m, LanguageProvider lang) {
+    final isCancelled = m.isCancelled;
+    return Card(
+      color: isCancelled ? Colors.red.withOpacity(0.05) : null,
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: isCancelled ? Colors.redAccent.withOpacity(0.2) : Colors.blue, 
+          child: Icon(isCancelled ? Icons.event_busy : Icons.event, color: isCancelled ? Colors.redAccent : Colors.white)
+        ),
+        title: Text(
+          isCancelled ? "ОТМЕНЕНА: ${m.title}" : m.title, 
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            decoration: isCancelled ? TextDecoration.lineThrough : null,
+            color: isCancelled ? Colors.redAccent : null,
+          )
+        ),
+        subtitle: Text("${_formatDate(m.start)} • ${_formatTime(m.start)}"),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => _showMeetingDetails(context, m, lang),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState(LanguageProvider lang, {bool isPast = false}) {
+    return Card(
+      color: Colors.grey.withOpacity(0.05),
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Center(
+          child: Text(
+            isPast ? 'История встреч пуста' : lang.translate('no_meetings'),
+            style: const TextStyle(color: Colors.grey),
+          ),
+        ),
+      ),
     );
   }
 

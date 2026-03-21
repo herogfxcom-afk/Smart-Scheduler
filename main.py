@@ -314,6 +314,38 @@ async def send_telegram_notification(chat_id: str, text: str, reply_markup: dict
     except Exception as e:
         print(f"TRACE: send_telegram_notification fail: {e}")
 
+# ─────────────────── BACKGROUND CLEANUP ───────────────────
+async def cleanup_very_old_meetings_task():
+    """Periodically removes meetings older than 1 year to keep the DB clean."""
+    while True:
+        try:
+            print("RUNNING: Scheduled cleanup of very old meetings (1 year+)...")
+            from database import SessionLocal
+            import models as _models
+            from datetime import datetime, timezone, timedelta
+            
+            with SessionLocal() as db:
+                one_year_ago = datetime.now(timezone.utc) - timedelta(days=365)
+                
+                # Delete old meetings. Cascades handle related data.
+                # Use subquery or list to avoid session issues during iteration
+                old_meeting_ids = [m.id for m in db.query(_models.GroupMeeting).filter(_models.GroupMeeting.end_time < one_year_ago).all()]
+                
+                if old_meeting_ids:
+                    db.query(_models.GroupMeeting).filter(_models.GroupMeeting.id.in_(old_meeting_ids)).delete(synchronize_session=False)
+                    print(f"CLEANUP: Removed {len(old_meeting_ids)} meetings older than 1 year.")
+                
+                # Also cleanup old BusySlots
+                db.query(_models.BusySlot).filter(_models.BusySlot.end_time < one_year_ago).delete(synchronize_session=False)
+                
+                db.commit()
+                print("CLEANUP COMPLETE.")
+        except Exception as e:
+            print(f"CLEANUP ERROR: {e}")
+        
+        # Run once a week (7 days)
+        await asyncio.sleep(7 * 24 * 60 * 60)
+
 # ─────────────────── ROUTERS ───────────────────
 app.include_router(google_auth_router)
 app.include_router(outlook_auth_router)
@@ -352,6 +384,8 @@ async def on_startup_webhook():
     # Cache bot username and setup UI
     await get_bot_username()
     asyncio.create_task(_setup_bot_ui())
+    # Start background cleanup task
+    asyncio.create_task(cleanup_very_old_meetings_task())
 
 @app.post("/webhook/bot")
 @limiter.limit("60/minute") # Protect from webhook spam

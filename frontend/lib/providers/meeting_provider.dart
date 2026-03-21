@@ -11,6 +11,19 @@ class MeetingProvider with ChangeNotifier {
   MeetingProvider(this._apiService);
 
   List<Meeting> get meetings => _meetings;
+  
+  List<Meeting> get upcomingMeetings {
+    final now = DateTime.now();
+    return _meetings.where((m) => m.endTime.isAfter(now)).toList()
+      ..sort((a, b) => a.startTime.compareTo(b.startTime));
+  }
+
+  List<Meeting> get pastMeetings {
+    final now = DateTime.now();
+    return _meetings.where((m) => m.endTime.isBefore(now)).toList()
+      ..sort((a, b) => b.startTime.compareTo(a.startTime)); // Newest first for history
+  }
+
   bool get isLoading => _isLoading;
   String? get error => _error;
 
