@@ -22,5 +22,5 @@ A production-ready Telegram Mini App for group scheduling across multiple timezo
 - **Google Calendar Sync:** Full bi-directional sync with conflict protection.
 
 ## 🤖 AI & Developer Continuity
-For developers and AI agents joining this project, please refer to the [AI_GUIDE.md](./AI_GUIDE.md) for the "Ground Truth" documentation on timezone handling and architecture.
+For developers and AI agents joining this project, please refer to the [AI_GUIDE.md](./AI_GUIDE.md) for the "Ground Truth" documentation on timezone handling and architecture....
 
