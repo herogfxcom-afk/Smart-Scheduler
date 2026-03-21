@@ -26,10 +26,12 @@ class GoogleCalendarService:
         )
 
     def _ensure_token(self):
-        if not self.creds.valid:
-            if self.creds.expired and self.creds.refresh_token:
-                request = google.auth.transport.urllib3.Request()
-                self.creds.refresh(request)
+        """Ensures a valid access token exists, refreshing if necessary."""
+        # IMPORTANT: self.creds.expired returns False when expiry is not set (token=None).
+        # So we must check token is None explicitly, otherwise refresh is never triggered.
+        if self.creds.token is None or not self.creds.valid:
+            request = google.auth.transport.urllib3.Request()
+            self.creds.refresh(request)
         return self.creds.token
 
     def _get_calendar_list(self):
