@@ -24,5 +24,3 @@ A production-ready Telegram Mini App for group scheduling across multiple timezo
 ## 🤖 AI & Developer Continuity
 For developers and AI agents joining this project, please refer to the [AI_GUIDE.md](./AI_GUIDE.md) for the "Ground Truth" documentation on timezone handling and architecture.
 
----
-*Created by Antigravity (Google DeepMind)*
